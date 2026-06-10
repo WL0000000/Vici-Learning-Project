@@ -10,4 +10,4 @@ Internal operations and automation dashboard designed for Vici Learning to centr
 -Frequently communicate pushes
 -Always pull whenever someone pushes. This avoids the headache of outdated local branch & merge conflicts
 -Communitcate what feature/component/section you're working on so others don't touch it
--
+
