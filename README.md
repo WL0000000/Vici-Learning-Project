@@ -16,7 +16,7 @@ does today.
 - Frequently communicate pushes
 - Always pull whenever someone pushes. This avoids the headache of outdated local branch & merge conflicts
 - Communicate what feature/component/section you're working on so others don't touch it
-- **Never commit real client data or API keys** — sandbox accounts and mock data only
+- **Never commit real client data or API keys**. Sandbox accounts and mock data only
 
 ## Tech Stack (summary)
 

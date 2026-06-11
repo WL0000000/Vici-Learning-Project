@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vici-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-vici_dashboard}
+      POSTGRES_USER: ${DB_USERNAME:-vici}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-vici}
+    volumes:
+      - vici_pg_data:/var/lib/postgresql/data
+
+volumes:
+  vici_pg_data:

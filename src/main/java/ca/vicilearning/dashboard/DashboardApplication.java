@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
-@EnableScheduling  // needed for the sync jobs we add in Phase 2
+@EnableScheduling  // needed for the sync jobs later
 public class DashboardApplication {
 
     public static void main(String[] args) {
