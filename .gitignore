@@ -14,10 +14,8 @@ target/
 .settings/
 .factorypath
 
-# ─── Environment / secrets — NEVER commit these ──────────────────────────────
+# ─── Environment / secrets NEVER commit these ──────────────────────────────
 .env
-CLAUDE.md
-cursor.md
 
 # ─── Logs ────────────────────────────────────────────────────────────────────
 *.log
@@ -26,3 +24,5 @@ logs/
 # ─── OS ──────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+CLAUDE.md
+cursor.md
