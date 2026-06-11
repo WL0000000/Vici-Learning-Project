@@ -21,10 +21,30 @@ Internal operations and automation dashboard for Vici Learning
 PostgreSQL via Docker Compose · SimplyBook.me JSON-RPC client · Brevo Java SDK.
 
 
-## Quick Start (placeholder Phase 0)
+## How to First Initialize & Run
 
 ```
-# coming in Phase 0:
+1. Install Java 21:
+Download: https://adoptium.net/ → Temurin 21 LTS
+
+2. Install Maven:
+Download: https://maven.apache.org/download.cgi
+
+For both of the above, extract folder and copy them as path to your user environment variables inside path and system variable path.
+
+3. Start the database:
+Run: **docker compose up -d**
+Docker Desktop must be running
+
+4. Run the app:
+mvn spring-boot:run
+
+5. Open browser:
+Go to http://localhost:8080
+TEST Login: username: admin pass: changeme
+6. Run tests (uses in-memory H2, no Docker needed)
+
+mvn test
 docker compose up        # database
 mvn spring-boot:run      # application
 ```
