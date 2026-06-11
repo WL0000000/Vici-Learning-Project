@@ -1,11 +1,8 @@
 # Vici Learning Integration Dashboard | Group 15
 
-Internal operations and automation dashboard for Vici Learning that centralizes administrative
-data from SimplyBook.me (bookings) and Brevo (CRM/email), surfaces actionable follow-up tasks,
-and triggers automated communication, replacing the manual spreadsheet reconciliation the staff
-does today.
+Internal operations and automation dashboard for Vici Learning 
 
-**Client:** Sarah Alhower, Vici Learning · **Course:** CMPT 276 (June–August 2026)
+**Client:** Sarah Alhower, Vici Learning · **Course:** CMPT 276 
 
 
 ## General Rules
@@ -18,13 +15,13 @@ does today.
 - Communicate what feature/component/section you're working on so others don't touch it
 - **Never commit real client data or API keys**. Sandbox accounts and mock data only
 
-## Tech Stack (summary)
+## Tech Stack 
 
 -Java 21 · Spring Boot 3 · Maven · Thymeleaf (server-rendered HTML, no frontend frameworks) ·
 PostgreSQL via Docker Compose · SimplyBook.me JSON-RPC client · Brevo Java SDK.
 
 
-## Quick Start (placeholder — Phase 0)
+## Quick Start (placeholder Phase 0)
 
 ```
 # coming in Phase 0:
