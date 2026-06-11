@@ -1,0 +1,30 @@
+# ─── Maven build output ───────────────────────────────────────────────────────
+target/
+*.class
+*.jar
+*.war
+
+# ─── IDE ─────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+.vscode/
+*.project
+*.classpath
+.settings/
+.factorypath
+
+# ─── Environment / secrets — NEVER commit these ──────────────────────────────
+.env
+
+# ─── Local AI context files — intentionally kept off the repo ────────────────
+CLAUDE.md
+cursor.md
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
