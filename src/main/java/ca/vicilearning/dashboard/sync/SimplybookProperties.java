@@ -9,5 +9,6 @@ public record SimplybookProperties(
         String adminUsername,
         String adminPassword,
         String loginUrl,
-        String adminUrl
+        String adminUrl,
+        long syncIntervalMs
 ) {}
