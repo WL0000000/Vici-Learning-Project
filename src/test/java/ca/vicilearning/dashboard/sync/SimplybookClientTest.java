@@ -64,7 +64,7 @@ class SimplybookClientTest {
     @Test
     void getPerformerList_parsesObjectFormat() {
         wm.stubFor(post(urlEqualTo("/admin"))
-                .withRequestBody(matchingJsonPath("$.method", equalTo("getPerformerList")))
+                .withRequestBody(matchingJsonPath("$.method", equalTo("getUnitList")))
                 .willReturn(okJson("""
                         {"jsonrpc":"2.0","id":3,"result":{
                             "1":{"id":"1","name":"Tutor Alice","email":"alice@vici.com","is_visible":"1"},
@@ -82,7 +82,7 @@ class SimplybookClientTest {
     @Test
     void getServiceList_parsesObjectFormat() {
         wm.stubFor(post(urlEqualTo("/admin"))
-                .withRequestBody(matchingJsonPath("$.method", equalTo("getServiceList")))
+                .withRequestBody(matchingJsonPath("$.method", equalTo("getEventList")))
                 .willReturn(okJson("""
                         {"jsonrpc":"2.0","id":4,"result":{
                             "1":{"id":"1","name":"Math Tutoring","duration":"60","is_visible":"1"},
@@ -99,7 +99,7 @@ class SimplybookClientTest {
     @Test
     void getBookingList_sendsDateRangeInParams() {
         wm.stubFor(post(urlEqualTo("/admin"))
-                .withRequestBody(matchingJsonPath("$.method", equalTo("getBookingList")))
+                .withRequestBody(matchingJsonPath("$.method", equalTo("getBookings")))
                 .willReturn(okJson("""
                         {"jsonrpc":"2.0","id":5,"result":{
                             "101":{"id":"101","client_id":"1","provider_id":"1","service_id":"1",
@@ -123,7 +123,7 @@ class SimplybookClientTest {
     @Test
     void nonAuthApiError_throwsSimplybookApiException() {
         wm.stubFor(post(urlEqualTo("/admin"))
-                .withRequestBody(matchingJsonPath("$.method", equalTo("getServiceList")))
+                .withRequestBody(matchingJsonPath("$.method", equalTo("getEventList")))
                 .willReturn(okJson("""
                         {"jsonrpc":"2.0","id":4,
                          "error":{"code":-32601,"message":"Method not found"}}

@@ -29,7 +29,9 @@ public class ServiceAdapter {
         s.setDurationMinutes(node.path("duration").asInt(0) == 0
                 ? null
                 : node.path("duration").asInt());
-        s.setActive(AdapterUtils.parseBool(node.path("is_visible")));
+        // Admin API events expose is_active; fall back to is_visible for older shapes
+        s.setActive(AdapterUtils.parseBool(
+                node.has("is_active") ? node.path("is_active") : node.path("is_visible")));
         s.setSyncedAt(now);
         return s;
     }
