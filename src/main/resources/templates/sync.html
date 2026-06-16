@@ -46,8 +46,8 @@
             </p>
         </div>
 
-        <form th:action="@{/sync/now}" method="post">
-            <button type="submit" class="btn-accent">Sync Now</button>
+        <form th:action="@{/sync/now}" method="post" id="sync-form">
+            <button type="submit" class="btn-accent" id="sync-btn">Sync Now</button>
         </form>
     </div>
 
@@ -57,25 +57,25 @@
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-3">
             <div class="stat-card">
-                <div class="stat-number" th:text="${studentCount}">0</div>
+                <div class="stat-number" data-stat="students" th:text="${studentCount}">0</div>
                 <div class="stat-label">Students</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card">
-                <div class="stat-number" th:text="${tutorCount}">0</div>
+                <div class="stat-number" data-stat="tutors" th:text="${tutorCount}">0</div>
                 <div class="stat-label">Tutors</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card">
-                <div class="stat-number" th:text="${serviceCount}">0</div>
+                <div class="stat-number" data-stat="services" th:text="${serviceCount}">0</div>
                 <div class="stat-label">Services</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card">
-                <div class="stat-number" th:text="${bookingCount}">0</div>
+                <div class="stat-number" data-stat="bookings" th:text="${bookingCount}">0</div>
                 <div class="stat-label">Bookings</div>
             </div>
         </div>
@@ -131,5 +131,6 @@
 
 </main>
 
+<script th:src="@{/js/sync.js}"></script>
 </body>
 </html>
