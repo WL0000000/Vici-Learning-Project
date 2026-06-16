@@ -25,7 +25,7 @@ final class AdapterUtils {
         if (result.isArray()) {
             result.forEach(out::add);
         } else if (result.isObject()) {
-            result.fields().forEachRemaining(e -> out.add(e.getValue()));
+            result.properties().forEach(e -> out.add(e.getValue()));
         }
         return out;
     }

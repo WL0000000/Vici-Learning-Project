@@ -90,6 +90,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Generates META-INF metadata so the IDE recognises custom @ConfigurationProperties -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- WireMock — stubs SimplyBook.me and Brevo in tests; no test may hit a real API -->
         <dependency>
             <groupId>org.wiremock</groupId>
