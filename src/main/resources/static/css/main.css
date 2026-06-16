@@ -129,6 +129,12 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 2px;
   padding: 1.5rem 1rem;
   text-align: center;
+  transition: border-color 0.4s ease, background 0.4s ease;
+}
+/* Brief highlight on a card whose count changed in the latest sync */
+.stat-card.stat-changed {
+  border-color: var(--accent);
+  background: rgba(79, 110, 247, 0.08);
 }
 .stat-number {
   font-family: 'Space Grotesk', sans-serif;
@@ -202,6 +208,25 @@ h1, h2, h3, h4, h5, h6 {
   white-space: nowrap;
 }
 .btn-accent:hover { background: var(--accent-dim); }
+.btn-accent:disabled,
+.btn-accent.is-syncing {
+  opacity: 0.85;
+  cursor: progress;
+}
+
+/* Spinner shown inside the Sync Now button while a sync is running */
+.btn-spinner {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.5em;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  vertical-align: -0.12em;
+  animation: vici-spin 0.6s linear infinite;
+}
+@keyframes vici-spin { to { transform: rotate(360deg); } }
 
 /* ── Status dot ───────────────────────────────────── */
 .status-dot {
