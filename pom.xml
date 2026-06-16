@@ -90,12 +90,18 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- WireMock — stubs SimplyBook.me and Brevo in tests; no test may hit a real API -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.9.1</version>
+            <scope>test</scope>
+        </dependency>
+
         <!--
-            TODO Phase 2 — add SimplyBook.me JSON-RPC client (hand-rolled via RestClient, no extra dep)
             TODO Phase 4 — add Brevo Java SDK:
                 <groupId>com.sendinblue</groupId>
                 <artifactId>sib-api-v3-sdk</artifactId>
-            TODO Phase 5 — add WireMock for API stubbing in tests
         -->
 
     </dependencies>

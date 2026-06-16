@@ -15,8 +15,6 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class SimplybookClient {
 
-    private static final String LOGIN_URL = "https://user-api.simplybook.me/login";
-    private static final String ADMIN_URL  = "https://user-api.simplybook.me/admin";
 
     private final SimplybookProperties props;
     private final RestClient restClient;
@@ -63,20 +61,20 @@ public class SimplybookClient {
                     .add(props.companyLogin())
                     .add(props.adminUsername())
                     .add(props.adminPassword());
-            adminToken = rpcCall(LOGIN_URL, null, "getUserToken", params).asText();
+            adminToken = rpcCall(props.loginUrl(), null, "getUserToken", params).asText();
         }
     }
 
     private JsonNode adminCall(String method, JsonNode params) {
         ensureAdminToken();
         try {
-            return rpcCall(ADMIN_URL, adminToken, method, params);
+            return rpcCall(props.adminUrl(), adminToken, method, params);
         } catch (SimplybookApiException e) {
             // -32000 is the generic SimplyBook.me auth error code
             if (e.getCode() == -32000 || e.getCode() == 401) {
                 synchronized (this) { adminToken = null; }
                 ensureAdminToken();
-                return rpcCall(ADMIN_URL, adminToken, method, params);
+                return rpcCall(props.adminUrl(), adminToken, method, params);
             }
             throw e;
         }

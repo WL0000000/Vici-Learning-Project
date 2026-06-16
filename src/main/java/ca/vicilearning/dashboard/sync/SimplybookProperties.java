@@ -7,5 +7,7 @@ public record SimplybookProperties(
         String companyLogin,
         String apiKey,
         String adminUsername,
-        String adminPassword
+        String adminPassword,
+        String loginUrl,
+        String adminUrl
 ) {}

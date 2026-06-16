@@ -99,3 +99,118 @@ h1, h2, h3, h4, h5, h6 {
   border-top: 1px solid var(--border);
   margin: 1.25rem 0;
 }
+
+/* ── Nav links ────────────────────────────────────── */
+.vici-nav .brand {
+  text-decoration: none;
+}
+.nav-links {
+  display: flex;
+  gap: 0.15rem;
+  align-items: center;
+}
+.nav-link-item {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 2px;
+  transition: color 0.15s;
+}
+.nav-link-item:hover,
+.nav-link-item.active {
+  color: var(--text-pri);
+}
+
+/* ── Stat cards ───────────────────────────────────── */
+.stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+.stat-number {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 0.4rem;
+}
+.stat-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+/* ── Table ────────────────────────────────────────── */
+.vici-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.vici-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.vici-table td {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-pri);
+}
+.vici-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Badges ───────────────────────────────────────── */
+.badge-ok,
+.badge-err {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 2px;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.badge-ok  { background: rgba(61,184,122,0.12); color: var(--success); }
+.badge-err { background: rgba(224,82,82,0.12);  color: var(--danger);  }
+
+/* ── Accent button ────────────────────────────────── */
+.btn-accent {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1.25rem;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn-accent:hover { background: var(--accent-dim); }
+
+/* ── Status dot ───────────────────────────────────── */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+.status-dot.ok  { background: var(--success); }
+.status-dot.err { background: var(--danger);  }

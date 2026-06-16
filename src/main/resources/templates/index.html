@@ -11,7 +11,13 @@
 
 <nav class="vici-nav">
     <div class="container d-flex align-items-center justify-content-between">
-        <span class="brand">Vici Learning</span>
+        <div class="d-flex align-items-center gap-4">
+            <a th:href="@{/}" class="brand">Vici Learning</a>
+            <nav class="nav-links">
+                <a th:href="@{/}" class="nav-link-item active">Dashboard</a>
+                <a th:href="@{/sync}" class="nav-link-item">Sync</a>
+            </nav>
+        </div>
         <form th:action="@{/logout}" method="post">
             <button type="submit" class="btn-ghost">Log out</button>
         </form>
