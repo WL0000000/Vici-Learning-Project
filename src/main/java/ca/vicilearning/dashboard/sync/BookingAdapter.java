@@ -39,7 +39,9 @@ public class BookingAdapter {
         if (id == 0) return null;
 
         long clientId  = node.path("client_id").asLong();
-        long serviceId = node.path("service_id").asLong();
+        // Admin API names services "events" (event_id); fall back to service_id for older shapes
+        long serviceId = node.has("event_id") ? node.path("event_id").asLong()
+                                              : node.path("service_id").asLong();
 
         Student student = students.get(clientId);
         Service service = services.get(serviceId);
@@ -49,7 +51,9 @@ public class BookingAdapter {
             return null;
         }
 
-        long providerId = node.path("provider_id").asLong();
+        // Admin API names providers "units" (unit_id); fall back to provider_id for older shapes
+        long providerId = node.has("unit_id") ? node.path("unit_id").asLong()
+                                             : node.path("provider_id").asLong();
         Tutor tutor = providerId > 0 ? tutors.get(providerId) : null;
 
         Booking b = new Booking();
@@ -59,10 +63,18 @@ public class BookingAdapter {
         b.setService(service);
         b.setStartTime(resolveStartTime(node));
         b.setEndTime(resolveEndTime(node));
-        b.setStatus(node.path("status").asText("confirmed"));
+        b.setStatus(resolveStatus(node));
         b.setCancelledAt(AdapterUtils.parseDateTime(node.path("cancel_date").asText(null)));
         b.setSyncedAt(now);
         return b;
+    }
+
+    // Admin API returns is_confirmed (0/1); older shapes use a string "status"
+    private String resolveStatus(JsonNode node) {
+        if (node.has("is_confirmed")) {
+            return AdapterUtils.parseBool(node.path("is_confirmed")) ? "confirmed" : "pending";
+        }
+        return node.path("status").asText("confirmed");
     }
 
     // SimplyBook.me may give start_date + start_time or start_date_time

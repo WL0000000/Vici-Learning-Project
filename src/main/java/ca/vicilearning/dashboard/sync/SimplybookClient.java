@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class SimplybookClient {
 
 
+    private static final int CLIENT_FETCH_LIMIT = 1000;
+
     private final SimplybookProperties props;
     private final RestClient restClient;
     private final ObjectMapper mapper;
@@ -33,24 +35,31 @@ public class SimplybookClient {
 
     // ── Public API methods ────────────────────────────────────────────────────
 
+    // getClientList($searchString, $limit) — empty search returns all clients
     public JsonNode getClientList() {
-        return adminCall("getClientList", mapper.createArrayNode());
+        ArrayNode params = mapper.createArrayNode().add("").add(CLIENT_FETCH_LIMIT);
+        return adminCall("getClientList", params);
     }
 
+    // getEventList($isVisibleOnly, $asArray) — "events" are services in admin API terms
     public JsonNode getServiceList() {
-        return adminCall("getServiceList", mapper.createArrayNode());
+        ArrayNode params = mapper.createArrayNode().add(false).add(true);
+        return adminCall("getEventList", params);
     }
 
+    // getUnitList($isVisibleOnly, $asArray) — "units" are service providers (tutors)
     public JsonNode getPerformerList() {
-        return adminCall("getPerformerList", mapper.createArrayNode());
+        ArrayNode params = mapper.createArrayNode().add(false).add(true);
+        return adminCall("getUnitList", params);
     }
 
+    // getBookings($params) — params is a single filter object
     public JsonNode getBookingList(LocalDate from, LocalDate to) {
         ObjectNode filter = mapper.createObjectNode()
                 .put("date_from", from.toString())
                 .put("date_to", to.toString());
         ArrayNode params = mapper.createArrayNode().add(filter);
-        return adminCall("getBookingList", params);
+        return adminCall("getBookings", params);
     }
 
     // ── Token management ─────────────────────────────────────────────────────
@@ -100,7 +109,7 @@ public class SimplybookClient {
                 .uri(url)
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("X-Company-Login", props.companyLogin())
-                .headers(h -> { if (token != null) h.set("X-Token", token); })
+                .headers(h -> { if (token != null) h.set("X-User-Token", token); })
                 .body(rawBody)
                 .retrieve()
                 .body(String.class);
