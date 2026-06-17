@@ -1,241 +1,470 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap');
 
+/* brand colors, tried to grab from their website */
 :root {
-  --bg-base:     #0b0b0d;
-  --bg-surface:  #131316;
-  --bg-elevated: #1c1c22;
-  --border:      #2a2a34;
-  --accent:      #4f6ef7;
-  --accent-dim:  #3a52c4;
-  --text-pri:    #ededf2;
-  --text-muted:  #78789a;
-  --success:     #3db87a;
-  --danger:      #e05252;
+  --vici-navy: #15315c;
+  --vici-navy-dark: #0e2444;
+  --vici-gold: #e8a93c;
+  --vici-bg: #f6f2ea;
+  --vici-card: #ffffff;
+  --vici-border: #e9e2d4;
+  --vici-text: #1a2c45;
+  --vici-muted: #8a93a3;
+
+  /* these are for status stuff */
+  --vici-green: #2f8a6a;
+  --vici-green-bg: #e3f2ea;
+  --vici-red: #c0492f;
+  --vici-red-bg: #f9e4dd;
+  --vici-yellow: #c98a2b;
+  --vici-yellow-bg: #fbf0d8;
 }
 
-*, *::before, *::after { box-sizing: border-box; }
-
 body {
-  background: var(--bg-base);
-  color: var(--text-pri);
-  font-family: 'Inter', sans-serif;
-  font-size: 0.95rem;
+  background-color: var(--vici-bg);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  color: var(--vici-text);
+}
+
+/* topbar */
+.vici-topbar {
+  height: 64px;
+  background: var(--vici-card);
+  border-bottom: 1px solid var(--vici-border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.brand-icon {
+  width: 34px;
+  height: 34px;
+  background: var(--vici-navy-dark);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vici-gold);
+  font-family: 'Fraunces', serif;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-family: 'Fraunces', serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vici-text);
+  line-height: 1.1;
+}
+
+.brand-sub {
+  font-size: 10px;
+  color: var(--vici-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.topbar-title {
+  flex: 1;
+  padding-left: 20px;
+}
+
+.topbar-title h1 {
+  font-family: 'Fraunces', serif;
+  font-size: 19px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--vici-text);
+}
+
+.topbar-title p {
+  font-size: 12px;
+  color: var(--vici-muted);
   margin: 0;
 }
 
-/* ── Navbar ───────────────────────────────────────── */
-.vici-nav {
-  background: var(--bg-base);
-  border-bottom: 1px solid var(--border);
-  padding: 0.8rem 0;
-}
-
-.vici-nav .brand {
-  font-family: 'Space Grotesk', sans-serif;
+/* user avatar in top right */
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--vici-navy);
+  color: white;
+  font-size: 12px;
   font-weight: 700;
-  font-size: 1.05rem;
-  color: var(--text-pri);
-  letter-spacing: -0.01em;
-  text-decoration: none;
-}
-
-.btn-ghost {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-family: 'Inter', sans-serif;
-  font-size: 0.8rem;
-  padding: 0.35rem 1rem;
-  border-radius: 2px;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-.btn-ghost:hover {
-  border-color: var(--text-muted);
-  color: var(--text-pri);
-}
-
-/* ── Cards ────────────────────────────────────────── */
-.vici-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  padding: 1.5rem 1.75rem;
-}
-
-/* ── Typography ───────────────────────────────────── */
-h1, h2, h3, h4, h5, h6 {
-  font-family: 'Space Grotesk', sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--text-pri);
-}
-
-.text-muted { color: var(--text-muted) !important; }
-
-/* ── Status indicator ─────────────────────────────── */
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  font-family: 'Space Grotesk', sans-serif;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-.status-pill::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  background: var(--success);
-  border-radius: 50%;
-}
-
-/* ── Divider ──────────────────────────────────────── */
-.vici-divider {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 1.25rem 0;
-}
-
-/* ── Nav links ────────────────────────────────────── */
-.vici-nav .brand {
-  text-decoration: none;
-}
-.nav-links {
   display: flex;
-  gap: 0.15rem;
   align-items: center;
-}
-.nav-link-item {
-  color: var(--text-muted);
-  text-decoration: none;
-  font-size: 0.85rem;
-  padding: 0.3rem 0.75rem;
-  border-radius: 2px;
-  transition: color 0.15s;
-}
-.nav-link-item:hover,
-.nav-link-item.active {
-  color: var(--text-pri);
+  justify-content: center;
 }
 
-/* ── Stat cards ───────────────────────────────────── */
-.stat-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  padding: 1.5rem 1rem;
-  text-align: center;
-  transition: border-color 0.4s ease, background 0.4s ease;
+/* layout, sidebar + main */
+.vici-layout {
+  display: flex;
+  height: calc(100vh - 64px);
 }
-/* Brief highlight on a card whose count changed in the latest sync */
-.stat-card.stat-changed {
-  border-color: var(--accent);
-  background: rgba(79, 110, 247, 0.08);
+
+.vici-sidebar {
+  width: 230px;
+  background: var(--vici-card);
+  border-right: 1px solid var(--vici-border);
+  padding: 16px 10px;
+  flex-shrink: 0;
+  overflow-y: auto;
 }
-.stat-number {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 2.25rem;
+
+.sidebar-section-label {
+  font-size: 10px;
   font-weight: 700;
-  color: var(--accent);
-  line-height: 1;
-  margin-bottom: 0.4rem;
-}
-.stat-label {
-  font-size: 0.72rem;
-  color: var(--text-muted);
+  color: var(--vici-muted);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: 0.08em;
+  padding: 0 10px 8px;
 }
 
-/* ── Table ────────────────────────────────────────── */
-.vici-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
+/* nav links */
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  color: #4a5a70;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.1s;
+  margin-bottom: 2px;
 }
-.vici-table th {
-  color: var(--text-muted);
-  font-weight: 500;
-  font-size: 0.72rem;
+
+.sidebar-link:hover {
+  background: var(--vici-bg);
+  color: var(--vici-navy);
+}
+
+.sidebar-link.active {
+  background: var(--vici-navy);
+  color: white;
+}
+
+/* flagged student badge */
+.sidebar-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  background: var(--vici-red-bg);
+  color: var(--vici-red);
+  padding: 1px 6px;
+  border-radius: 20px;
+}
+
+.sidebar-link.active .sidebar-badge {
+  background: var(--vici-gold);
+  color: var(--vici-navy-dark);
+}
+
+/* little weekly stats card at bottom of sidebar */
+.sidebar-stats-card {
+  background: linear-gradient(160deg, var(--vici-navy), var(--vici-navy-dark));
+  border-radius: 12px;
+  padding: 14px;
+  color: white;
+  margin-top: auto;
+}
+
+.sidebar-stats-card .week-label {
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0.75rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  font-family: 'Space Grotesk', sans-serif;
+  color: #aebfd6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
 }
-.vici-table td {
-  padding: 0.75rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-pri);
+
+.week-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vici-gold);
+  display: inline-block;
 }
-.vici-table tbody tr:last-child td {
+
+.sidebar-stats-card .big-num {
+  font-family: 'Fraunces', serif;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sidebar-stats-card .num-label {
+  font-size: 11px;
+  color: #aebfd6;
+  margin-top: 2px;
+}
+
+/* main content area */
+.vici-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 22px;
+}
+
+/* stat cards */
+.stat-card {
+  background: var(--vici-card);
+  border: 1px solid var(--vici-border);
+  border-radius: 12px;
+  padding: 16px;
+  height: 100%;
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+
+.stat-card .stat-label {
+  font-size: 12px;
+  color: var(--vici-muted);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.stat-card .stat-val {
+  font-family: 'Fraunces', serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--vici-text);
+}
+
+.stat-card .stat-sub {
+  font-size: 11px;
+  color: var(--vici-muted);
+  margin-top: 4px;
+}
+
+/* sync strip, just sits at the top of the overview page * */
+.sync-strip {
+  background: var(--vici-card);
+  border: 1px solid var(--vici-border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.sync-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vici-green);
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.sync-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vici-text);
+}
+
+.sync-sub {
+  font-size: 11.5px;
+  color: var(--vici-muted);
+}
+
+/* panels*/
+.vici-panel {
+  background: var(--vici-card);
+  border: 1px solid var(--vici-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.vici-panel-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--vici-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vici-panel-header h2 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--vici-text);
+}
+
+.vici-panel-header p {
+  font-size: 11.5px;
+  color: var(--vici-muted);
+  margin: 0;
+}
+
+/* flagged students list */
+.flagged-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vici-border);
+}
+
+.flagged-row:last-child {
   border-bottom: none;
 }
 
-/* ── Badges ───────────────────────────────────────── */
-.badge-ok,
-.badge-err {
-  display: inline-block;
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.2rem 0.6rem;
-  border-radius: 2px;
-  font-family: 'Space Grotesk', sans-serif;
-  letter-spacing: 0.05em;
+.flagged-row:hover {
+  background: #faf8f4;
+}
+
+.flag-name {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.flag-reason {
+  font-size: 12.5px;
+  color: #4a5a70;
+  margin-top: 1px;
+}
+
+.flag-meta {
+  font-size: 11px;
+  color: var(--vici-muted);
+}
+
+/* urgent badge */
+.badge-urgent {
+  font-size: 9.5px;
+  font-weight: 800;
   text-transform: uppercase;
-}
-.badge-ok  { background: rgba(61,184,122,0.12); color: var(--success); }
-.badge-err { background: rgba(224,82,82,0.12);  color: var(--danger);  }
-
-/* ── Accent button ────────────────────────────────── */
-.btn-accent {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding: 0.5rem 1.25rem;
-  border-radius: 2px;
-  cursor: pointer;
-  transition: background 0.15s;
-  white-space: nowrap;
-}
-.btn-accent:hover { background: var(--accent-dim); }
-.btn-accent:disabled,
-.btn-accent.is-syncing {
-  opacity: 0.85;
-  cursor: progress;
+  background: var(--vici-red-bg);
+  color: var(--vici-red);
+  padding: 2px 6px;
+  border-radius: 5px;
+  letter-spacing: 0.04em;
 }
 
-/* Spinner shown inside the Sync Now button while a sync is running */
-.btn-spinner {
-  display: inline-block;
-  width: 0.85em;
-  height: 0.85em;
-  margin-right: 0.5em;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
-  border-radius: 50%;
-  vertical-align: -0.12em;
-  animation: vici-spin 0.6s linear infinite;
+/* upcoming sessions table */
+/* just using bootstrap table but overriding some stuff */
+.sessions-table th {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--vici-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #faf8f4;
+  border-color: var(--vici-border);
+  padding: 10px 12px;
 }
-@keyframes vici-spin { to { transform: rotate(360deg); } }
 
-/* ── Status dot ───────────────────────────────────── */
-.status-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-right: 0.4rem;
+.sessions-table td {
+  font-size: 13px;
+  padding: 10px 12px;
+  border-color: var(--vici-border);
   vertical-align: middle;
 }
-.status-dot.ok  { background: var(--success); }
-.status-dot.err { background: var(--danger);  }
+
+.sessions-table tbody tr:hover {
+  background: #faf8f4;
+}
+
+/* student initials avatar in table */
+.student-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--vici-navy);
+  color: white;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.student-name { font-weight: 700; font-size: 13px; }
+.student-sub  { font-size: 11px; color: var(--vici-muted); }
+
+/* status pills */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+
+.status-pill::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+
+.pill-confirmed  { background: var(--vici-green-bg);  color: var(--vici-green); }
+.pill-pending    { background: var(--vici-yellow-bg); color: var(--vici-yellow); }
+.pill-cancelled  { background: var(--vici-red-bg);    color: var(--vici-red); }
+
+/* buttons */
+.btn-vici {
+  background: var(--vici-navy);
+  color: white;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 8px;
+}
+
+.btn-vici:hover {
+  background: #1d3f70;
+  color: white;
+}
+
+.btn-vici-outline {
+  background: transparent;
+  color: var(--vici-navy);
+  border: 1px solid var(--vici-border);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 7px;
+}
+
+.btn-vici-outline:hover {
+  background: var(--vici-bg);
+}
+
+/* logout button in topbar */
+.btn-logout {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--vici-border);
+  color: var(--vici-muted);
+  background: transparent;
+}
+
+.btn-logout:hover {
+  color: var(--vici-text);
+  background: var(--vici-bg);
+}
+
+/* TODO: add responsive stuff later, works fine on desktop for now */
