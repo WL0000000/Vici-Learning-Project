@@ -24,6 +24,7 @@ body {
   background-color: var(--vici-bg);
   font-family: 'Plus Jakarta Sans', sans-serif;
   color: var(--vici-text);
+  margin: 0;
 }
 
 /* topbar */
@@ -420,6 +421,28 @@ body {
 .pill-confirmed  { background: var(--vici-green-bg);  color: var(--vici-green); }
 .pill-pending    { background: var(--vici-yellow-bg); color: var(--vici-yellow); }
 .pill-cancelled  { background: var(--vici-red-bg);    color: var(--vici-red); }
+
+.tutors-table td {
+  height: 58px;
+}
+
+.table-link {
+  color: var(--vici-navy);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.table-link:hover {
+  color: var(--vici-navy-dark);
+  text-decoration: underline;
+}
+
+.tutor-empty {
+  color: var(--vici-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
 
 /* buttons */
 .btn-vici {
