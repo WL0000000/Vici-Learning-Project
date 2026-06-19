@@ -30,7 +30,7 @@
     }
 
     var current = {};
-    var nodes = document.querySelectorAll(".stat-number[data-stat]");
+    var nodes = document.querySelectorAll(".stat-val[data-stat]");
 
     nodes.forEach(function (el) {
         var key = el.getAttribute("data-stat");

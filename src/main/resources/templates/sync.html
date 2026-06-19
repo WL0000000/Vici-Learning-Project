@@ -3,133 +3,226 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sync Status — Vici</title>
+    <title>Sync Status — Vici Learning</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link th:href="@{/css/main.css}" rel="stylesheet">
 </head>
 <body>
 
-<nav class="vici-nav">
-    <div class="container d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center gap-4">
-            <a th:href="@{/}" class="brand">Vici Learning</a>
-            <nav class="nav-links">
-                <a th:href="@{/}" class="nav-link-item">Dashboard</a>
-                <a th:href="@{/sync}" class="nav-link-item active">Sync</a>
-            </nav>
-        </div>
-        <form th:action="@{/logout}" method="post">
-            <button type="submit" class="btn-ghost">Log out</button>
-        </form>
-    </div>
-</nav>
-
-<main class="container py-5">
-
-    <!-- ── Header ─────────────────────────────────────────────────────────── -->
-    <div class="d-flex align-items-start justify-content-between mb-3">
+<!-- ── Topbar (matches dashboard) ──────────────────────────────────────────── -->
+<header class="vici-topbar">
+    <div class="d-flex align-items-center gap-2">
+        <div class="brand-icon">V</div>
         <div>
-            <h1 class="h4 mb-1">Sync Status</h1>
-
-            <p th:if="${lastSync == null}" class="mb-0" style="font-size:0.875rem; color:var(--text-muted)">
-                <span class="status-dot err"></span>Never synced
-            </p>
-            <p th:if="${lastSync != null && lastSync.success}" class="mb-0" style="font-size:0.875rem">
-                <span class="status-dot ok"></span>
-                Last synced <strong th:text="${minutesAgo}">0</strong> min ago
-                (<span th:text="${#temporals.format(lastSync.startedAt, 'yyyy-MM-dd HH:mm')}">time</span> UTC)
-            </p>
-            <p th:if="${lastSync != null && !lastSync.success}" class="mb-0" style="font-size:0.875rem; color:var(--danger)">
-                <span class="status-dot err"></span>
-                Last sync failed at
-                <span th:text="${#temporals.format(lastSync.startedAt, 'yyyy-MM-dd HH:mm')}">time</span> UTC
-            </p>
+            <div class="brand-name">Vici Learning</div>
+            <div class="brand-sub">Staff Console</div>
         </div>
+    </div>
 
-        <form th:action="@{/sync/now}" method="post" id="sync-form">
-            <button type="submit" class="btn-accent" id="sync-btn">Sync Now</button>
+    <div class="topbar-title">
+        <h1>Sync Status</h1>
+        <p>SimplyBook.me → local database</p>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 ms-auto">
+        <div class="user-avatar">RW</div>
+        <form th:action="@{/logout}" method="post" class="mb-0">
+            <button type="submit" class="btn-logout">Log out</button>
         </form>
     </div>
+</header>
 
-    <hr class="vici-divider">
+<!-- ── Layout: sidebar + main ──────────────────────────────────────────────── -->
+<div class="vici-layout">
 
-    <!-- ── Stat cards ─────────────────────────────────────────────────────── -->
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="stat-card">
-                <div class="stat-number" data-stat="students" th:text="${studentCount}">0</div>
-                <div class="stat-label">Students</div>
+    <nav class="vici-sidebar d-flex flex-column">
+        <div class="sidebar-section-label">Workspace</div>
+
+        <a th:href="@{/}" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="9" rx="1.5"/>
+                <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+                <rect x="14" y="12" width="7" height="9" rx="1.5"/>
+                <rect x="3" y="16" width="7" height="5" rx="1.5"/>
+            </svg>
+            Overview
+        </a>
+
+        <a href="#" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="8" r="3.2"/>
+                <path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>
+                <path d="M16 6.2a3 3 0 0 1 0 5.6"/>
+                <path d="M17.5 14.4A5.2 5.2 0 0 1 21 19.4"/>
+            </svg>
+            Students
+        </a>
+
+        <a href="#" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/>
+                <path d="M3.5 9h17"/>
+                <path d="M8 2.5v4M16 2.5v4"/>
+            </svg>
+            Bookings
+        </a>
+
+        <a href="#" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3.2v2.3M12 18.5v2.3M4.6 7.5l2 1.2M17.4 14.3l2 1.2M4.6 16.5l2-1.2M17.4 9.7l2-1.2"/>
+                <circle cx="12" cy="12" r="3.4"/>
+            </svg>
+            Automations
+        </a>
+
+        <a th:href="@{/sync}" class="sidebar-link active">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3.5 12a8.5 8.5 0 0 1 14.5-6"/>
+                <path d="M20.5 12a8.5 8.5 0 0 1-14.5 6"/>
+                <path d="M18.2 2.5v3.6h-3.6"/>
+                <path d="M5.8 21.5v-3.6h3.6"/>
+            </svg>
+            Sync Status
+        </a>
+    </nav>
+
+    <!-- ── Main content ────────────────────────────────────────────────────── -->
+    <main class="vici-main">
+
+        <!-- Status strip: last sync result + Sync Now -->
+        <div class="sync-strip">
+            <div class="d-flex align-items-center gap-2">
+
+                <!-- Never synced -->
+                <span th:if="${lastSync == null}" class="sync-status-dot is-err"></span>
+                <!-- Success -->
+                <span th:if="${lastSync != null && lastSync.success}" class="sync-status-dot"></span>
+                <!-- Failed -->
+                <span th:if="${lastSync != null && !lastSync.success}" class="sync-status-dot is-err"></span>
+
+                <div aria-live="polite">
+                    <div th:if="${lastSync == null}">
+                        <div class="sync-text">Never synced</div>
+                        <div class="sync-sub">Run a sync to pull data from SimplyBook.me.</div>
+                    </div>
+                    <div th:if="${lastSync != null && lastSync.success}">
+                        <div class="sync-text">All systems synced</div>
+                        <div class="sync-sub">
+                            Last synced <strong th:text="${minutesAgo}">0</strong> min ago
+                            · <span th:text="${#temporals.format(lastSync.startedAt, 'yyyy-MM-dd HH:mm')}">time</span> UTC
+                        </div>
+                    </div>
+                    <div th:if="${lastSync != null && !lastSync.success}">
+                        <div class="sync-text" style="color: var(--vici-red);">Last sync failed</div>
+                        <div class="sync-sub">
+                            Failed at <span th:text="${#temporals.format(lastSync.startedAt, 'yyyy-MM-dd HH:mm')}">time</span> UTC
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <form th:action="@{/sync/now}" method="post" id="sync-form" class="mb-0">
+                <button type="submit" class="btn-vici" id="sync-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="me-1">
+                        <path d="M3.5 12a8.5 8.5 0 0 1 14.5-6"/>
+                        <path d="M20.5 12a8.5 8.5 0 0 1-14.5 6"/>
+                        <path d="M18.2 2.5v3.6h-3.6"/>
+                        <path d="M5.8 21.5v-3.6h3.6"/>
+                    </svg>
+                    Sync Now
+                </button>
+            </form>
+        </div>
+
+        <!-- Record counts -->
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="stat-card" style="border-left-color: #15315c;">
+                    <div class="stat-label">Students</div>
+                    <div class="stat-val" data-stat="students" th:text="${studentCount}">0</div>
+                    <div class="stat-sub">in local database</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card" style="border-left-color: #e8a93c;">
+                    <div class="stat-label">Tutors</div>
+                    <div class="stat-val" data-stat="tutors" th:text="${tutorCount}">0</div>
+                    <div class="stat-sub">in local database</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card" style="border-left-color: #2f8a6a;">
+                    <div class="stat-label">Services</div>
+                    <div class="stat-val" data-stat="services" th:text="${serviceCount}">0</div>
+                    <div class="stat-sub">session types</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card" style="border-left-color: #c0492f;">
+                    <div class="stat-label">Bookings</div>
+                    <div class="stat-val" data-stat="bookings" th:text="${bookingCount}">0</div>
+                    <div class="stat-sub">synced sessions</div>
+                </div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card">
-                <div class="stat-number" data-stat="tutors" th:text="${tutorCount}">0</div>
-                <div class="stat-label">Tutors</div>
+
+        <!-- Recent sync runs -->
+        <div class="vici-panel">
+            <div class="vici-panel-header">
+                <div>
+                    <h2>Recent Sync Runs</h2>
+                    <p>Last 5 runs · counts show records added or updated</p>
+                </div>
+            </div>
+
+            <!-- Empty state -->
+            <div th:if="${#lists.isEmpty(recentLogs)}"
+                 class="p-4 text-center"
+                 style="font-size: 13px; color: var(--vici-muted);">
+                No sync runs yet. Click <strong>Sync Now</strong> to pull data from SimplyBook.me.
+            </div>
+
+            <!-- Runs table -->
+            <div class="table-responsive" th:if="${!#lists.isEmpty(recentLogs)}">
+                <table class="table sessions-table mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Started (UTC)</th>
+                            <th scope="col">Finished</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="text-end">Students</th>
+                            <th scope="col" class="text-end">Tutors</th>
+                            <th scope="col" class="text-end">Services</th>
+                            <th scope="col" class="text-end">Bookings</th>
+                            <th scope="col">Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="entry : ${recentLogs}">
+                            <td style="font-weight: 600;"
+                                th:text="${#temporals.format(entry.startedAt, 'yyyy-MM-dd HH:mm')}">—</td>
+                            <td class="text-muted"
+                                th:text="${entry.finishedAt != null}
+                                        ? ${#temporals.format(entry.finishedAt, 'HH:mm:ss')}
+                                        : '…'">—</td>
+                            <td>
+                                <span th:if="${entry.success}" class="status-pill pill-confirmed">OK</span>
+                                <span th:unless="${entry.success}" class="status-pill pill-cancelled">Failed</span>
+                            </td>
+                            <td class="text-end" th:text="${entry.studentsUpserted}">0</td>
+                            <td class="text-end" th:text="${entry.tutorsUpserted}">0</td>
+                            <td class="text-end" th:text="${entry.servicesUpserted}">0</td>
+                            <td class="text-end" th:text="${entry.bookingsUpserted}">0</td>
+                            <td style="font-size: 12px; color: var(--vici-red); max-width: 240px; word-break: break-word;"
+                                th:text="${#strings.isEmpty(entry.errorMessage) ? '—' : entry.errorMessage}">—</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card">
-                <div class="stat-number" data-stat="services" th:text="${serviceCount}">0</div>
-                <div class="stat-label">Services</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card">
-                <div class="stat-number" data-stat="bookings" th:text="${bookingCount}">0</div>
-                <div class="stat-label">Bookings</div>
-            </div>
-        </div>
-    </div>
 
-    <hr class="vici-divider">
-
-    <!-- ── Recent sync log ────────────────────────────────────────────────── -->
-    <h2 class="h6 mb-3">Recent Sync Runs</h2>
-
-    <div class="vici-card" style="padding:0; overflow:hidden;">
-
-        <div th:if="${#lists.isEmpty(recentLogs)}"
-             class="p-4 text-center"
-             style="font-size:0.875rem; color:var(--text-muted)">
-            No sync runs yet. Click <strong>Sync Now</strong> to pull data from SimplyBook.me.
-        </div>
-
-        <table class="vici-table" th:if="${!#lists.isEmpty(recentLogs)}">
-            <thead>
-                <tr>
-                    <th>Started (UTC)</th>
-                    <th>Finished</th>
-                    <th>Status</th>
-                    <th>Students</th>
-                    <th>Tutors</th>
-                    <th>Services</th>
-                    <th>Bookings</th>
-                    <th>Error</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr th:each="entry : ${recentLogs}">
-                    <td th:text="${#temporals.format(entry.startedAt, 'yyyy-MM-dd HH:mm')}">—</td>
-                    <td th:text="${entry.finishedAt != null}
-                            ? ${#temporals.format(entry.finishedAt, 'HH:mm:ss')}
-                            : '…'">—</td>
-                    <td>
-                        <span th:if="${entry.success}"  class="badge-ok">OK</span>
-                        <span th:unless="${entry.success}" class="badge-err">Failed</span>
-                    </td>
-                    <td th:text="${entry.studentsUpserted}">0</td>
-                    <td th:text="${entry.tutorsUpserted}">0</td>
-                    <td th:text="${entry.servicesUpserted}">0</td>
-                    <td th:text="${entry.bookingsUpserted}">0</td>
-                    <td style="font-size:0.8rem; color:var(--danger); max-width:260px; word-break:break-word"
-                        th:text="${#strings.isEmpty(entry.errorMessage) ? '—' : entry.errorMessage}">—</td>
-                </tr>
-            </tbody>
-        </table>
-
-    </div>
-
-</main>
+    </main>
+</div>
 
 <script th:src="@{/js/sync.js}"></script>
 </body>
