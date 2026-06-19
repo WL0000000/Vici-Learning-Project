@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -60,23 +61,36 @@ public class SyncService {
         syncLogRepo.save(entry);
 
         log.info("Starting SimplyBook.me sync");
-        try {
-            syncTutors(entry);
-            syncServices(entry);
-            syncStudents(entry);
-            syncBookings(entry);
-            entry.setSuccess(true);
-            log.info("Sync completed: tutors={} services={} students={} bookings={}",
-                    entry.getTutorsUpserted(), entry.getServicesUpserted(),
-                    entry.getStudentsUpserted(), entry.getBookingsUpserted());
-        } catch (Exception e) {
-            log.error("Sync failed: {}", e.getMessage(), e);
-            entry.setErrorMessage(e.getMessage());
-        } finally {
-            entry.setFinishedAt(LocalDateTime.now(ZoneOffset.UTC));
-            syncLogRepo.save(entry);
+
+        // Each step runs independently: a failure in one upstream resource (e.g. a
+        // flaky getUnitList call) must not prevent the others from syncing. We collect
+        // per-step failures and only mark the run successful if every step succeeded.
+        List<String> failures = new ArrayList<>();
+        runStep("tutors",   () -> syncTutors(entry),   failures);
+        runStep("services", () -> syncServices(entry), failures);
+        runStep("students", () -> syncStudents(entry), failures);
+        runStep("bookings", () -> syncBookings(entry), failures);
+
+        entry.setSuccess(failures.isEmpty());
+        if (!failures.isEmpty()) {
+            entry.setErrorMessage(String.join("; ", failures));
         }
+        entry.setFinishedAt(LocalDateTime.now(ZoneOffset.UTC));
+        syncLogRepo.save(entry);
+
+        log.info("Sync finished (success={}): tutors={} services={} students={} bookings={}",
+                entry.isSuccess(), entry.getTutorsUpserted(), entry.getServicesUpserted(),
+                entry.getStudentsUpserted(), entry.getBookingsUpserted());
         return entry;
+    }
+
+    private void runStep(String name, Runnable step, List<String> failures) {
+        try {
+            step.run();
+        } catch (Exception e) {
+            log.error("Sync step '{}' failed: {}", name, e.getMessage(), e);
+            failures.add(name + ": " + e.getMessage());
+        }
     }
 
     private void syncTutors(SyncLog entry) {
