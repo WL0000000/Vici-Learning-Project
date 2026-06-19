@@ -8,6 +8,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -65,5 +66,34 @@ class SyncServiceTest {
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getErrorMessage()).isNull();
+    }
+
+    @Test
+    void secondSyncWhileOneIsRunning_isSkipped() {
+        AtomicReference<SyncLog> reentrant = new AtomicReference<>();
+
+        // While the outer sync is mid-flight (inside the first step), fire a second
+        // sync() on the same instance. The guard must make it a no-op returning null.
+        when(client.getPerformerList()).thenAnswer(inv -> {
+            reentrant.set(syncService.sync());
+            return null;
+        });
+        when(performerAdapter.toTutors(any())).thenReturn(List.of(new Tutor()));
+        when(serviceAdapter.toServices(any())).thenReturn(List.of(new Service()));
+        when(clientAdapter.toStudents(any())).thenReturn(List.of(new Student()));
+        when(studentRepo.findAll()).thenReturn(List.of());
+        when(tutorRepo.findAll()).thenReturn(List.of());
+        when(serviceRepo.findAll()).thenReturn(List.of());
+        when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+
+        SyncLog outer = syncService.sync();
+
+        // Outer run completed normally; the overlapping call was skipped (null).
+        assertThat(outer).isNotNull();
+        assertThat(outer.isSuccess()).isTrue();
+        assertThat(reentrant.get()).isNull();
+
+        // The skipped call never started a second run, so only the outer SyncLog was persisted.
+        verify(client, times(1)).getPerformerList();
     }
 }

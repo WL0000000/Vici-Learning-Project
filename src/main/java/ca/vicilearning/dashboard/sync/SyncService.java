@@ -11,6 +11,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +32,10 @@ public class SyncService {
     private final ServiceRepository       serviceRepo;
     private final BookingRepository       bookingRepo;
     private final SyncLogRepository       syncLogRepo;
+
+    // Ensures only one sync runs at a time: the hourly scheduler and a manual
+    // "Sync Now" click can otherwise race on the same tables.
+    private final AtomicBoolean syncInProgress = new AtomicBoolean(false);
 
     public SyncService(SimplybookClient client,
                        ClientAdapter clientAdapter,
@@ -54,7 +59,23 @@ public class SyncService {
         this.syncLogRepo     = syncLogRepo;
     }
 
+    /**
+     * Runs a full sync. If a sync is already running, this call is skipped and
+     * returns {@code null} rather than racing the in-flight run.
+     */
     public SyncLog sync() {
+        if (!syncInProgress.compareAndSet(false, true)) {
+            log.info("Sync already in progress; skipping this run");
+            return null;
+        }
+        try {
+            return doSync();
+        } finally {
+            syncInProgress.set(false);
+        }
+    }
+
+    private SyncLog doSync() {
         SyncLog entry = new SyncLog();
         entry.setStartedAt(LocalDateTime.now(ZoneOffset.UTC));
         entry.setSuccess(false);
