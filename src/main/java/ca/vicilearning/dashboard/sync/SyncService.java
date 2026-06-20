@@ -3,15 +3,20 @@ package ca.vicilearning.dashboard.sync;
 import ca.vicilearning.dashboard.domain.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -99,9 +104,13 @@ public class SyncService {
         entry.setFinishedAt(LocalDateTime.now(ZoneOffset.UTC));
         syncLogRepo.save(entry);
 
-        log.info("Sync finished (success={}): tutors={} services={} students={} bookings={}",
-                entry.isSuccess(), entry.getTutorsUpserted(), entry.getServicesUpserted(),
-                entry.getStudentsUpserted(), entry.getBookingsUpserted());
+        log.info("Sync finished (success={}): tutors={}(-{}) services={}(-{}) "
+                        + "students={}(-{}) bookings={}(-{})",
+                entry.isSuccess(),
+                entry.getTutorsUpserted(),   entry.getTutorsRemoved(),
+                entry.getServicesUpserted(), entry.getServicesRemoved(),
+                entry.getStudentsUpserted(), entry.getStudentsRemoved(),
+                entry.getBookingsUpserted(), entry.getBookingsRemoved());
         return entry;
     }
 
@@ -118,6 +127,9 @@ public class SyncService {
         List<Tutor> tutors = performerAdapter.toTutors(client.getPerformerList());
         tutorRepo.saveAll(tutors);
         entry.setTutorsUpserted(tutors.size());
+        entry.setTutorsRemoved(reconcileDeletions(
+                tutorRepo.findAll(), tutors,
+                Tutor::getId, Tutor::getDeletedAt, Tutor::setDeletedAt, tutorRepo));
     }
 
     private void syncServices(SyncLog entry) {
@@ -125,12 +137,20 @@ public class SyncService {
                 serviceAdapter.toServices(client.getServiceList());
         serviceRepo.saveAll(services);
         entry.setServicesUpserted(services.size());
+        entry.setServicesRemoved(reconcileDeletions(
+                serviceRepo.findAll(), services,
+                ca.vicilearning.dashboard.domain.Service::getId,
+                ca.vicilearning.dashboard.domain.Service::getDeletedAt,
+                ca.vicilearning.dashboard.domain.Service::setDeletedAt, serviceRepo));
     }
 
     private void syncStudents(SyncLog entry) {
         List<Student> students = clientAdapter.toStudents(client.getClientList());
         studentRepo.saveAll(students);
         entry.setStudentsUpserted(students.size());
+        entry.setStudentsRemoved(reconcileDeletions(
+                studentRepo.findAll(), students,
+                Student::getId, Student::getDeletedAt, Student::setDeletedAt, studentRepo));
     }
 
     private void syncBookings(SyncLog entry) {
@@ -146,9 +166,44 @@ public class SyncService {
                 client.getBookingList(from, to), studentMap, tutorMap, serviceMap);
         bookingRepo.saveAll(bookings);
         entry.setBookingsUpserted(bookings.size());
+
+        // Only reconcile within the queried window: a booking outside [from, to] was
+        // never fetched, so its absence from the result does not imply it was removed.
+        List<Booking> existingInWindow = bookingRepo.findByStartTimeBetween(
+                from.atStartOfDay(), to.atTime(LocalTime.MAX));
+        entry.setBookingsRemoved(reconcileDeletions(
+                existingInWindow, bookings,
+                Booking::getId, Booking::getDeletedAt, Booking::setDeletedAt, bookingRepo));
     }
 
-    private <T, K> Map<K, T> toMap(List<T> list, java.util.function.Function<T, K> keyFn) {
+    private <T, K> Map<K, T> toMap(List<T> list, Function<T, K> keyFn) {
         return list.stream().collect(Collectors.toMap(keyFn, t -> t));
+    }
+
+    /**
+     * Soft-deletes local rows that are no longer present upstream. Any row in
+     * {@code existing} whose id is not in {@code fetched} and is not already marked
+     * deleted gets its {@code deletedAt} stamped and is saved. Rows that reappear
+     * upstream are un-deleted automatically: the upsert of {@code fetched} writes a
+     * fresh entity with {@code deletedAt == null} before this runs.
+     *
+     * @return the number of rows newly marked deleted by this call
+     */
+    private <T> int reconcileDeletions(List<T> existing,
+                                       List<T> fetched,
+                                       Function<T, Long> idFn,
+                                       Function<T, LocalDateTime> getDeletedAt,
+                                       BiConsumer<T, LocalDateTime> setDeletedAt,
+                                       JpaRepository<T, Long> repo) {
+        Set<Long> liveIds = fetched.stream().map(idFn).collect(Collectors.toSet());
+        List<T> newlyRemoved = existing.stream()
+                .filter(row -> !liveIds.contains(idFn.apply(row)))
+                .filter(row -> getDeletedAt.apply(row) == null)
+                .toList();
+
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        newlyRemoved.forEach(row -> setDeletedAt.accept(row, now));
+        repo.saveAll(newlyRemoved);
+        return newlyRemoved.size();
     }
 }

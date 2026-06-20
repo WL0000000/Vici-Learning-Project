@@ -35,6 +35,10 @@ public class Booking {
     @Column(nullable = false)
     private LocalDateTime syncedAt;
 
+    // Soft-delete marker: set when a sync no longer finds this booking upstream.
+    // null = still present in SimplyBook.me.
+    private LocalDateTime deletedAt;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -61,4 +65,7 @@ public class Booking {
 
     public LocalDateTime getSyncedAt() { return syncedAt; }
     public void setSyncedAt(LocalDateTime syncedAt) { this.syncedAt = syncedAt; }
+
+    public LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
 }
