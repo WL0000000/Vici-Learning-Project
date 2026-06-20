@@ -63,6 +63,22 @@ class SimplybookClientTest {
     }
 
     @Test
+    void getClientList_requestsAllRecordsWithNullLimit() {
+        wm.stubFor(post(urlEqualTo("/admin"))
+                .withRequestBody(matchingJsonPath("$.method", equalTo("getClientList")))
+                .willReturn(okJson("""
+                        {"jsonrpc":"2.0","id":2,"result":{}}
+                        """)));
+
+        client.getClientList();
+
+        // The limit must be sent as null (no 1000-row cap), so SimplyBook returns every
+        // client. Otherwise sync's soft-delete would prune clients beyond the cap.
+        wm.verify(postRequestedFor(urlEqualTo("/admin"))
+                .withRequestBody(equalToJson("{\"params\":[\"\",null]}", true, true)));
+    }
+
+    @Test
     void getPerformerList_parsesObjectFormat() {
         wm.stubFor(post(urlEqualTo("/admin"))
                 .withRequestBody(matchingJsonPath("$.method", equalTo("getUnitList")))
