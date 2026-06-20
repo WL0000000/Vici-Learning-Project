@@ -1,11 +1,14 @@
 package ca.vicilearning.dashboard.sync;
 
 import ca.vicilearning.dashboard.domain.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -26,8 +29,16 @@ class SyncServiceTest {
     @Mock ServiceRepository  serviceRepo;
     @Mock BookingRepository  bookingRepo;
     @Mock SyncLogRepository  syncLogRepo;
+    @Mock PlatformTransactionManager txManager;
 
     @InjectMocks SyncService syncService;
+
+    @BeforeEach
+    void txReturnsRealStatus() {
+        // Make each step's TransactionTemplate run its action; commit/rollback are no-ops
+        // on the mock, so step bodies execute exactly as in production minus real DB tx.
+        when(txManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+    }
 
     @Test
     void failingStep_doesNotPreventOtherSteps_andRecordsFailure() {
