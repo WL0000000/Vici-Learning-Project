@@ -11,4 +11,9 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByStudentId(Long studentId);
 
     List<Booking> findByTutorId(Long tutorId);
+
+    // Active = not soft-deleted (still present in SimplyBook.me).
+    long countByDeletedAtIsNull();
+
+    List<Booking> findByDeletedAtIsNull();
 }

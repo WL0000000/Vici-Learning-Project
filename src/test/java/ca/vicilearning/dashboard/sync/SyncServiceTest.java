@@ -39,13 +39,14 @@ class SyncServiceTest {
         when(tutorRepo.findAll()).thenReturn(List.of());
         when(serviceRepo.findAll()).thenReturn(List.of());
         when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
 
         SyncLog result = syncService.sync();
 
-        
-        verify(serviceRepo).saveAll(any());
-        verify(studentRepo).saveAll(any());
-        verify(bookingRepo).saveAll(any());
+        // atLeastOnce: each step now calls saveAll twice (upsert + soft-delete reconcile).
+        verify(serviceRepo, atLeastOnce()).saveAll(any());
+        verify(studentRepo, atLeastOnce()).saveAll(any());
+        verify(bookingRepo, atLeastOnce()).saveAll(any());
 
         // The run is marked failed and the failing step is named in the error message.
         assertThat(result.isSuccess()).isFalse();
@@ -61,6 +62,7 @@ class SyncServiceTest {
         when(tutorRepo.findAll()).thenReturn(List.of());
         when(serviceRepo.findAll()).thenReturn(List.of());
         when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
 
         SyncLog result = syncService.sync();
 
@@ -85,6 +87,7 @@ class SyncServiceTest {
         when(tutorRepo.findAll()).thenReturn(List.of());
         when(serviceRepo.findAll()).thenReturn(List.of());
         when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
 
         SyncLog outer = syncService.sync();
 
@@ -95,5 +98,35 @@ class SyncServiceTest {
 
         // The skipped call never started a second run, so only the outer SyncLog was persisted.
         verify(client, times(1)).getPerformerList();
+    }
+
+    @Test
+    void rowMissingUpstream_isSoftDeleted_whilePresentRowsAreUntouched() {
+        Tutor live  = tutorWithId(1L);   // still returned by SimplyBook.me
+        Tutor stale = tutorWithId(2L);   // in our DB but no longer upstream
+
+        when(performerAdapter.toTutors(any())).thenReturn(List.of(live));
+        // findAll reflects the post-upsert state: both the live and the stale row.
+        when(tutorRepo.findAll()).thenReturn(List.of(live, stale));
+        // Remaining steps are no-ops.
+        when(serviceAdapter.toServices(any())).thenReturn(List.of());
+        when(serviceRepo.findAll()).thenReturn(List.of());
+        when(clientAdapter.toStudents(any())).thenReturn(List.of());
+        when(studentRepo.findAll()).thenReturn(List.of());
+        when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
+
+        SyncLog result = syncService.sync();
+
+        assertThat(stale.getDeletedAt()).isNotNull();   // gone upstream → soft-deleted
+        assertThat(live.getDeletedAt()).isNull();       // still present → left alone
+        assertThat(result.getTutorsRemoved()).isEqualTo(1);
+        assertThat(result.isSuccess()).isTrue();
+    }
+
+    private static Tutor tutorWithId(long id) {
+        Tutor t = new Tutor();
+        t.setId(id);
+        return t;
     }
 }

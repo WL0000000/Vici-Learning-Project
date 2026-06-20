@@ -50,10 +50,12 @@ public class SyncController {
         model.addAttribute("recentLogs",   logs);
         model.addAttribute("lastSync",     last);
         model.addAttribute("minutesAgo",   minutesAgo);
-        model.addAttribute("studentCount", studentRepo.count());
-        model.addAttribute("tutorCount",   tutorRepo.count());
-        model.addAttribute("serviceCount", serviceRepo.count());
-        model.addAttribute("bookingCount", bookingRepo.count());
+        // Count only active (not soft-deleted) rows so the page reflects what is
+        // actually live in SimplyBook.me rather than including stale, removed records.
+        model.addAttribute("studentCount", studentRepo.countByDeletedAtIsNull());
+        model.addAttribute("tutorCount",   tutorRepo.countByDeletedAtIsNull());
+        model.addAttribute("serviceCount", serviceRepo.countByDeletedAtIsNull());
+        model.addAttribute("bookingCount", bookingRepo.countByDeletedAtIsNull());
 
         return "sync";
     }

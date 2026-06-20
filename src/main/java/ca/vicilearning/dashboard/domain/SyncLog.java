@@ -24,6 +24,11 @@ public class SyncLog {
     private int servicesUpserted;
     private int bookingsUpserted;
 
+    private int studentsRemoved;
+    private int tutorsRemoved;
+    private int servicesRemoved;
+    private int bookingsRemoved;
+
     @Column(columnDefinition = "text")
     private String errorMessage;
 
@@ -49,6 +54,18 @@ public class SyncLog {
 
     public int getBookingsUpserted() { return bookingsUpserted; }
     public void setBookingsUpserted(int bookingsUpserted) { this.bookingsUpserted = bookingsUpserted; }
+
+    public int getStudentsRemoved() { return studentsRemoved; }
+    public void setStudentsRemoved(int studentsRemoved) { this.studentsRemoved = studentsRemoved; }
+
+    public int getTutorsRemoved() { return tutorsRemoved; }
+    public void setTutorsRemoved(int tutorsRemoved) { this.tutorsRemoved = tutorsRemoved; }
+
+    public int getServicesRemoved() { return servicesRemoved; }
+    public void setServicesRemoved(int servicesRemoved) { this.servicesRemoved = servicesRemoved; }
+
+    public int getBookingsRemoved() { return bookingsRemoved; }
+    public void setBookingsRemoved(int bookingsRemoved) { this.bookingsRemoved = bookingsRemoved; }
 
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }

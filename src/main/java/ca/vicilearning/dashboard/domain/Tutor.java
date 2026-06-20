@@ -23,6 +23,11 @@ public class Tutor {
     @Column(nullable = false)
     private LocalDateTime syncedAt;
 
+    // Soft-delete marker: set when a sync no longer finds this tutor upstream.
+    // null = still present in SimplyBook.me. Distinct from `active`, which mirrors
+    // the upstream visibility flag.
+    private LocalDateTime deletedAt;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -40,4 +45,7 @@ public class Tutor {
 
     public LocalDateTime getSyncedAt() { return syncedAt; }
     public void setSyncedAt(LocalDateTime syncedAt) { this.syncedAt = syncedAt; }
+
+    public LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
 }
