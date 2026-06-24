@@ -1,6 +1,8 @@
 package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
+import ca.vicilearning.dashboard.rules.MockTaskService; // Import your new service file
+import ca.vicilearning.dashboard.rules.BrevoReviewTask;  // Import the record layout
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @Controller
@@ -17,22 +18,19 @@ import java.util.Map;
 public class BrevoController {
 
     private final BrevoCommunicationService communicationService;
+    private final MockTaskService mockTaskService; // Added as a clean dependency
 
-    // Direct dependency injection, exactly like SyncController
-    public BrevoController(BrevoCommunicationService communicationService) {
+    // Dependency injection constructor matching your group's architectural pattern
+    public BrevoController(BrevoCommunicationService communicationService, MockTaskService mockTaskService) {
         this.communicationService = communicationService;
+        this.mockTaskService = mockTaskService;
     }
 
     @GetMapping("/review")
     public String reviewQueuePage(Model model) {
-        // Mock data layer referencing your functional sandbox contact address
-        List<BrevoReviewTask> mockTasks = List.of(
-            new BrevoReviewTask(1L, "Miata Boy", "miataboy100@gmail.com", "Lapsed: No bookings observed in 14 days", 1L),
-            new BrevoReviewTask(2L, "Jane Doe", "jane.doe@example.com", "Payment Status: Overdue Invoice", 2L)
-        );
-
-        model.addAttribute("pendingTasks", mockTasks);
-        return "comms-review"; // Routes to templates/comms-review.html
+        // Look how clean this is now! We just ask the separate service file for the data.
+        model.addAttribute("pendingTasks", mockTaskService.getSimulatedSyncTasks());
+        return "comms-review";
     }
 
     @PostMapping("/approve")
@@ -42,21 +40,24 @@ public class BrevoController {
             @RequestParam("templateId") Long templateId,
             @RequestParam("reason") String reason) {
 
-        // Build dynamic parameters payload corresponding to your Brevo email design placeholders
+        System.out.println("====== PROTOTYPE TRANSACTION TRIGGERED ======");
+        System.out.println("Processing approval for family: " + name);
+        System.out.println("Target Destination: " + email);
+        System.out.println("Executing Template Identification ID: " + templateId);
+
         Map<String, Object> emailParams = new HashMap<>();
         emailParams.put("CONTACT_NAME", name);
         emailParams.put("TRIGGER_REASON", reason);
 
-        // Dispatch live request to Brevo via your RestClient Service layer
-        boolean emailSent = communicationService.sendTemplatedEmail(email, name, templateId, emailParams);
+        boolean success = communicationService.sendTemplatedEmail(email, name, templateId, emailParams);
 
-        if (emailSent) {
-            System.out.println("Prototype log: Successfully dispatched Brevo communication to " + email);
+        if (success) {
+            System.out.println("STATUS: Outbound delivery payload successfully accepted by Brevo servers!");
         } else {
-            System.err.println("Prototype log: Failed to dispatch communication to " + email);
+            System.err.println("STATUS: Transmission failure. Check keys, templates, or daily caps.");
         }
+        System.out.println("===============================================");
 
-        // Redirect back to main review dashboard view, maintaining consistent group design patterns
         return "redirect:/comms/review";
     }
 }
