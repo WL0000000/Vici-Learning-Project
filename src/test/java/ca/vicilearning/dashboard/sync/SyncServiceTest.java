@@ -20,6 +20,8 @@ import static org.mockito.Mockito.*;
 class SyncServiceTest {
 
     @Mock SimplybookClient   client;
+    @Mock SimplybookRestClient restClient;
+    @Mock SimplybookProperties props;
     @Mock ClientAdapter      clientAdapter;
     @Mock PerformerAdapter   performerAdapter;
     @Mock ServiceAdapter     serviceAdapter;
@@ -139,5 +141,52 @@ class SyncServiceTest {
         Tutor t = new Tutor();
         t.setId(id);
         return t;
+    }
+
+    @Test
+    void accountIdStep_populatesStudentFromRestV2_whenConfigured() {
+        // All JSON-RPC steps are no-ops so we isolate the REST v2 Account_ID step.
+        when(performerAdapter.toTutors(any())).thenReturn(List.of());
+        when(serviceAdapter.toServices(any())).thenReturn(List.of());
+        when(clientAdapter.toStudents(any())).thenReturn(List.of());
+        when(studentRepo.findAll()).thenReturn(List.of());
+        when(tutorRepo.findAll()).thenReturn(List.of());
+        when(serviceRepo.findAll()).thenReturn(List.of());
+        when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
+
+        Student student = new Student();
+        student.setId(5L);
+        when(props.restConfigured()).thenReturn(true);
+        when(props.accountIdFieldTitle()).thenReturn("Account_ID");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(student));
+        when(clientAdapter.extractAccountId(any(), eq("Account_ID"))).thenReturn("VICI-001");
+
+        SyncLog result = syncService.sync();
+
+        assertThat(student.getAccountId()).isEqualTo("VICI-001");
+        assertThat(result.getAccountIdsLinked()).isEqualTo(1);
+        assertThat(result.isSuccess()).isTrue();
+        verify(studentRepo).save(student);
+    }
+
+    @Test
+    void accountIdStep_isSkippedCleanly_whenRestNotConfigured() {
+        when(performerAdapter.toTutors(any())).thenReturn(List.of());
+        when(serviceAdapter.toServices(any())).thenReturn(List.of());
+        when(clientAdapter.toStudents(any())).thenReturn(List.of());
+        when(studentRepo.findAll()).thenReturn(List.of());
+        when(tutorRepo.findAll()).thenReturn(List.of());
+        when(serviceRepo.findAll()).thenReturn(List.of());
+        when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
+
+        // restConfigured() defaults to false on the mock → step must no-op, not fail,
+        // and must never call the REST client.
+        SyncLog result = syncService.sync();
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getAccountIdsLinked()).isEqualTo(0);
+        verifyNoInteractions(restClient);
     }
 }

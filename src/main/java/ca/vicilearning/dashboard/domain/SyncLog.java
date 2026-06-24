@@ -29,6 +29,9 @@ public class SyncLog {
     private int servicesRemoved;
     private int bookingsRemoved;
 
+    // Count of students whose Account_ID (Brevo link) was set/updated from REST v2 this run.
+    private int accountIdsLinked;
+
     @Column(columnDefinition = "text")
     private String errorMessage;
 
@@ -66,6 +69,9 @@ public class SyncLog {
 
     public int getBookingsRemoved() { return bookingsRemoved; }
     public void setBookingsRemoved(int bookingsRemoved) { this.bookingsRemoved = bookingsRemoved; }
+
+    public int getAccountIdsLinked() { return accountIdsLinked; }
+    public void setAccountIdsLinked(int accountIdsLinked) { this.accountIdsLinked = accountIdsLinked; }
 
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
