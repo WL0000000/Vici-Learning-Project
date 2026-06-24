@@ -17,6 +17,11 @@ public class Student {
 
     private String phone;
 
+    // The SimplyBook.me "Account_ID" custom client field — the key that links this
+    // student/family to its canonical record in Brevo. Pulled via REST API v2 (JSON-RPC
+    // cannot read custom fields). Nullable: not every client has it set upstream.
+    private String accountId;
+
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
@@ -37,6 +42,9 @@ public class Student {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+
+    public String getAccountId() { return accountId; }
+    public void setAccountId(String accountId) { this.accountId = accountId; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

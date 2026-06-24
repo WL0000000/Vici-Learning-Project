@@ -30,6 +30,8 @@ public class SyncService {
     private static final int BOOKING_LOOKAHEAD_DAYS = 30;
 
     private final SimplybookClient        client;
+    private final SimplybookRestClient    restClient;
+    private final SimplybookProperties    props;
     private final ClientAdapter           clientAdapter;
     private final PerformerAdapter        performerAdapter;
     private final ServiceAdapter          serviceAdapter;
@@ -50,6 +52,8 @@ public class SyncService {
     private final TransactionTemplate transactionTemplate;
 
     public SyncService(SimplybookClient client,
+                       SimplybookRestClient restClient,
+                       SimplybookProperties props,
                        ClientAdapter clientAdapter,
                        PerformerAdapter performerAdapter,
                        ServiceAdapter serviceAdapter,
@@ -61,6 +65,8 @@ public class SyncService {
                        SyncLogRepository syncLogRepo,
                        PlatformTransactionManager transactionManager) {
         this.client          = client;
+        this.restClient      = restClient;
+        this.props           = props;
         this.clientAdapter   = clientAdapter;
         this.performerAdapter = performerAdapter;
         this.serviceAdapter  = serviceAdapter;
@@ -105,6 +111,9 @@ public class SyncService {
         runStep("services", () -> syncServices(entry), failures);
         runStep("students", () -> syncStudents(entry), failures);
         runStep("bookings", () -> syncBookings(entry), failures);
+        // Runs after students so their rows exist; uses REST v2 (not JSON-RPC) for the
+        // Account_ID custom field. Its own step so a REST outage can't fail booking sync.
+        runStep("accountIds", () -> syncAccountIds(entry), failures);
 
         entry.setSuccess(failures.isEmpty());
         if (!failures.isEmpty()) {
@@ -114,12 +123,13 @@ public class SyncService {
         syncLogRepo.save(entry);
 
         log.info("Sync finished (success={}): tutors={}(-{}) services={}(-{}) "
-                        + "students={}(-{}) bookings={}(-{})",
+                        + "students={}(-{}) bookings={}(-{}) accountIdsLinked={}",
                 entry.isSuccess(),
                 entry.getTutorsUpserted(),   entry.getTutorsRemoved(),
                 entry.getServicesUpserted(), entry.getServicesRemoved(),
                 entry.getStudentsUpserted(), entry.getStudentsRemoved(),
-                entry.getBookingsUpserted(), entry.getBookingsRemoved());
+                entry.getBookingsUpserted(), entry.getBookingsRemoved(),
+                entry.getAccountIdsLinked());
         return entry;
     }
 
@@ -193,6 +203,47 @@ public class SyncService {
                 Booking::getId, Booking::getDeletedAt, Booking::setDeletedAt, bookingRepo);
         entry.setBookingsUpserted(bookings.size());
         entry.setBookingsRemoved(removed);
+    }
+
+    /**
+     * Populates each active student's Account_ID (the Brevo link) from SimplyBook REST v2.
+     *
+     * <p>This is one REST call per student. That's fine at current scale (~70 students) but
+     * is an N+1 pattern; when we approach the 300+/1000+ targets this should move to a bulk
+     * strategy or run incrementally (only students missing an Account_ID). A failure for one
+     * client is logged and skipped so a single bad record never aborts the whole step.
+     *
+     * <p>Skipped cleanly (not failed) when REST creds aren't configured yet, so teammates
+     * without REST keys still get green syncs for the JSON-RPC data.
+     */
+    private void syncAccountIds(SyncLog entry) {
+        if (!props.restConfigured()) {
+            log.info("REST v2 not configured (no company login / API key); skipping Account_ID sync");
+            entry.setAccountIdsLinked(0);
+            return;
+        }
+
+        List<Student> students = studentRepo.findByDeletedAtIsNull();
+        String fieldTitle = props.accountIdFieldTitle();
+        int linked = 0;
+
+        for (Student student : students) {
+            String accountId;
+            try {
+                accountId = clientAdapter.extractAccountId(
+                        restClient.getClientFieldValues(student.getId()), fieldTitle);
+            } catch (Exception e) {
+                log.warn("Account_ID fetch failed for client {}: {}", student.getId(), e.getMessage());
+                continue;
+            }
+            // Only write when the value actually changed, to avoid pointless updates.
+            if (accountId != null && !accountId.equals(student.getAccountId())) {
+                student.setAccountId(accountId);
+                studentRepo.save(student);
+                linked++;
+            }
+        }
+        entry.setAccountIdsLinked(linked);
     }
 
     private <T, K> Map<K, T> toMap(List<T> list, Function<T, K> keyFn) {
