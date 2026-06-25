@@ -46,15 +46,41 @@
             Overview
         </a>
 
-        <a th:href="@{/api/notion/tutors}" class="sidebar-link active">
+        <a th:href="@{/students}" class="sidebar-link">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="9" cy="8" r="3.2"/>
                 <path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>
                 <path d="M16 6.2a3 3 0 0 1 0 5.6"/>
                 <path d="M17.5 14.4A5.2 5.2 0 0 1 21 19.4"/>
             </svg>
+            Students
+        </a>
+
+        <a th:href="@{/api/notion/tutors}" class="sidebar-link active">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="7.5" r="3.2"/>
+                <path d="M5 20a7 7 0 0 1 14 0"/>
+                <path d="M8.5 13.5h7"/>
+            </svg>
             Tutors
             <span class="sidebar-badge" th:text="${#lists.size(tutors)}">0</span>
+        </a>
+
+        <a href="#" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/>
+                <path d="M3.5 9h17"/>
+                <path d="M8 2.5v4M16 2.5v4"/>
+            </svg>
+            Bookings
+        </a>
+
+        <a th:href="@{/comms/review}" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3.2v2.3M12 18.5v2.3M4.6 7.5l2 1.2M17.4 14.3l2 1.2M4.6 16.5l2-1.2M17.4 9.7l2-1.2"/>
+                <circle cx="12" cy="12" r="3.4"/>
+            </svg>
+            Automations
         </a>
 
         <a th:href="@{/sync}" class="sidebar-link">
