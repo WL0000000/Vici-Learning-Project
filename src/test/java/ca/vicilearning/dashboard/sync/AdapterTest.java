@@ -90,6 +90,43 @@ class AdapterTest {
 
             assertThat(students.get(0).getEmail()).isNull();
         }
+
+        // ── extractAccountId (REST v2 Client_DetailsEntity) ──
+
+        @Test
+        void extractAccountId_matchesByFieldTitle() throws Exception {
+            JsonNode details = mapper.readTree("""
+                    {"id":2,"fields":[
+                      {"id":"name","field":{"id":"name","title":"Name","type":"text"},"value":"Alice"},
+                      {"id":"f_acc","field":{"id":"f_acc","title":"Account_ID","type":"text"},"value":"VICI-001"}
+                    ]}
+                    """);
+
+            assertThat(adapter.extractAccountId(details, "Account_ID")).isEqualTo("VICI-001");
+        }
+
+        @Test
+        void extractAccountId_isCaseInsensitiveAndTrimsBlankToNull() throws Exception {
+            JsonNode details = mapper.readTree("""
+                    {"id":2,"fields":[
+                      {"id":"f_acc","field":{"id":"f_acc","title":"Account_ID","type":"text"},"value":"  "}
+                    ]}
+                    """);
+
+            // Blank value → null even though the field exists.
+            assertThat(adapter.extractAccountId(details, "account_id")).isNull();
+        }
+
+        @Test
+        void extractAccountId_returnsNullWhenFieldAbsent() throws Exception {
+            JsonNode details = mapper.readTree("""
+                    {"id":2,"fields":[
+                      {"id":"name","field":{"id":"name","title":"Name","type":"text"},"value":"Alice"}
+                    ]}
+                    """);
+
+            assertThat(adapter.extractAccountId(details, "Account_ID")).isNull();
+        }
     }
 
     // ── PerformerAdapter ──────────────────────────────────────────────────────

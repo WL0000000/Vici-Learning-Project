@@ -16,8 +16,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public class SimplybookClient {
 
 
-    private static final int CLIENT_FETCH_LIMIT = 1000;
-
     private final SimplybookProperties props;
     private final RestClient restClient;
     private final ObjectMapper mapper;
@@ -35,9 +33,14 @@ public class SimplybookClient {
 
     // ── Public API methods ────────────────────────────────────────────────────
 
-    // getClientList($searchString, $limit) — empty search returns all clients
+    // getClientList($searchString, $limit). The admin API has no page/offset paging;
+    // per SimplyBook's docs, a null $limit returns ALL clients. A hardcoded cap would
+    // silently truncate the list, which is unsafe now that sync soft-deletes any local
+    // client missing from the result — truncation would prune every un-fetched client.
     public JsonNode getClientList() {
-        ArrayNode params = mapper.createArrayNode().add("").add(CLIENT_FETCH_LIMIT);
+        ArrayNode params = mapper.createArrayNode();
+        params.add("");      // empty search → all clients
+        params.addNull();    // null limit → no cap
         return adminCall("getClientList", params);
     }
 

@@ -13,6 +13,7 @@ import java.time.LocalDate;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
 import static org.assertj.core.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -59,6 +60,22 @@ class SimplybookClientTest {
         assertThat(result.size()).isEqualTo(2);
         assertThat(result.get("1").get("name").asText()).isEqualTo("Alice Smith");
         assertThat(result.get("2").get("email").asText()).isEqualTo("bob@test.com");
+    }
+
+    @Test
+    void getClientList_requestsAllRecordsWithNullLimit() {
+        wm.stubFor(post(urlEqualTo("/admin"))
+                .withRequestBody(matchingJsonPath("$.method", equalTo("getClientList")))
+                .willReturn(okJson("""
+                        {"jsonrpc":"2.0","id":2,"result":{}}
+                        """)));
+
+        client.getClientList();
+
+        // The limit must be sent as null (no 1000-row cap), so SimplyBook returns every
+        // client. Otherwise sync's soft-delete would prune clients beyond the cap.
+        wm.verify(postRequestedFor(urlEqualTo("/admin"))
+                .withRequestBody(equalToJson("{\"params\":[\"\",null]}", true, true)));
     }
 
     @Test
@@ -118,6 +135,59 @@ class SimplybookClientTest {
         wm.verify(postRequestedFor(urlEqualTo("/admin"))
                 .withRequestBody(matchingJsonPath("$.params[0].date_from", equalTo("2026-03-16")))
                 .withRequestBody(matchingJsonPath("$.params[0].date_to",   equalTo("2026-06-15"))));
+    }
+
+    @Test
+    void authError_dropsTokenReauthenticatesAndRetriesOnce() {
+        String scenario = "reauth";
+
+        // First /admin call comes back with the SimplyBook auth error code -32000…
+        wm.stubFor(post(urlEqualTo("/admin"))
+                .inScenario(scenario).whenScenarioStateIs(STARTED)
+                .withRequestBody(matchingJsonPath("$.method", equalTo("getEventList")))
+                .willReturn(okJson("""
+                        {"jsonrpc":"2.0","id":2,
+                         "error":{"code":-32000,"message":"Token expired"}}
+                        """))
+                .willSetStateTo("reauthed"));
+
+        // …and the retry (after a fresh login) succeeds.
+        wm.stubFor(post(urlEqualTo("/admin"))
+                .inScenario(scenario).whenScenarioStateIs("reauthed")
+                .withRequestBody(matchingJsonPath("$.method", equalTo("getEventList")))
+                .willReturn(okJson("""
+                        {"jsonrpc":"2.0","id":3,"result":{
+                            "1":{"id":"1","name":"Math Tutoring","duration":"60","is_visible":"1"}
+                        }}
+                        """)));
+
+        JsonNode result = client.getServiceList();
+
+        // The caller transparently gets the retried result, not the auth error.
+        assertThat(result.size()).isEqualTo(1);
+        assertThat(result.get("1").get("name").asText()).isEqualTo("Math Tutoring");
+
+        // A fresh token was fetched (login called again) and exactly one retry was issued.
+        wm.verify(moreThanOrExactly(1), postRequestedFor(urlEqualTo("/login")));
+        wm.verify(exactly(2), postRequestedFor(urlEqualTo("/admin")));
+    }
+
+    @Test
+    void authError_retriesAtMostOnce_thenPropagates() {
+        // /admin keeps returning the auth error even after re-login.
+        wm.stubFor(post(urlEqualTo("/admin"))
+                .withRequestBody(matchingJsonPath("$.method", equalTo("getEventList")))
+                .willReturn(okJson("""
+                        {"jsonrpc":"2.0","id":2,
+                         "error":{"code":-32000,"message":"Token expired"}}
+                        """)));
+
+        assertThatThrownBy(() -> client.getServiceList())
+                .isInstanceOf(SimplybookApiException.class)
+                .hasMessageContaining("-32000");
+
+        // Original call + exactly one retry = 2; the client must not loop forever.
+        wm.verify(exactly(2), postRequestedFor(urlEqualTo("/admin")));
     }
 
     @Test
