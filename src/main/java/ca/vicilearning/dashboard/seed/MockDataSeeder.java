@@ -1,0 +1,250 @@
+package ca.vicilearning.dashboard.seed;
+
+import ca.vicilearning.dashboard.domain.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+/**
+ * Generates realistic mock data so the dashboard can be demoed and load-tested without any
+ * live SimplyBook.me / Brevo credentials. It writes the exact same local entities a real
+ * SimplyBook sync produces — tutors, services, students (with the Brevo-link {@code accountId}),
+ * and bookings — so every downstream feature (weekly hours, filters, tutor drill-down) works
+ * against it identically to live data.
+ *
+ * <p><b>Activation:</b> only runs under the {@code seed} Spring profile, so it can never touch a
+ * real deployment. Run with {@code SPRING_PROFILES_ACTIVE=seed} (or
+ * {@code mvn spring-boot:run -Dspring-boot.run.profiles=seed}). Control volume with
+ * {@code seed.student-count} (default 70; set to 300+ for scale checks).
+ *
+ * <p><b>Important:</b> do not run the live sync against a seeded DB — the sync soft-deletes any
+ * local row it doesn't find upstream, which would mark all seeded rows deleted. Seeding is for
+ * offline demo/dev only.
+ */
+@Component
+@Profile("seed")
+@Order(1)
+public class MockDataSeeder implements ApplicationRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(MockDataSeeder.class);
+
+    // Fixed seed → identical data on every run and for every teammate, so demos are stable.
+    private static final long RANDOM_SEED = 20260623L;
+
+    // Mirror the live sync window so seeded bookings line up with what a real sync would hold.
+    private static final int LOOKBACK_DAYS  = 90;
+    private static final int LOOKAHEAD_DAYS = 30;
+
+    // Manually assigned id ranges (these entities use upstream ids, not @GeneratedValue).
+    private static final long STUDENT_ID_BASE = 1000L;
+
+    private static final String[] FIRST_NAMES = {
+            "Olivia", "Liam", "Emma", "Noah", "Ava", "Ethan", "Sophia", "Mason", "Isabella",
+            "Lucas", "Mia", "Aiden", "Charlotte", "Jackson", "Amelia", "Caleb", "Harper",
+            "Benjamin", "Ella", "Daniel", "Grace", "Henry", "Chloe", "Samuel", "Zoe"
+    };
+    private static final String[] LAST_NAMES = {
+            "Tran", "Nguyen", "Smith", "Patel", "Chen", "Kim", "Singh", "Wong", "Garcia",
+            "Lee", "Brown", "Khan", "Martin", "Wang", "Lam", "Roy", "Dixon", "Ahmed",
+            "Park", "Reyes", "Cohen", "Diaz", "Ford", "Gill"
+    };
+    private static final String[] TUTOR_NAMES = {
+            "Corina Vega", "Daniel Osei", "Priya Sharma", "Marcus Bell",
+            "Hannah Park", "Tariq Aziz", "Elena Petrova", "Sam Whitfield"
+    };
+
+    // Service catalogue: {name, durationMinutes}. The 120-min entry is why hours must be
+    // derived from duration, not session count (a client requirement).
+    private static final Object[][] SERVICE_DEFS = {
+            {"30min Tutoring Session", 30},
+            {"Virtual 1hr Tutoring Session", 60},
+            {"In-Person 1hr Tutoring Session", 60},
+            {"2hr Intensive Session", 120}
+    };
+
+    private final TutorRepository   tutorRepo;
+    private final ServiceRepository serviceRepo;
+    private final StudentRepository studentRepo;
+    private final BookingRepository bookingRepo;
+    private final int studentCount;
+
+    public MockDataSeeder(TutorRepository tutorRepo,
+                          ServiceRepository serviceRepo,
+                          StudentRepository studentRepo,
+                          BookingRepository bookingRepo,
+                          @Value("${seed.student-count:70}") int studentCount) {
+        this.tutorRepo    = tutorRepo;
+        this.serviceRepo  = serviceRepo;
+        this.studentRepo  = studentRepo;
+        this.bookingRepo  = bookingRepo;
+        this.studentCount = studentCount;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        try {
+            long existing = studentRepo.count();
+            if (existing > 0) {
+                // Idempotent: never double-seed an already-populated DB.
+                log.info("Seed profile active but {} students already exist; skipping seed", existing);
+                return;
+            }
+            seed();
+        } catch (Exception e) {
+            // Seeding must never crash app startup — log and carry on.
+            log.error("Mock data seeding failed: {}", e.getMessage(), e);
+        }
+    }
+
+    private void seed() {
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        Random rng = new Random(RANDOM_SEED);
+
+        List<Tutor> tutors = buildTutors(now);
+        tutorRepo.saveAll(tutors);
+
+        List<Service> services = buildServices(now);
+        serviceRepo.saveAll(services);
+
+        List<Student> students = buildStudents(now, rng);
+        studentRepo.saveAll(students);
+
+        List<Booking> bookings = buildBookings(students, tutors, services, now, rng);
+        bookingRepo.saveAll(bookings);
+
+        log.info("Seeded mock data: {} tutors, {} services, {} students, {} bookings",
+                tutors.size(), services.size(), students.size(), bookings.size());
+    }
+
+    private List<Tutor> buildTutors(LocalDateTime now) {
+        List<Tutor> tutors = new ArrayList<>();
+        for (int i = 0; i < TUTOR_NAMES.length; i++) {
+            Tutor t = new Tutor();
+            t.setId((long) (i + 1));
+            t.setName(TUTOR_NAMES[i]);
+            t.setEmail(emailFrom(TUTOR_NAMES[i], "vicilearning.ca"));
+            t.setPhone(randomPhone(new Random(i)));
+            // One tutor inactive, to exercise the active/visibility flag in the UI.
+            t.setActive(i != TUTOR_NAMES.length - 1);
+            t.setSyncedAt(now);
+            tutors.add(t);
+        }
+        return tutors;
+    }
+
+    private List<Service> buildServices(LocalDateTime now) {
+        List<Service> services = new ArrayList<>();
+        for (int i = 0; i < SERVICE_DEFS.length; i++) {
+            Service s = new Service();
+            s.setId((long) (i + 1));
+            s.setName((String) SERVICE_DEFS[i][0]);
+            s.setDurationMinutes((Integer) SERVICE_DEFS[i][1]);
+            s.setActive(true);
+            s.setSyncedAt(now);
+            services.add(s);
+        }
+        return services;
+    }
+
+    private List<Student> buildStudents(LocalDateTime now, Random rng) {
+        List<Student> students = new ArrayList<>();
+        for (int i = 0; i < studentCount; i++) {
+            String name = FIRST_NAMES[rng.nextInt(FIRST_NAMES.length)] + " "
+                    + LAST_NAMES[rng.nextInt(LAST_NAMES.length)];
+            Student s = new Student();
+            s.setId(STUDENT_ID_BASE + i);
+            s.setName(name);
+            s.setEmail(emailFrom(name + i, "example.com"));
+            s.setPhone(randomPhone(rng));
+            // The Brevo join key. Sequential here; in production it comes from SimplyBook's
+            // Account_ID custom field via the REST v2 client.
+            s.setAccountId(String.format("VICI-%04d", i + 1));
+            s.setCreatedAt(now.minusDays(30 + rng.nextInt(700)));
+            s.setSyncedAt(now);
+            students.add(s);
+        }
+        return students;
+    }
+
+    private List<Booking> buildBookings(List<Student> students, List<Tutor> tutors,
+                                        List<Service> services, LocalDateTime now, Random rng) {
+        List<Booking> bookings = new ArrayList<>();
+        LocalDate windowStart = now.minusDays(LOOKBACK_DAYS).toLocalDate();
+        LocalDate windowEnd   = now.plusDays(LOOKAHEAD_DAYS).toLocalDate();
+        LocalDate lapsedCutoff = now.minusDays(21).toLocalDate();
+        long bookingId = 1;
+
+        for (Student student : students) {
+            // ~15% of students are "lapsed": they have history but nothing in the last 3 weeks
+            // or upcoming — the top follow-up target for the future rules engine.
+            boolean lapsed = rng.nextDouble() < 0.15;
+            int sessionsPerWeek = rng.nextDouble() < 0.3 ? 2 : 1;
+
+            for (LocalDate week = windowStart; !week.isAfter(windowEnd); week = week.plusWeeks(1)) {
+                if (lapsed && !week.isBefore(lapsedCutoff)) break;      // lapsed: stop before recent weeks
+                if (rng.nextDouble() < 0.25) continue;                  // not every week has a booking
+
+                for (int n = 0; n < sessionsPerWeek; n++) {
+                    LocalDate day = week.plusDays(rng.nextInt(5));      // Mon–Fri
+                    int hour = 15 + rng.nextInt(5);                     // 3pm–7pm
+                    LocalDateTime start = day.atTime(hour, 0);
+                    if (start.toLocalDate().isBefore(windowStart) || start.toLocalDate().isAfter(windowEnd)) {
+                        continue;
+                    }
+                    Service service = weightedService(services, rng);
+                    LocalDateTime end = start.plusMinutes(service.getDurationMinutes());
+
+                    Booking b = new Booking();
+                    b.setId(bookingId++);
+                    b.setStudent(student);
+                    // ~5% have no assigned tutor (mirrors real gaps in the data).
+                    b.setTutor(rng.nextDouble() < 0.05 ? null : tutors.get(rng.nextInt(tutors.size())));
+                    b.setService(service);
+                    b.setStartTime(start);
+                    b.setEndTime(end);
+
+                    // ~10% cancelled, cancelled a little before the session.
+                    if (rng.nextDouble() < 0.10) {
+                        b.setStatus("cancelled");
+                        b.setCancelledAt(start.minusHours(6 + rng.nextInt(48)));
+                    } else {
+                        b.setStatus("confirmed");
+                    }
+                    b.setSyncedAt(now);
+                    bookings.add(b);
+                }
+            }
+        }
+        return bookings;
+    }
+
+    // Heavier weighting toward the 1hr services, like a real tutoring schedule.
+    private Service weightedService(List<Service> services, Random rng) {
+        double r = rng.nextDouble();
+        if (r < 0.15) return services.get(0);   // 30min
+        if (r < 0.55) return services.get(1);   // virtual 1hr
+        if (r < 0.85) return services.get(2);   // in-person 1hr
+        return services.get(3);                 // 2hr
+    }
+
+    private String emailFrom(String name, String domain) {
+        String local = name.toLowerCase().replaceAll("[^a-z0-9]", ".");
+        return local + "@" + domain;
+    }
+
+    private String randomPhone(Random rng) {
+        return String.format("604-555-%04d", rng.nextInt(10000));
+    }
+}
