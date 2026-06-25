@@ -35,56 +35,7 @@
 <!-- ── Layout: sidebar + main ──────────────────────────────────────────────── -->
 <div class="vici-layout">
 
-    <nav class="vici-sidebar d-flex flex-column">
-        <div class="sidebar-section-label">Workspace</div>
-
-        <a th:href="@{/}" class="sidebar-link">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="9" rx="1.5"/>
-                <rect x="14" y="3" width="7" height="5" rx="1.5"/>
-                <rect x="14" y="12" width="7" height="9" rx="1.5"/>
-                <rect x="3" y="16" width="7" height="5" rx="1.5"/>
-            </svg>
-            Overview
-        </a>
-
-        <a th:href="@{/students}" class="sidebar-link">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="9" cy="8" r="3.2"/>
-                <path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>
-                <path d="M16 6.2a3 3 0 0 1 0 5.6"/>
-                <path d="M17.5 14.4A5.2 5.2 0 0 1 21 19.4"/>
-            </svg>
-            Students
-        </a>
-
-        <a href="#" class="sidebar-link">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/>
-                <path d="M3.5 9h17"/>
-                <path d="M8 2.5v4M16 2.5v4"/>
-            </svg>
-            Bookings
-        </a>
-
-        <a href="#" class="sidebar-link">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3.2v2.3M12 18.5v2.3M4.6 7.5l2 1.2M17.4 14.3l2 1.2M4.6 16.5l2-1.2M17.4 9.7l2-1.2"/>
-                <circle cx="12" cy="12" r="3.4"/>
-            </svg>
-            Automations
-        </a>
-
-        <a th:href="@{/sync}" class="sidebar-link active">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3.5 12a8.5 8.5 0 0 1 14.5-6"/>
-                <path d="M20.5 12a8.5 8.5 0 0 1-14.5 6"/>
-                <path d="M18.2 2.5v3.6h-3.6"/>
-                <path d="M5.8 21.5v-3.6h3.6"/>
-            </svg>
-            Sync Status
-        </a>
-    </nav>
+    <script th:replace = "fragments/side-bar :: side-bar('sync')"></script>
 
     <!-- ── Main content ────────────────────────────────────────────────────── -->
     <main class="vici-main">
