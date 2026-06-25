@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Students &amp; Hours — Vici Learning</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link th:href="@{/css/main.css}" rel="stylesheet">
+</head>
+<body>
+
+<header class="vici-topbar">
+    <div class="d-flex align-items-center gap-2">
+        <div class="brand-icon">V</div>
+        <div>
+            <div class="brand-name">Vici Learning</div>
+            <div class="brand-sub">Staff Console</div>
+        </div>
+    </div>
+    <div class="topbar-title">
+        <h1>Students &amp; Hours</h1>
+        <p>Live data · Brevo identity + SimplyBook bookings, joined</p>
+    </div>
+    <div class="d-flex align-items-center gap-2 ms-auto">
+        <div class="user-avatar">RW</div>
+        <form th:action="@{/logout}" method="post" class="mb-0">
+            <button type="submit" class="btn-logout">Log out</button>
+        </form>
+    </div>
+</header>
+
+<div class="vici-layout">
+
+    <nav class="vici-sidebar d-flex flex-column">
+        <div class="sidebar-section-label">Workspace</div>
+        <a th:href="@{/}" class="sidebar-link">Overview</a>
+        <a th:href="@{/students}" class="sidebar-link active">Students</a>
+        <a th:href="@{/api/notion/tutors}" class="sidebar-link">Tutors</a>
+        <a th:href="@{/sync}" class="sidebar-link">Sync Status</a>
+    </nav>
+
+    <main class="vici-main">
+
+        <!-- ── Overview cards (computed from local DB) ─────────────────────────── -->
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="stat-card" style="border-left-color: #15315c;">
+                    <div class="stat-label">Active Students</div>
+                    <div class="stat-val" th:text="${overview.activeStudents}">0</div>
+                    <div class="stat-sub">in local database</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card" style="border-left-color: #e8a93c;">
+                    <div class="stat-label">Sessions This Week</div>
+                    <div class="stat-val" th:text="${overview.sessionsThisWeek}">0</div>
+                    <div class="stat-sub">confirmed + pending</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card" style="border-left-color: #2f8a6a;">
+                    <div class="stat-label">Hours This Week</div>
+                    <div class="stat-val" th:text="${overview.hoursThisWeek}">0</div>
+                    <div class="stat-sub">from session durations</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card" style="border-left-color: #c0492f;">
+                    <div class="stat-label">Cancellations This Month</div>
+                    <div class="stat-val" th:text="${overview.cancellationsThisMonth}">0</div>
+                    <div class="stat-sub">this calendar month</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <!-- ── Weekly hours (the automated "BOOKED" column) ────────────────── -->
+            <div class="col-lg-7">
+                <div class="vici-panel h-100">
+                    <div class="vici-panel-header">
+                        <div>
+                            <h2>Hours Booked by Week</h2>
+                            <p>3 weeks back · this week · 2 weeks ahead</p>
+                        </div>
+                        <div class="d-flex align-items-center gap-3" style="font-size:12px; color:var(--vici-muted);">
+                            <span class="d-inline-flex align-items-center gap-1">
+                                <span style="width:11px; height:11px; border-radius:3px; background:#15315c; display:inline-block;"></span>
+                                Booked
+                            </span>
+                            <span class="d-inline-flex align-items-center gap-1">
+                                <span style="width:11px; height:11px; border-radius:3px; background:#e8a93c; display:inline-block;"></span>
+                                Upcoming
+                            </span>
+                        </div>
+                    </div>
+                    <div style="padding:16px 18px;">
+                        <div style="position:relative; height:260px;">
+                            <canvas id="weeklyHoursChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Tutor drill-down (hours this week) ──────────────────────────── -->
+            <div class="col-lg-5">
+                <div class="vici-panel h-100">
+                    <div class="vici-panel-header">
+                        <div>
+                            <h2>Hours by Tutor</h2>
+                            <p>This week</p>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table sessions-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Tutor</th>
+                                    <th class="text-end">Hours</th>
+                                    <th class="text-end">Sessions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="t : ${tutorHours}">
+                                    <td style="font-weight:600;" th:text="${t.tutorName}">—</td>
+                                    <td class="text-end" style="font-weight:700;" th:text="${t.hours}">0</td>
+                                    <td class="text-end text-muted" th:text="${t.sessions}">0</td>
+                                </tr>
+                                <tr th:if="${#lists.isEmpty(tutorHours)}">
+                                    <td colspan="3" class="text-center text-muted p-4">No sessions this week.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Student table: Brevo + SimplyBook joined on Account_ID ──────────── -->
+        <div class="vici-panel mb-3">
+            <div class="vici-panel-header">
+                <div>
+                    <h2>Students</h2>
+                    <p>Contact identity + Account_ID link + this week's booked hours</p>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table sessions-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Account ID</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th class="text-end">Sessions (wk)</th>
+                            <th class="text-end">Hours (wk)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="s : ${students}">
+                            <td style="font-weight:600;" th:text="${s.name}">—</td>
+                            <td>
+                                <span class="status-pill pill-confirmed"
+                                      th:if="${s.accountId != null}" th:text="${s.accountId}">VICI-0000</span>
+                                <span class="text-muted" th:if="${s.accountId == null}">— not linked —</span>
+                            </td>
+                            <td class="text-muted" th:text="${s.email != null ? s.email : '—'}">—</td>
+                            <td class="text-muted" th:text="${s.phone != null ? s.phone : '—'}">—</td>
+                            <td class="text-end" th:text="${s.sessionsThisWeek}">0</td>
+                            <td class="text-end" style="font-weight:700;" th:text="${s.hoursThisWeek}">0</td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(students)}">
+                            <td colspan="6" class="text-center text-muted p-4">
+                                No students. Run the seeder or a sync.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── Upcoming sessions ───────────────────────────────────────────────── -->
+        <div class="vici-panel">
+            <div class="vici-panel-header">
+                <div>
+                    <h2>Upcoming Sessions</h2>
+                    <p>Next 10 scheduled</p>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table sessions-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Tutor</th>
+                            <th>Service</th>
+                            <th>When</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="u : ${upcoming}">
+                            <td style="font-weight:600;" th:text="${u.studentName}">—</td>
+                            <td class="text-muted" th:text="${u.tutorName}">—</td>
+                            <td class="text-muted" th:text="${u.serviceName}">—</td>
+                            <td th:text="${#temporals.format(u.startTime, 'EEE, MMM d · h:mm a')}">—</td>
+                            <td>
+                                <span class="status-pill"
+                                      th:classappend="${u.status == 'cancelled'} ? 'pill-cancelled'
+                                                    : (${u.status == 'pending'} ? 'pill-pending' : 'pill-confirmed')"
+                                      th:text="${u.status}">status</span>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(upcoming)}">
+                            <td colspan="5" class="text-center text-muted p-4">No upcoming sessions.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script th:inline="javascript">
+/*<![CDATA[*/
+(function () {
+    // Server-rendered data → Thymeleaf serializes these lists to JSON arrays.
+    const labels   = /*[[${weekLabels}]]*/ [];
+    const hours    = /*[[${weekHours}]]*/ [];
+    const sessions = /*[[${weekSessions}]]*/ [];
+    const currentIdx = /*[[${currentWeekIndex}]]*/ 0;
+
+    const canvas = document.getElementById('weeklyHoursChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    // Past + current week = navy (actual bookings); future weeks = gold (upcoming/projected).
+    const colors = labels.map((_, i) => (i > currentIdx ? '#e8a93c' : '#15315c'));
+
+    new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Hours booked',
+                data: hours,
+                backgroundColor: colors,
+                borderRadius: 6,
+                maxBarThickness: 46
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            const s = sessions[ctx.dataIndex] ?? 0;
+                            return ` ${ctx.parsed.y} h · ${s} session${s === 1 ? '' : 's'}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Hours' },
+                    ticks: { precision: 0 },
+                    grid: { color: '#eef1f5' }
+                },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+})();
+/*]]>*/
+</script>
+</body>
+</html>

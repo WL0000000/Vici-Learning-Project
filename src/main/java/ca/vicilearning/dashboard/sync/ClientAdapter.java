@@ -32,4 +32,24 @@ public class ClientAdapter {
         s.setSyncedAt(now);
         return s;
     }
+
+    /**
+     * Pulls the Account_ID value out of a REST v2 {@code Client_DetailsEntity}
+     * ({@code {id, fields:[{id, field:{id,title,type}, value}]}}). We match on the field's
+     * {@code title} (case-insensitive) or its id, so the column can be renamed in SimplyBook
+     * without breaking us as long as the configured title is updated.
+     *
+     * @return the trimmed Account_ID, or {@code null} if the field is absent/blank.
+     */
+    public String extractAccountId(JsonNode clientDetails, String fieldTitle) {
+        if (clientDetails == null || fieldTitle == null) return null;
+        for (JsonNode f : clientDetails.path("fields")) {
+            String title = f.path("field").path("title").asText("");
+            String fieldId = f.path("id").asText("");
+            if (title.equalsIgnoreCase(fieldTitle) || fieldId.equalsIgnoreCase(fieldTitle)) {
+                return AdapterUtils.blankToNull(f.path("value").asText(null));
+            }
+        }
+        return null;
+    }
 }
