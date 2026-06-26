@@ -31,13 +31,7 @@
 
 <div class="vici-layout">
 
-    <nav class="vici-sidebar d-flex flex-column">
-        <div class="sidebar-section-label">Workspace</div>
-        <a th:href="@{/}" class="sidebar-link">Overview</a>
-        <a th:href="@{/students}" class="sidebar-link active">Students</a>
-        <a th:href="@{/api/notion/tutors}" class="sidebar-link">Tutors</a>
-        <a th:href="@{/sync}" class="sidebar-link">Sync Status</a>
-    </nav>
+    <script th:replace = "fragments/side-bar :: side-bar('students')"></script>
 
     <main class="vici-main">
 
