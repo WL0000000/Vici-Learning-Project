@@ -11,26 +11,22 @@
 
 <div th:replace="~{fragments/header :: header('Automations Queue', 'Review Queue -> Brevo API Delivery')}"></div>
 
-<!-- ── Layout: sidebar + main ──────────────────────────────────────────────── -->
 <div class="vici-layout">
 
     <script th:replace = "fragments/side-bar :: side-bar('comms-review')"></script>
 
-    <!-- ── Main content ────────────────────────────────────────────────────── -->
     <main class="vici-main">
 
-        <!-- Banner status strip -->
         <div class="sync-strip">
             <div class="d-flex align-items-center gap-2">
                 <span class="sync-status-dot"></span>
                 <div>
                     <div class="sync-text">Brevo Service Channel Active</div>
-                    <div class="sync-sub">Prototype running on sandboxed system account environment.</div>
+                    <div class="sync-sub">Prototype running on sandboxed system account environment. Supports parallel multi-child vectors.</div>
                 </div>
             </div>
         </div>
 
-        <!-- Review card data tables -->
         <div class="vici-panel">
             <div class="vici-panel-header">
                 <div>
@@ -44,9 +40,10 @@
                     <thead>
                         <tr>
                             <th>Recipient Family</th>
-                            <th>Email Address</th>
+                            <th>Link ID</th>
+                            <th>Student Targets</th>
                             <th>Trigger Reason</th>
-                            <th>Target Template</th>
+                            <th>Billing State</th>
                             <th class="text-end">Verification Action</th>
                         </tr>
                     </thead>
@@ -58,27 +55,42 @@
                                          th:text="${#strings.substring(task.familyName, 0, 2)}">FI</div>
                                     <div>
                                         <div class="student-name" th:text="${task.familyName}">Family Name</div>
+                                        <small class="text-muted" th:text="${task.email}">email@example.com</small>
                                     </div>
                                 </div>
                             </td>
-                            <td class="text-muted" th:text="${task.email}">email@example.com</td>
+                            <td><code th:text="${task.viciAccountId}">OV30174</code></td>
+                            <td>
+                                <div th:each="name : ${task.studentNames}" class="badge bg-light text-dark border me-1 py-1 px-2" style="font-weight:500;" th:text="${name}">Child</div>
+                            </td>
                             <td>
                                 <span class="status-pill pill-pending" th:text="${task.triggerReason}">Flag Reason</span>
                             </td>
-                            <td style="font-weight: 700;">
-                                <span class="text-muted">ID: </span><span th:text="${task.templateId}">1</span>
+                            <td>
+                                <span th:text="${task.paymentStatus}" 
+                                      th:class="${task.paymentStatus == 'OVERDUE'} ? 'text-danger fw-bold' : 'text-success'">Status</span>
                             </td>
                             <td class="text-end">
                                 <form th:action="@{/comms/approve}" method="post" class="mb-0">
+                                    <input type="hidden" name="taskId" th:value="${task.id}" />
                                     <input type="hidden" name="email" th:value="${task.email}" />
-                                    <input type="hidden" name="name" th:value="${task.familyName}" />
+                                    <input type="hidden" name="familyName" th:value="${task.familyName}" />
+                                    <input type="hidden" name="viciAccountId" th:value="${task.viciAccountId}" />
                                     <input type="hidden" name="templateId" th:value="${task.templateId}" />
                                     <input type="hidden" name="reason" th:value="${task.triggerReason}" />
+                                    <input type="hidden" name="paymentStatus" th:value="${task.paymentStatus}" />
+                                    
+                                    <input type="hidden" name="studentNames" th:value="${task.getFlattenedStudentNames()}" />
+                                    <input type="hidden" name="bookingDates" th:value="${task.getFlattenedBookingDates()}" />
+                                    
                                     <button type="submit" class="btn-vici py-1 px-3" style="font-size: 13px;">
                                         Approve &amp; Send
                                     </button>
                                 </form>
                             </td>
+                        </tr>
+                        <tr th:if="${pendingTasks.isEmpty()}">
+                            <td colspan="6" class="text-center text-muted py-4">No pending issues flagged in review queue. Channel clear.</td>
                         </tr>
                     </tbody>
                 </table>

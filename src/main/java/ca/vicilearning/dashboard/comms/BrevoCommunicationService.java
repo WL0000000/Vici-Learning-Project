@@ -7,7 +7,9 @@ import org.springframework.web.client.RestClient;
 import java.util.List;
 import java.util.Map;
 
-// Data Transfer Objects (DTOs) tailored for Brevo's JSON structure
+/**
+ * Data Transfer Objects (DTOs) strictly modeling Brevo's outbound JSON payloads.
+ */
 record Recipient(String email, String name) {}
 
 record BrevoEmailPayload(
@@ -21,24 +23,43 @@ public class BrevoCommunicationService {
 
     private final RestClient brevoRestClient;
 
-    // Spring automatically injects the RestClient bean we configured in Step 2 earlier
     public BrevoCommunicationService(RestClient brevoRestClient) {
         this.brevoRestClient = brevoRestClient;
     }
 
     /**
-     * Sends a templated email using Brevo's v3 SMTP endpoint.
+     * Syncs custom flat contact attributes to a Parent profile row inside Brevo CRM[cite: 251].
+     * Pushes properties like VICI_ACCOUNT_ID, STUDENT_NAMES, and PAYMENT_STATUS[cite: 304].
+     * * @param email The target unique identifier for the parent account[cite: 23, 239, 303].
+     * @param attributes Map containing custom field key-value allocations.
+     */
+    public void updateContactAttributes(String email, Map<String, Object> attributes) {
+        try {
+            brevoRestClient.put()
+                .uri("/contacts/{email}", email)
+                .body(Map.of("attributes", attributes))
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, (request, response) -> {
+                    System.err.println("CRM Attribute Sync Client Error: " + response.getStatusCode());
+                })
+                .toBodilessEntity();
+            System.out.println("CRM Attributes successfully pushed for parent target: " + email);
+        } catch (Exception e) {
+            System.err.println("Network exception updating Brevo contact properties: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Signals Brevo's SMTP server engine to issue a personalized transactional email template[cite: 20, 251].
      */
     public boolean sendTemplatedEmail(String toEmail, String recipientName, Long templateId, Map<String, Object> params) {
         try {
-            // 1. Pack the data into the structure Brevo expects
             BrevoEmailPayload payload = new BrevoEmailPayload(
                 templateId,
                 List.of(new Recipient(toEmail, recipientName)),
                 params
             );
 
-            // 2. Make the asynchronous/synchronous POST call to /smtp/email
             brevoRestClient.post()
                     .uri("/smtp/email")
                     .body(payload)
@@ -47,14 +68,14 @@ public class BrevoCommunicationService {
                         if (response.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
                             System.err.println("CRITICAL: Brevo 300 free daily email limit exhausted (429 Rate Limit)!");
                         } else {
-                            System.err.println("Brevo Client Error occurred. Status: " + response.getStatusCode());
+                            System.err.println("Brevo SMTP Transfer Client Error: " + response.getStatusCode());
                         }
                     })
-                    .toBodilessEntity(); // We just need to know if it succeeded (201 Created)
+                    .toBodilessEntity();
 
             return true;
         } catch (Exception e) {
-            System.err.println("Network exception while communicating with Brevo: " + e.getMessage());
+            System.err.println("Network exception during outbound Brevo transaction: " + e.getMessage());
             return false;
         }
     }
