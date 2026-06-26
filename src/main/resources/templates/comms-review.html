@@ -9,28 +9,7 @@
 </head>
 <body>
 
-<!-- ── Topbar (matches system conventions) ─────────────────────────────────── -->
-<header class="vici-topbar">
-    <div class="d-flex align-items-center gap-2">
-        <div class="brand-icon">V</div>
-        <div>
-            <div class="brand-name">Vici Learning</div>
-            <div class="brand-sub">Staff Console</div>
-        </div>
-    </div>
-
-    <div class="topbar-title">
-        <h1>Automations Queue</h1>
-        <p>Review Queue &rarr; Brevo API Delivery</p>
-    </div>
-
-    <div class="d-flex align-items-center gap-2 ms-auto">
-        <div class="user-avatar">RW</div>
-        <form th:action="@{/logout}" method="post" class="mb-0">
-            <button type="submit" class="btn-logout">Log out</button>
-        </form>
-    </div>
-</header>
+<div th:replace="~{fragments/header :: header('Automations Queue', 'Review Queue -> Brevo API Delivery')}"></div>
 
 <!-- ── Layout: sidebar + main ──────────────────────────────────────────────── -->
 <div class="vici-layout">

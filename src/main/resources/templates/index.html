@@ -9,31 +9,7 @@
 </head>
 <body>
 
-<header class="vici-topbar">
-    <div class="d-flex align-items-center gap-2">
-        <div class="brand-icon">V</div>
-        <div>
-            <div class="brand-name">Vici Learning</div>
-            <div class="brand-sub">Staff Console</div>
-        </div>
-    </div>
-
-    <div class="topbar-title">
-        <h1>Overview</h1>
-        <p>New Westminster campus</p>
-    </div>
-
-    <!-- right side -->
-    <div class="d-flex align-items-center gap-2 ms-auto">
-        <!-- hardcoded initials for now, will pull from spring security session later -->
-        <div class="user-avatar">RW</div>
-
-        <form th:action="@{/logout}" method="post" class="mb-0">
-            <button type="submit" class="btn-logout">Log out</button>
-        </form>
-    </div>
-
-</header>
+<div th:replace="~{fragments/header :: header('Overview', 'New Westminster campus')}"></div>
 
 <!-- main layout -->
 <div class="vici-layout">
