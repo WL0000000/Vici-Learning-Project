@@ -9,25 +9,7 @@
 </head>
 <body>
 
-<header class="vici-topbar">
-    <div class="d-flex align-items-center gap-2">
-        <div class="brand-icon">V</div>
-        <div>
-            <div class="brand-name">Vici Learning</div>
-            <div class="brand-sub">Staff Console</div>
-        </div>
-    </div>
-    <div class="topbar-title">
-        <h1>Students &amp; Hours</h1>
-        <p>Live data · Brevo identity + SimplyBook bookings, joined</p>
-    </div>
-    <div class="d-flex align-items-center gap-2 ms-auto">
-        <div class="user-avatar">RW</div>
-        <form th:action="@{/logout}" method="post" class="mb-0">
-            <button type="submit" class="btn-logout">Log out</button>
-        </form>
-    </div>
-</header>
+<div th:replace="~{fragments/header :: header('Students &amp; Hours', 'Live data - Brevo identity + SimplyBook bookings, joined')}"></div>
 
 <div class="vici-layout">
 
