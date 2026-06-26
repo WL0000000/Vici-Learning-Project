@@ -9,28 +9,7 @@
 </head>
 <body>
 
-<header class="vici-topbar">
-    <div class="d-flex align-items-center gap-2">
-        <div class="brand-icon">V</div>
-        <div>
-            <div class="brand-name">Vici Learning</div>
-            <div class="brand-sub">Staff Console</div>
-        </div>
-    </div>
-
-    <div class="topbar-title">
-        <h1>Notion Tutors</h1>
-        <p>Live tutors data source</p>
-    </div>
-
-    <div class="d-flex align-items-center gap-2 ms-auto">
-        <div class="user-avatar">RW</div>
-
-        <form th:action="@{/logout}" method="post" class="mb-0">
-            <button type="submit" class="btn-logout">Log out</button>
-        </form>
-    </div>
-</header>
+<div th:replace="~{fragments/header :: header('Notion Tutors', 'Live tutors data source')}"></div>
 
 <div class="vici-layout">
     <script th:replace = "fragments/side-bar :: side-bar('tutors')"></script>
