@@ -22,12 +22,14 @@
                 <span class="sync-status-dot"></span>
                 <div>
                     <div class="sync-text">All systems synced</div>
-                    <!-- TODO: pull lastSyncTime from model once controller is updated -->
-                    <div class="sync-sub">Last synced <strong>Today, 10:42 AM</strong> · 3 sources connected</div>
+                    <div class="sync-sub">
+                        <span th:if="${minutesAgo != null}">Last synced <strong th:text="${minutesAgo} + ' min ago'">—</strong></span>
+                        <span th:if="${minutesAgo == null}">Not synced yet</span>
+                        · 3 sources connected
+                    </div>
                 </div>
             </div>
-            <!-- sync now button, gonna have to hook up to /sync/trigger endpoint -->
-            <button class="btn-vici">
+            <a href="/sync" class="btn-vici" style="text-decoration:none; display:inline-flex; align-items:center;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="me-1">
                     <path d="M3.5 12a8.5 8.5 0 0 1 14.5-6"/>
                     <path d="M20.5 12a8.5 8.5 0 0 1-14.5 6"/>
@@ -35,40 +37,42 @@
                     <path d="M5.8 21.5v-3.6h3.6"/>
                 </svg>
                 Sync Now
-            </button>
+            </a>
         </div>
 
-        <!-- stat cards -->
+        <!-- stat cards are now pulling from DashboardMetricsService.overview() same as students page -->
         <div class="row g-3 mb-3">
             <div class="col-3">
                 <div class="stat-card" style="border-left-color: #15315c;">
                     <div class="stat-label">Total Active Students</div>
-                    <div class="stat-val">148</div>
-                    <div class="stat-sub">+6 vs last month</div>
+                    <div class="stat-val" th:text="${overview.activeStudents}">0</div>
+                    <div class="stat-sub">in local database</div>
                 </div>
             </div>
 
             <div class="col-3">
                 <div class="stat-card" style="border-left-color: #e8a93c;">
                     <div class="stat-label">Sessions This Week</div>
-                    <div class="stat-val">92</div>
-                    <div class="stat-sub">+11 vs last week</div>
+                    <div class="stat-val" th:text="${overview.sessionsThisWeek}">0</div>
+                    <div class="stat-sub">confirmed + pending</div>
                 </div>
             </div>
 
             <div class="col-3">
                 <div class="stat-card" style="border-left-color: #c0492f;">
                     <div class="stat-label">Cancellations This Month</div>
-                    <div class="stat-val">9</div>
-                    <div class="stat-sub">-3 vs last month</div>
+                    <div class="stat-val" th:text="${overview.cancellationsThisMonth}">0</div>
+                    <div class="stat-sub">this calendar month</div>
                 </div>
             </div>
 
             <div class="col-3">
                 <div class="stat-card" style="border-left-color: #2f8a6a;">
                     <div class="stat-label">Emails Sent</div>
-                    <div class="stat-val">412</div>
-                    <div class="stat-sub">+48 this month</div>
+                    <!-- TODO no email tracking exists yet, this is still a placeholder
+                         will need to hook this up once brevo comms logging is in place -->
+                    <div class="stat-val">—</div>
+                    <div class="stat-sub">not tracked yet</div>
                 </div>
             </div>
 
@@ -83,9 +87,13 @@
                             <h2>Action Required</h2>
                             <p>Students that need attention</p>
                         </div>
-                        <a href="#" class="text-decoration-none" style="font-size:12.5px; font-weight:700; color: var(--vici-navy);">View all</a>
+                        <a href="/comms/review" class="text-decoration-none" style="font-size:12.5px; font-weight:700; color: var(--vici-navy);">View all</a>
                     </div>
-                    <!-- dummy flagged students, will come from controller later -->
+                    <!-- 
+                        TODO this whole panel is still dummy data
+                        no flagging logic exists in the backend yet (no booking gap detection, payment overdue checks etc)
+                        leaving this as is until that logic gets built, dont want to fake numbers that look real
+                    -->
                     <div class="flagged-row">
                         <div class="flex-grow-1">
                             <div class="d-flex align-items-center gap-2">
@@ -123,42 +131,18 @@
                         </div>
                         <button class="btn-vici-outline">Review</button>
                     </div>
-
-                    <div class="flagged-row">
-                        <div class="flex-grow-1">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="flag-name">Maya Patel</span>
-                                <span style="font-size:11px; color:var(--vici-muted);">Grade 12</span>
-                            </div>
-                            <div class="flag-reason">Welcome email not sent</div>
-                            <div class="flag-meta">Enrolled June 3</div>
-                        </div>
-                        <button class="btn-vici-outline">Send email</button>
-                    </div>
-
-                    <div class="flagged-row">
-                        <div class="flex-grow-1">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="flag-name">Liam Nguyen</span>
-                                <span style="font-size:11px; color:var(--vici-muted);">Grade 8</span>
-                            </div>
-                            <div class="flag-reason">Tutor unassigned</div>
-                            <div class="flag-meta">Subject: Science</div>
-                        </div>
-                        <button class="btn-vici-outline">Assign tutor</button>
-                    </div>
-
                 </div>
             </div>
-            <!-- upcoming sessions -->
+
+            <!-- upcoming sessions, this one IS wired up now!! -->
             <div class="col-7">
                 <div class="vici-panel h-100">
                     <div class="vici-panel-header">
                         <div>
                             <h2>Upcoming Sessions</h2>
-                            <p>Next 3 days · 7 scheduled</p>
+                            <p th:text="${#lists.size(upcoming)} + ' scheduled'">scheduled</p>
                         </div>
-                        <a href="#" class="text-decoration-none" style="font-size:12.5px; font-weight:700; color: var(--vici-navy);">Open calendar</a>
+                        <a href="/bookings" class="text-decoration-none" style="font-size:12.5px; font-weight:700; color: var(--vici-navy);">Open calendar</a>
                     </div>
 
                     <div class="table-responsive">
@@ -173,96 +157,28 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <!-- more dummy data for now lmao-->
-                                <tr>
+                                <tr th:each="s : ${upcoming}">
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
-                                            <div class="student-avatar">OM</div>
+                                            <!-- no initials avatar logic here yet, just showing the name -->
+                                            <div class="student-avatar" th:text="${#strings.substring(s.studentName, 0, 1)}">?</div>
                                             <div>
-                                                <div class="student-name">Olivia Martin</div>
-                                                <div class="student-sub">Grade 10 · Math</div>
+                                                <div class="student-name" th:text="${s.studentName}">—</div>
+                                                <div class="student-sub" th:text="${s.serviceName}">—</div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="text-muted">Sarah Chen</td>
-                                    <td class="text-muted">Mon, Jun 10</td>
-                                    <td style="font-weight:700;">3:30 PM</td>
-                                    <td><span class="status-pill pill-confirmed">Confirmed</span></td>
+                                    <td class="text-muted" th:text="${s.tutorName}">—</td>
+                                    <td class="text-muted" th:text="${#temporals.format(s.startTime, 'EEE, MMM d')}">—</td>
+                                    <td style="font-weight:700;" th:text="${#temporals.format(s.startTime, 'h:mm a')}">—</td>
+                                    <td>
+                                        <span class="status-pill"
+                                              th:classappend="${s.status == 'CONFIRMED'} ? 'pill-confirmed' : (${s.status == 'PENDING'} ? 'pill-pending' : 'pill-cancelled')"
+                                              th:text="${s.status}">—</span>
+                                    </td>
                                 </tr>
-                                <tr>
-                                    <td>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="student-avatar">NW</div>
-                                            <div>
-                                                <div class="student-name">Noah Williams</div>
-                                                <div class="student-sub">Grade 8 · English</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="text-muted">David Okafor</td>
-                                    <td class="text-muted">Mon, Jun 10</td>
-                                    <td style="font-weight:700;">4:15 PM</td>
-                                    <td><span class="status-pill pill-confirmed">Confirmed</span></td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="student-avatar">EJ</div>
-                                            <div>
-                                                <div class="student-name">Emma Johnson</div>
-                                                <div class="student-sub">Grade 11 · Chemistry</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="text-muted">Sarah Chen</td>
-                                    <td class="text-muted">Mon, Jun 10</td>
-                                    <td style="font-weight:700;">5:00 PM</td>
-                                    <td><span class="status-pill pill-pending">Pending</span></td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="student-avatar">LT</div>
-                                            <div>
-                                                <div class="student-name">Lucas Tremblay</div>
-                                                <div class="student-sub">Grade 9 · Physics</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="text-muted">Priya Sharma</td>
-                                    <td class="text-muted">Tue, Jun 11</td>
-                                    <td style="font-weight:700;">3:30 PM</td>
-                                    <td><span class="status-pill pill-confirmed">Confirmed</span></td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="student-avatar">SL</div>
-                                            <div>
-                                                <div class="student-name">Sophia Lee</div>
-                                                <div class="student-sub">Grade 7 · Reading</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="text-muted">David Okafor</td>
-                                    <td class="text-muted">Tue, Jun 11</td>
-                                    <td style="font-weight:700;">4:30 PM</td>
-                                    <td><span class="status-pill pill-pending">Pending</span></td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="student-avatar">EB</div>
-                                            <div>
-                                                <div class="student-name">Ethan Brown</div>
-                                                <div class="student-sub">Grade 12 · Calculus</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="text-muted">Marcus Reid</td>
-                                    <td class="text-muted">Wed, Jun 12</td>
-                                    <td style="font-weight:700;">3:00 PM</td>
-                                    <td><span class="status-pill pill-confirmed">Confirmed</span></td>
+                                <tr th:if="${#lists.isEmpty(upcoming)}">
+                                    <td colspan="5" class="text-center text-muted" style="padding:24px;">No upcoming sessions found.</td>
                                 </tr>
                             </tbody>
                         </table>
