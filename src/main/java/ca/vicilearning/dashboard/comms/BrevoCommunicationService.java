@@ -17,6 +17,9 @@ record BrevoEmailPayload(
     List<Recipient> to,
     Map<String, Object> params
 ) {}
+record ContactSearchPayload(String filter) {}
+record BrevoContactResponse(String email, Map<String, Object> attributes) {}
+record BrevoSearchResponse(List<BrevoContactResponse> contacts, Long count) {}
 
 @Service
 public class BrevoCommunicationService {
@@ -78,5 +81,33 @@ public class BrevoCommunicationService {
             System.err.println("Network exception during outbound Brevo transaction: " + e.getMessage());
             return false;
         }
+    }
+    /**
+     * Reaches out to Brevo's CRM engine and searches for a parent account 
+     * matching the given unique local VICI Account ID string token.
+     * @param accountId The target string token (e.g., "VICI-0001")
+     * @return A Map of Brevo's stored attributes, or null if no contact is found.
+     */
+    public Map<String, Object> getAttributesByAccountId(String accountId) {
+        try {
+            // Construct Brevo Search API Filter string matching your account ID custom field
+            String filterQuery = String.format("{\"attributes.VICI_ACCOUNT_ID\":\"%s\"}", accountId);
+            ContactSearchPayload payload = new ContactSearchPayload(filterQuery);
+
+            BrevoSearchResponse response = brevoRestClient.post()
+                    .uri("/contacts/search")
+                    .body(payload)
+                    .retrieve()
+                    .toEntity(BrevoSearchResponse.class)
+                    .getBody();
+
+            if (response != null && response.contacts() != null && !response.contacts().isEmpty()) {
+                // Return the custom attributes dictionary of the first matching contact row
+                return response.contacts().get(0).attributes();
+            }
+        } catch (Exception e) {
+            System.err.println("Network exception querying Brevo contact search catalog: " + e.getMessage());
+        }
+        return null;
     }
 }

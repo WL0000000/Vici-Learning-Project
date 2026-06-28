@@ -1,7 +1,10 @@
 package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
-import ca.vicilearning.dashboard.rules.MockTaskService; 
+import ca.vicilearning.dashboard.domain.AlertStudent;
+import ca.vicilearning.dashboard.domain.AlertStudentRepository;
+import ca.vicilearning.dashboard.rules.MockTaskService;
+import ca.vicilearning.dashboard.sync.BrevoSyncEngineService;
 import ca.vicilearning.dashboard.rules.BrevoReviewTask;  
 
 import org.springframework.stereotype.Controller;
@@ -21,62 +24,47 @@ import java.util.Map;
 public class BrevoController {
 
     private final BrevoCommunicationService communicationService;
-    private final MockTaskService mockTaskService; 
+    private final AlertStudentRepository alertStudentRepository;
+    private final BrevoSyncEngineService syncEngineService;
 
-    public BrevoController(BrevoCommunicationService communicationService, MockTaskService mockTaskService) {
+    public BrevoController(BrevoCommunicationService communicationService, 
+                           AlertStudentRepository alertStudentRepository,
+                           BrevoSyncEngineService syncEngineService) {
         this.communicationService = communicationService;
-        this.mockTaskService = mockTaskService;
+        this.alertStudentRepository = alertStudentRepository;
+        this.syncEngineService = syncEngineService;
     }
 
     @GetMapping("/review")
     public String reviewQueuePage(Model model) {
-        model.addAttribute("pendingTasks", mockTaskService.getSimulatedSyncTasks());
+        // Automatically isolate conflicting profiles to hydrate the review rows
+        List<AlertStudent> structuralDiscrepancies = alertStudentRepository.findDiscrepancies();
+        
+        model.addAttribute("pendingTasks", structuralDiscrepancies);
         return "comms-review";
     }
 
+    @PostMapping("/sync-now")
+    public String triggerManualCalculationSweep() {
+        syncEngineService.runTwoWayReconciliationSync();
+        return "redirect:/comms/review";
+    }
+    
     @PostMapping("/approve")
     public String approveTask(
-            @RequestParam("taskId") Long taskId,
+            @RequestParam("studentName") String studentName,
             @RequestParam("email") String email,
-            @RequestParam("familyName") String familyName,
             @RequestParam("viciAccountId") String viciAccountId,
-            @RequestParam("templateId") Long templateId,
-            @RequestParam("reason") String reason,
-            @RequestParam("paymentStatus") String paymentStatus,
-            @RequestParam("studentNames") String studentNames,
-            @RequestParam("bookingDates") String bookingDates) {
+            @RequestParam("actionType") String actionType) {
 
-        System.out.println("====== SYSTEM REVIEW INTERACTION EXECUTED ======");
-        System.out.println("Approving Review Tracker Item ID: " + taskId);
-        System.out.println("Processing flat structures for family: " + familyName);
+        System.out.println("Processing dynamic CRM override adjustments for student: " + studentName);
 
-        // Step 1: Force synchronization with Brevo's horizontal CRM grid columns [cite: 15, 251]
-        // Sends cleanly formatted parallel arrays straight to the API [cite: 320, 323, 327]
-        Map<String, Object> crmAttributes = Map.of(
-            "VICI_ACCOUNT_ID", viciAccountId,
-            "STUDENT_NAMES", studentNames,
-            "PAYMENT_STATUS", paymentStatus,
-            "LAST_BOOKING_DATE", bookingDates
-        );
-        communicationService.updateContactAttributes(email, crmAttributes);
-
-        // Step 2: Assemble localized tokens mapped directly into active transaction templates [cite: 19, 20]
-        Map<String, Object> emailParams = Map.of(
-            "CONTACT_NAME", familyName,
-            "STUDENT_NAMES", studentNames,
-            "TRIGGER_REASON", reason,
-            "PAYMENT_STATUS", paymentStatus
-        );
-
-        // Step 3: Command the outbound message pipeline execution loop [cite: 20]
-        boolean success = communicationService.sendTemplatedEmail(email, familyName, templateId, emailParams);
-
-        if (success) {
-            System.out.println("STATUS SUCCESS: Outbound event payload logged securely by Brevo servers.");
-        } else {
-            System.err.println("STATUS FAILURE: Processing error. Check daily cap metrics or API key parameters.");
-        }
-        System.out.println("=================================================");
+        // Build your flat CRM array logic pipeline loops here based on actionType matching:
+        // Type A ("Approve & Sync") updates Brevo parallel status flag to LAPSED and issues reminder email template.
+        // Type B ("Clear Flag") updates Brevo parallel status to ACTIVE silently, without issuing email.
+        
+        // After syncing with Brevo, remove or flag the resolved record out of your ledger
+        alertStudentRepository.deleteById(studentName);
 
         return "redirect:/comms/review";
     }
