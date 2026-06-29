@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -150,6 +151,57 @@ public class DashboardMetricsService {
                 .toList();
     }
 
+    /**
+     * Students needing attention, getting this from real booking history:
+     *  - no booking in 21+ days (using their most recent active booking)
+     *  - 3+ cancellations this calendar month
+     * Sorted worst-first (longest gap / most cancellations first).
+     */
+    public List<ActionItem> actionRequired() {
+        LocalDate monthStart = today().withDayOfMonth(1);
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+
+        Map<Long, LocalDateTime> lastBookingByStudent = new LinkedHashMap<>();
+        Map<Long, Integer> cancellationsThisMonth = new LinkedHashMap<>();
+
+        for (Booking b : bookingRepo.findByDeletedAtIsNull()) {
+            Long sid = b.getStudent().getId();
+
+            if (isCancelled(b) && !b.getStartTime().toLocalDate().isBefore(monthStart)) {
+                cancellationsThisMonth.merge(sid, 1, Integer::sum);
+            }
+
+            if (isCounted(b) && b.getStartTime().isBefore(now)) {
+                lastBookingByStudent.merge(sid, b.getStartTime(),
+                        (existing, candidate) -> candidate.isAfter(existing) ? candidate : existing);
+            }
+        }
+
+        List<ActionItem> items = new ArrayList<>();
+
+        for (Student s : studentRepo.findByDeletedAtIsNull()) {
+            LocalDateTime last = lastBookingByStudent.get(s.getId());
+            long daysSince = last == null ? Long.MAX_VALUE
+                    : ChronoUnit.DAYS.between(last.toLocalDate(), today());
+
+            if (daysSince >= 21) {
+                items.add(new ActionItem(s.getId(), s.getName(), "NO_BOOKING",
+                        last == null ? "No bookings on record" : "No booking in " + daysSince + " days",
+                        last == null ? null : last.toLocalDate(), (int) Math.min(daysSince, Integer.MAX_VALUE)));
+            }
+
+            int cancels = cancellationsThisMonth.getOrDefault(s.getId(), 0);
+            if (cancels >= 3) {
+                items.add(new ActionItem(s.getId(), s.getName(), "CANCELLATIONS",
+                        cancels + " cancellations this month", null, cancels));
+            }
+        }
+
+        return items.stream()
+                .sorted(Comparator.comparingInt(ActionItem::severity).reversed())
+                .toList();
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private List<Booking> activeBetween(LocalDate fromInclusive, LocalDate toExclusive) {
@@ -204,4 +256,7 @@ public class DashboardMetricsService {
 
     public record StudentRow(Long id, String name, String accountId, String email, String phone,
                              int sessionsThisWeek, double hoursThisWeek) {}
+
+    public record ActionItem(Long studentId, String studentName, String type, String reason,
+                              LocalDate lastSession, int severity) {}
 }

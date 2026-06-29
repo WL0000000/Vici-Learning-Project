@@ -40,7 +40,7 @@
             </a>
         </div>
 
-        <!-- stat cards are now pulling from DashboardMetricsService.overview() same as students page -->
+        <!-- stat cards are now pulling from DashboardMetricsService.overview() -->
         <div class="row g-3 mb-3">
             <div class="col-3">
                 <div class="stat-card" style="border-left-color: #15315c;">
@@ -89,47 +89,23 @@
                         </div>
                         <a href="/comms/review" class="text-decoration-none" style="font-size:12.5px; font-weight:700; color: var(--vici-navy);">View all</a>
                     </div>
-                    <!-- 
-                        TODO this whole panel is still dummy data
-                        no flagging logic exists in the backend yet (no booking gap detection, payment overdue checks etc)
-                        leaving this as is until that logic gets built, dont want to fake numbers that look real
-                    -->
-                    <div class="flagged-row">
-                        <div class="flex-grow-1">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="flag-name">Jane Doe</span>
-                                <span style="font-size:11px; color:var(--vici-muted);">Grade 9</span>
-                                <span class="badge-urgent ms-auto">Urgent</span>
-                            </div>
-                            <div class="flag-reason">No booking in 32 days</div>
-                            <div class="flag-meta">Last session: May 9</div>
-                        </div>
-                        <button class="btn-vici-outline">Reach out</button>
-                    </div>
 
-                    <div class="flagged-row">
+                    <!-- now wired up, no booking 21+ days and 3+ cancellations are real, calculated from booking history -->
+                    <div th:each="item : ${actionItems}" class="flagged-row">
                         <div class="flex-grow-1">
                             <div class="d-flex align-items-center gap-2">
-                                <span class="flag-name">John Smith</span>
-                                <span style="font-size:11px; color:var(--vici-muted);">Grade 11</span>
-                                <span class="badge-urgent ms-auto">Urgent</span>
+                                <span class="flag-name" th:text="${item.studentName}">—</span>
+                                <span th:if="${item.type == 'NO_BOOKING'}" class="badge-urgent ms-auto">Urgent</span>
                             </div>
-                            <div class="flag-reason">Payment overdue</div>
-                            <div class="flag-meta">Invoice #1042 · $240</div>
+                            <div class="flag-reason" th:text="${item.reason}">—</div>
+                            <div class="flag-meta" th:if="${item.lastSession != null}"
+                                 th:text="'Last session: ' + ${#temporals.format(item.lastSession, 'MMM d')}">—</div>
+                            <div class="flag-meta" th:if="${item.type == 'CANCELLATIONS'}">Pattern flag</div>
                         </div>
-                        <button class="btn-vici-outline">Send invoice</button>
+                        <button class="btn-vici-outline" th:text="${item.type == 'NO_BOOKING'} ? 'Reach out' : 'Review'">—</button>
                     </div>
-
-                    <div class="flagged-row">
-                        <div class="flex-grow-1">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="flag-name">Aiden Brooks</span>
-                                <span style="font-size:11px; color:var(--vici-muted);">Grade 7</span>
-                            </div>
-                            <div class="flag-reason">3 cancellations this month</div>
-                            <div class="flag-meta">Pattern flag · Math</div>
-                        </div>
-                        <button class="btn-vici-outline">Review</button>
+                    <div th:if="${#lists.isEmpty(actionItems)}" class="text-center text-muted" style="padding:24px;">
+                        Nothing needs attention right now.
                     </div>
                 </div>
             </div>
@@ -160,7 +136,6 @@
                                 <tr th:each="s : ${upcoming}">
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
-                                            <!-- no initials avatar logic here yet, just showing the name -->
                                             <div class="student-avatar" th:text="${#strings.substring(s.studentName, 0, 1)}">?</div>
                                             <div>
                                                 <div class="student-name" th:text="${s.studentName}">—</div>
