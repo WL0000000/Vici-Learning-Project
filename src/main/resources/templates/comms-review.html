@@ -57,11 +57,10 @@
                         <tr th:each="alert : ${pendingTasks}">
                             <td>
                                 <div class="d-flex align-items-center gap-2">
-                                    <div class="student-avatar" 
-                                         th:text="${#strings.substring(alert.name, 0, 2)}">ST</div>
+                                    <div class="student-avatar" th:text="${#strings.substring(alert.name, 0, 2)}">ST</div>
                                     <div>
                                         <div class="student-name" th:text="${alert.name}">Student Name</div>
-                                        <small class="text-muted" th:text="${'Calculated: ' + #temporals.format(alert.lastCheckedAt, 'yyyy-MM-dd HH:mm')}">Timestamp</small>
+                                        <small class="text-muted" th:text="${alert.parentEmail}">true.email@maildrop.cc</small>
                                     </div>
                                 </div>
                             </td>
@@ -70,16 +69,12 @@
 
                             <td>
                                 <span th:class="${alert.lapsedNow} ? 'badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1' : 'badge bg-success-subtle text-success border border-success-subtle px-2 py-1'"
-                                      th:text="${alert.lapsedNow} ? 'LAPSED' : 'ACTIVE'">
-                                    DB State
-                                </span>
+                                    th:text="${alert.lapsedNow} ? 'LAPSED' : 'ACTIVE'">DB</span>
                             </td>
 
                             <td>
                                 <span th:class="${alert.lapsedStatus} ? 'badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1' : 'badge bg-success-subtle text-success border border-success-subtle px-2 py-1'"
-                                      th:text="${alert.lapsedStatus} ? 'LAPSED' : 'ACTIVE'">
-                                    CRM State
-                                </span>
+                                    th:text="${alert.lapsedStatus} ? 'LAPSED' : 'ACTIVE'">CRM</span>
                             </td>
 
                             <td>

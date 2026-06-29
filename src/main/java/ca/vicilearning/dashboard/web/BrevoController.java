@@ -3,18 +3,13 @@ package ca.vicilearning.dashboard.web;
 import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
 import ca.vicilearning.dashboard.domain.AlertStudent;
 import ca.vicilearning.dashboard.domain.AlertStudentRepository;
-import ca.vicilearning.dashboard.rules.MockTaskService;
 import ca.vicilearning.dashboard.sync.BrevoSyncEngineService;
-import ca.vicilearning.dashboard.rules.BrevoReviewTask;  
-
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +22,15 @@ public class BrevoController {
     private final AlertStudentRepository alertStudentRepository;
     private final BrevoSyncEngineService syncEngineService;
 
+    public record PendingTaskViewNode(
+        String name,
+        String accountId,
+        boolean lapsedNow,
+        boolean lapsedStatus,
+        LocalDateTime lastCheckedAt,
+        String parentEmail
+    ) {}
+
     public BrevoController(BrevoCommunicationService communicationService, 
                            AlertStudentRepository alertStudentRepository,
                            BrevoSyncEngineService syncEngineService) {
@@ -35,37 +39,82 @@ public class BrevoController {
         this.syncEngineService = syncEngineService;
     }
 
+    /**
+     * Renders the administrative review page dashboard grid queue.
+     * Executes exactly ONE single batch request to fetch contacts upfront.
+     */
     @GetMapping("/review")
     public String reviewQueuePage(Model model) {
-        // Automatically isolate conflicting profiles to hydrate the review rows
-        List<AlertStudent> structuralDiscrepancies = alertStudentRepository.findDiscrepancies();
+        System.out.println("[CONTROLLER] Loading Automations Review Queue view...");
         
-        model.addAttribute("pendingTasks", structuralDiscrepancies);
+        List<AlertStudent> localAlerts = alertStudentRepository.findDiscrepancies();
+        List<PendingTaskViewNode> viewTasks = new ArrayList<>();
+
+        // ONE elegant network call, fetching everything in a single transaction
+        Map<String, String> crmEmailDictionary = communicationService.fetchViciIdToEmailMap();
+
+        if (localAlerts != null) {
+            for (AlertStudent alert : localAlerts) {
+                String lookupKey = (alert.getAccountId() != null) ? alert.getAccountId().trim().toUpperCase() : "";
+                
+                // Instant look up resolution in memory! No trailing iterative network requests.
+                String displayEmail = crmEmailDictionary.getOrDefault(lookupKey, "Not Found in Brevo");
+
+                viewTasks.add(new PendingTaskViewNode(
+                    alert.getName(),
+                    alert.getAccountId(),
+                    alert.isLapsedNow(),
+                    alert.isLapsedStatus(),
+                    alert.getLastCheckedAt(),
+                    displayEmail
+                ));
+            }
+        }
+
+        model.addAttribute("pendingTasks", viewTasks);
         return "comms-review";
     }
 
-    @PostMapping("/sync-now")
-    public String triggerManualCalculationSweep() {
-        syncEngineService.runTwoWayReconciliationSync();
+    @PostMapping("/approve")
+    public String approveAnomalySync(@RequestParam("studentName") String studentName,
+                                     @RequestParam("viciAccountId") String viciAccountId,
+                                     @RequestParam("email") String email,
+                                     @RequestParam("actionType") String actionType) {
+        try {
+            if (email == null || email.isBlank() || "Not Found in Brevo".equalsIgnoreCase(email.trim())) {
+                return "redirect:/comms/review?error=invalid_email_coordinate";
+            }
+
+            String calculatedStatus = "Active";
+            if ("LAPSED".equalsIgnoreCase(actionType) || "SYNC_LAPSED".equalsIgnoreCase(actionType)) {
+                calculatedStatus = "Lapsed";
+            }
+
+            Map<String, Object> attributePayload = new HashMap<>();
+            attributePayload.put("STUDENT_NAMES", studentName.trim());
+            attributePayload.put("ACTIVITY_STATUS", calculatedStatus);
+
+            communicationService.updateContactAttributes(email, attributePayload);
+
+            if ("SYNC_LAPSED".equalsIgnoreCase(actionType)) {
+                Map<String, Object> emailParams = Map.of("STUDENT_NAME", studentName, "TRIGGER_REASON", "No tutoring session completed within 14 days.");
+                communicationService.sendTemplatedEmail(email, studentName, 1L, emailParams);
+            }
+        } catch (Exception e) {
+            System.err.println("[APPROVE EXCEPTION] " + e.getMessage());
+        }
+
+        alertStudentRepository.deleteById(studentName);
         return "redirect:/comms/review";
     }
-    
-    @PostMapping("/approve")
-    public String approveTask(
-            @RequestParam("studentName") String studentName,
-            @RequestParam("email") String email,
-            @RequestParam("viciAccountId") String viciAccountId,
-            @RequestParam("actionType") String actionType) {
 
-        System.out.println("Processing dynamic CRM override adjustments for student: " + studentName);
-
-        // Build your flat CRM array logic pipeline loops here based on actionType matching:
-        // Type A ("Approve & Sync") updates Brevo parallel status flag to LAPSED and issues reminder email template.
-        // Type B ("Clear Flag") updates Brevo parallel status to ACTIVE silently, without issuing email.
-        
-        // After syncing with Brevo, remove or flag the resolved record out of your ledger
-        alertStudentRepository.deleteById(studentName);
-
+    @PostMapping("/sync-now")
+    public String triggerImmediateSync() {
+        try {
+            syncEngineService.runTwoWayReconciliationSync();
+        } catch (Exception e) {
+            System.err.println("Sync failed: " + e.getMessage());
+        }
         return "redirect:/comms/review";
     }
 }
