@@ -38,16 +38,14 @@ public class BrevoCommunicationService {
     }
 
     /**
-     * Universal Map Compiler: Hits the GET /contacts route exactly ONCE.
-     * Compiles an in-memory look-up dictionary of VICI_ACCOUNT_ID -> email.
+     * Hits the global GET /contacts endpoint exactly ONCE.
+     * Compiles an in-memory dictionary of VICI_ACCOUNT_ID -> primary email string.
      */
     public Map<String, String> fetchViciIdToEmailMap() {
         Map<String, String> lookupMap = new HashMap<>();
         try {
-            System.out.println("[SERVICE] Pulling universal contact index from Brevo...");
-            
             BrevoListContactsResponse response = brevoRestClient.get()
-                    .uri("/contacts?limit=100&offset=0") // Clean single-page pull matching test mechanics
+                    .uri("/contacts?limit=100&offset=0") 
                     .retrieve()
                     .body(BrevoListContactsResponse.class);
 
@@ -61,12 +59,52 @@ public class BrevoCommunicationService {
                     }
                 }
             }
-            System.out.println("[SERVICE SUCCESS] Universal mapping initialized. Cached " + lookupMap.size() + " lookup keys.");
         } catch (Exception e) {
-            System.err.println("[SERVICE CRITICAL ERROR] Failed compiling local index cache: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("[SERVICE ERROR] Failed compiling VICI ID to Email map: " + e.getMessage());
         }
         return lookupMap;
+    }
+
+    /**
+     * Compiles a fast map of individual student names (lowercase) to their live status inside Brevo.
+     * This dynamically unpacks the comma-separated parallel string tokens safely.
+     */
+    public Map<String, String> fetchStudentStatusMap() {
+        Map<String, String> statusMap = new HashMap<>();
+        try {
+            BrevoListContactsResponse response = brevoRestClient.get()
+                    .uri("/contacts?limit=100&offset=0")
+                    .retrieve()
+                    .body(BrevoListContactsResponse.class);
+
+            if (response != null && response.contacts() != null) {
+                for (BrevoContactNode contact : response.contacts()) {
+                    if (contact.attributes() != null) {
+                        String namesRaw = contact.attributes().studentNames();
+                        String statusesRaw = contact.attributes().activityStatus();
+
+                        if (namesRaw != null && !namesRaw.isBlank()) {
+                            String[] names = namesRaw.split(",");
+                            String[] statuses = (statusesRaw != null && !statusesRaw.isBlank()) 
+                                    ? statusesRaw.split(",") 
+                                    : new String[0];
+
+                            for (int i = 0; i < names.length; i++) {
+                                String cleanName = names[i].trim().toLowerCase();
+                                String cleanStatus = (i < statuses.length) ? statuses[i].trim() : "Active";
+                                if (!cleanName.isEmpty()) {
+                                    statusMap.put(cleanName, cleanStatus);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[SERVICE ERROR] Failed compiling student status map: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return statusMap;
     }
 
     public void updateContactAttributes(String parentEmail, Map<String, Object> attributePayload) {
