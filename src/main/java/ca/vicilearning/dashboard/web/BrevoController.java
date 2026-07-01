@@ -1,83 +1,152 @@
 package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
-import ca.vicilearning.dashboard.rules.MockTaskService; 
-import ca.vicilearning.dashboard.rules.BrevoReviewTask;  
-
+import ca.vicilearning.dashboard.domain.AlertStudent;
+import ca.vicilearning.dashboard.domain.AlertStudentRepository;
+import ca.vicilearning.dashboard.domain.StudentRepository;
+import ca.vicilearning.dashboard.sync.BrevoSyncEngineService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Controller
 @RequestMapping("/comms")
 public class BrevoController {
 
     private final BrevoCommunicationService communicationService;
-    private final MockTaskService mockTaskService; 
+    private final AlertStudentRepository alertStudentRepository;
+    private final StudentRepository studentRepository;
+    private final BrevoSyncEngineService syncEngineService;
 
-    public BrevoController(BrevoCommunicationService communicationService, MockTaskService mockTaskService) {
+    public record PendingTaskViewNode(
+        String name,
+        String accountId,
+        boolean lapsedNow,
+        boolean lapsedStatus,
+        LocalDateTime lastCheckedAt,
+        String parentEmail
+    ) {}
+
+    public BrevoController(BrevoCommunicationService communicationService, 
+                           AlertStudentRepository alertStudentRepository,
+                           StudentRepository studentRepository,
+                           BrevoSyncEngineService syncEngineService) {
         this.communicationService = communicationService;
-        this.mockTaskService = mockTaskService;
+        this.alertStudentRepository = alertStudentRepository;
+        this.studentRepository = studentRepository;
+        this.syncEngineService = syncEngineService;
     }
 
     @GetMapping("/review")
     public String reviewQueuePage(Model model) {
-        model.addAttribute("pendingTasks", mockTaskService.getSimulatedSyncTasks());
+        System.out.println("[CONTROLLER] Loading Automations Review Queue view...");
+        
+        List<AlertStudent> localAlerts = alertStudentRepository.findDiscrepancies();
+        List<PendingTaskViewNode> viewTasks = new ArrayList<>();
+        Map<String, String> crmEmailDictionary = communicationService.fetchViciIdToEmailMap();
+
+        if (localAlerts != null) {
+            for (AlertStudent alert : localAlerts) {
+                String lookupKey = (alert.getAccountId() != null) ? alert.getAccountId().trim().toUpperCase() : "";
+                String displayEmail = crmEmailDictionary.getOrDefault(lookupKey, "Not Found in Brevo");
+
+                viewTasks.add(new PendingTaskViewNode(
+                    alert.getName(),
+                    alert.getAccountId(),
+                    alert.isLapsedNow(),
+                    alert.isLapsedStatus(),
+                    alert.getLastCheckedAt(),
+                    displayEmail
+                ));
+            }
+        }
+
+        model.addAttribute("pendingTasks", viewTasks);
         return "comms-review";
     }
 
     @PostMapping("/approve")
-    public String approveTask(
-            @RequestParam("taskId") Long taskId,
-            @RequestParam("email") String email,
-            @RequestParam("familyName") String familyName,
-            @RequestParam("viciAccountId") String viciAccountId,
-            @RequestParam("templateId") Long templateId,
-            @RequestParam("reason") String reason,
-            @RequestParam("paymentStatus") String paymentStatus,
-            @RequestParam("studentNames") String studentNames,
-            @RequestParam("bookingDates") String bookingDates) {
+    public String approveAnomalySync(@RequestParam("studentName") String studentName,
+                                     @RequestParam("viciAccountId") String viciAccountId,
+                                     @RequestParam("email") String email,
+                                     @RequestParam("actionType") String actionType) {
+        
+        System.out.println("\n=== [CONTROLLER APPROVE ACTION] ===");
+        System.out.println("Processing approval for student: " + studentName + " (Account ID: " + viciAccountId + ")");
 
-        System.out.println("====== SYSTEM REVIEW INTERACTION EXECUTED ======");
-        System.out.println("Approving Review Tracker Item ID: " + taskId);
-        System.out.println("Processing flat structures for family: " + familyName);
+        try {
+            if (email == null || email.isBlank() || "Not Found in Brevo".equalsIgnoreCase(email.trim())) {
+                return "redirect:/comms/review?error=invalid_email_coordinate";
+            }
 
-        // Step 1: Force synchronization with Brevo's horizontal CRM grid columns [cite: 15, 251]
-        // Sends cleanly formatted parallel arrays straight to the API [cite: 320, 323, 327]
-        Map<String, Object> crmAttributes = Map.of(
-            "VICI_ACCOUNT_ID", viciAccountId,
-            "STUDENT_NAMES", studentNames,
-            "PAYMENT_STATUS", paymentStatus,
-            "LAST_BOOKING_DATE", bookingDates
-        );
-        communicationService.updateContactAttributes(email, crmAttributes);
+            // 1. Locate ALL active sibling students sharing this parent account key
+            List<ca.vicilearning.dashboard.domain.Student> familyMembers = studentRepository.findByDeletedAtIsNull().stream()
+                    .filter(s -> s.getAccountId() != null && s.getAccountId().trim().equalsIgnoreCase(viciAccountId.trim()))
+                    .toList();
 
-        // Step 2: Assemble localized tokens mapped directly into active transaction templates [cite: 19, 20]
-        Map<String, Object> emailParams = Map.of(
-            "CONTACT_NAME", familyName,
-            "STUDENT_NAMES", studentNames,
-            "TRIGGER_REASON", reason,
-            "PAYMENT_STATUS", paymentStatus
-        );
+            List<String> namesCollector = new ArrayList<>();
+            List<String> statusCollector = new ArrayList<>();
 
-        // Step 3: Command the outbound message pipeline execution loop [cite: 20]
-        boolean success = communicationService.sendTemplatedEmail(email, familyName, templateId, emailParams);
+            // 2. Safely re-compile parallel arrays to prevent sibling data corruption
+            for (ca.vicilearning.dashboard.domain.Student student : familyMembers) {
+                String currentName = student.getName().trim();
+                namesCollector.add(currentName);
 
-        if (success) {
-            System.out.println("STATUS SUCCESS: Outbound event payload logged securely by Brevo servers.");
-        } else {
-            System.err.println("STATUS FAILURE: Processing error. Check daily cap metrics or API key parameters.");
+                String calculatedStatus = "Active";
+                if (currentName.equalsIgnoreCase(studentName.trim())) {
+                    if ("LAPSED".equalsIgnoreCase(actionType) || "SYNC_LAPSED".equalsIgnoreCase(actionType)) {
+                        calculatedStatus = "Lapsed";
+                    }
+                } else {
+                    Optional<AlertStudent> siblingAlert = alertStudentRepository.findById(currentName);
+                    if (siblingAlert.isPresent() && siblingAlert.get().isLapsedNow()) {
+                        calculatedStatus = "Lapsed";
+                    }
+                }
+                statusCollector.add(calculatedStatus);
+            }
+
+            String delimitedNames = String.join(", ", namesCollector);
+            String delimitedStatuses = String.join(", ", statusCollector);
+
+            Map<String, Object> attributePayload = new HashMap<>();
+            attributePayload.put("STUDENT_NAMES", delimitedNames);
+            attributePayload.put("ACTIVITY_STATUS", delimitedStatuses);
+
+            communicationService.updateContactAttributes(email, attributePayload);
+
+            if ("SYNC_LAPSED".equalsIgnoreCase(actionType)) {
+                Map<String, Object> emailParams = Map.of(
+                    "STUDENT_NAME", studentName,
+                    "TRIGGER_REASON", "No tutoring session completed or scheduled within the past 14 days."
+                );
+                communicationService.sendTemplatedEmail(email, studentName, 1L, emailParams);
+            }
+
+        } catch (Exception e) {
+            System.err.println("[APPROVE CRITICAL EXCEPTION] Processing loop crashed:");
+            e.printStackTrace();
         }
-        System.out.println("=================================================");
 
+        alertStudentRepository.deleteById(studentName);
+        System.out.println("=== [CONTROLLER APPROVE ACTION COMPLETE] ===\n");
+        return "redirect:/comms/review";
+    }
+
+    @PostMapping("/sync-now")
+    public String triggerImmediateSync() {
+        try {
+            syncEngineService.runTwoWayReconciliationSync();
+        } catch (Exception e) {
+            System.err.println("Immediate background engine sync failed: " + e.getMessage());
+        }
         return "redirect:/comms/review";
     }
 }

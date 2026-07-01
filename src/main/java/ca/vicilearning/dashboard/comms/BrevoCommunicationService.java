@@ -1,25 +1,51 @@
 package ca.vicilearning.dashboard.comms;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Data Transfer Objects (DTOs) strictly modeling Brevo's outbound JSON payloads.
+ * Service orchestrating direct HTTP interactions with the Brevo marketing API platform.
+ * Handles contact synchronizations, attribute state adjustments, and transactional SMTP dispatches.
  */
-record Recipient(String email, String name) {}
-
-record BrevoEmailPayload(
-    Long templateId,
-    List<Recipient> to,
-    Map<String, Object> params
-) {}
-
 @Service
 public class BrevoCommunicationService {
+
+    private static final Logger log = LoggerFactory.getLogger(BrevoCommunicationService.class);
+
+    // Endpoint URIs and API Defaults
+    private static final String ENDPOINT_CONTACTS = "/contacts?limit=100&offset=0";
+    private static final String ENDPOINT_CONTACT_BY_EMAIL = "/contacts/{email}";
+    private static final String ENDPOINT_SMTP_EMAIL = "/smtp/email";
+    private static final String DEFAULT_STATUS = "Active";
+
+    // --- Inner DTO Node Data Enclaves (Records) ---
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record BrevoAttributesNode(
+        @JsonProperty("VICI_ACCOUNT_ID") String viciAccountId,
+        @JsonProperty("STUDENT_NAMES") String studentNames,
+        @JsonProperty("ACTIVITY_STATUS") String activityStatus,
+        @JsonProperty("LAST_BOOKING_DATE") String lastBookingDate
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record BrevoContactNode(
+        @JsonProperty("email") String email,
+        @JsonProperty("attributes") BrevoAttributesNode attributes
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record BrevoListContactsResponse(
+        @JsonProperty("contacts") List<BrevoContactNode> contacts,
+        @JsonProperty("count") Long count
+    ) {}
 
     private final RestClient brevoRestClient;
 
@@ -28,55 +54,134 @@ public class BrevoCommunicationService {
     }
 
     /**
-     * Syncs custom flat contact attributes to a Parent profile row inside Brevo CRM[cite: 251].
-     * Pushes properties like VICI_ACCOUNT_ID, STUDENT_NAMES, and PAYMENT_STATUS[cite: 304].
-     * * @param email The target unique identifier for the parent account[cite: 23, 239, 303].
-     * @param attributes Map containing custom field key-value allocations.
+     * Pulls global contact configurations exactly once to generate an in-memory 
+     * dictionary routing Account Keys to their explicit target parent email structures.
+     *
+     * @return Lookup map linking VICI Account IDs to Primary Emails.
      */
-    public void updateContactAttributes(String email, Map<String, Object> attributes) {
+    public Map<String, String> fetchViciIdToEmailMap() {
+        Map<String, String> lookupMap = new HashMap<>();
         try {
-            brevoRestClient.put()
-                .uri("/contacts/{email}", email)
-                .body(Map.of("attributes", attributes))
-                .retrieve()
-                .onStatus(HttpStatusCode::is4xxClientError, (request, response) -> {
-                    System.err.println("CRM Attribute Sync Client Error: " + response.getStatusCode());
-                })
-                .toBodilessEntity();
-            System.out.println("CRM Attributes successfully pushed for parent target: " + email);
+            BrevoListContactsResponse response = brevoRestClient.get()
+                    .uri(ENDPOINT_CONTACTS) 
+                    .retrieve()
+                    .body(BrevoListContactsResponse.class);
+
+            if (response != null && response.contacts() != null) {
+                for (BrevoContactNode contact : response.contacts()) {
+                    if (contact.attributes() != null && contact.attributes().viciAccountId() != null) {
+                        String cleanViciId = contact.attributes().viciAccountId().trim().toUpperCase();
+                        if (!cleanViciId.isEmpty() && contact.email() != null) {
+                            lookupMap.put(cleanViciId, contact.email().trim());
+                        }
+                    }
+                }
+            }
         } catch (Exception e) {
-            System.err.println("Network exception updating Brevo contact properties: " + e.getMessage());
+            log.error("Failed compiling VICI ID to Email mapping matrix.", e);
+        }
+        return lookupMap;
+    }
+
+    /**
+     * Collects and safely normalizes localized student names against their corresponding 
+     * comma-separated parallel status streams retrieved dynamically from Brevo.
+     *
+     * @return Lookup map linking individual lowercase Student Names to their system status.
+     */
+    public Map<String, String> fetchStudentStatusMap() {
+        Map<String, String> statusMap = new HashMap<>();
+        try {
+            BrevoListContactsResponse response = brevoRestClient.get()
+                    .uri(ENDPOINT_CONTACTS)
+                    .retrieve()
+                    .body(BrevoListContactsResponse.class);
+
+            if (response != null && response.contacts() != null) {
+                for (BrevoContactNode contact : response.contacts()) {
+                    if (contact.attributes() != null) {
+                        unpackContactStatuses(contact.attributes(), statusMap);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed executing dynamic student status normalization mappings.", e);
+        }
+        return statusMap;
+    }
+
+    /**
+     * Unpacks CSV tokens for names and statuses out of a target metadata attribute node.
+     */
+    private void unpackContactStatuses(BrevoAttributesNode attributes, Map<String, String> statusMap) {
+        String namesRaw = attributes.studentNames();
+        String statusesRaw = attributes.activityStatus();
+
+        if (namesRaw == null || namesRaw.isBlank()) {
+            return;
+        }
+
+        String[] names = namesRaw.split(",");
+        String[] statuses = (statusesRaw != null && !statusesRaw.isBlank()) 
+                ? statusesRaw.split(",") 
+                : new String[0];
+
+        for (int i = 0; i < names.length; i++) {
+            String cleanName = names[i].trim().toLowerCase();
+            String cleanStatus = (i < statuses.length) ? statuses[i].trim() : DEFAULT_STATUS;
+            
+            if (!cleanName.isEmpty()) {
+                statusMap.put(cleanName, cleanStatus);
+            }
         }
     }
 
     /**
-     * Signals Brevo's SMTP server engine to issue a personalized transactional email template[cite: 20, 251].
+     * Updates profile attribute nodes remotely inside Brevo for a designated parent record.
+     *
+     * @param parentEmail      The target unique recipient lookup key.
+     * @param attributePayload Key-value matrix representing CRM metadata keys to update.
      */
-    public boolean sendTemplatedEmail(String toEmail, String recipientName, Long templateId, Map<String, Object> params) {
+    public void updateContactAttributes(String parentEmail, Map<String, Object> attributePayload) {
+        if (parentEmail == null || attributePayload == null) return;
         try {
-            BrevoEmailPayload payload = new BrevoEmailPayload(
-                templateId,
-                List.of(new Recipient(toEmail, recipientName)),
-                params
-            );
+            Map<String, Object> bodyWrapper = Map.of("attributes", attributePayload);
+            brevoRestClient.put()
+                    .uri(ENDPOINT_CONTACT_BY_EMAIL, parentEmail.trim())
+                    .body(bodyWrapper)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.info("Attributes successfully synchronized on Brevo container for: {}", parentEmail);
+        } catch (Exception e) {
+            log.error("Failed adjusting system configuration node for: {}", parentEmail, e);
+        }
+    }
 
+    /**
+     * Dispatches transactional templates out to specialized target accounts using SMTP parameters.
+     *
+     * @param targetEmail    Recipient communication address.
+     * @param recipientName  Formatted descriptive recipient descriptor name.
+     * @param templateId     Brevo managed pre-compiled graphic template ID number.
+     * @param templateParams Injected runtime variables parsed into layout templates.
+     */
+    public void sendTemplatedEmail(String targetEmail, String recipientName, long templateId, Map<String, Object> templateParams) {
+        try {
+            Map<String, Object> recipient = Map.of("email", targetEmail, "name", recipientName);
+            Map<String, Object> payload = Map.of(
+                "templateId", templateId, 
+                "to", List.of(recipient), 
+                "params", templateParams
+            );
+            
             brevoRestClient.post()
-                    .uri("/smtp/email")
+                    .uri(ENDPOINT_SMTP_EMAIL)
                     .body(payload)
                     .retrieve()
-                    .onStatus(HttpStatusCode::is4xxClientError, (request, response) -> {
-                        if (response.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
-                            System.err.println("CRITICAL: Brevo 300 free daily email limit exhausted (429 Rate Limit)!");
-                        } else {
-                            System.err.println("Brevo SMTP Transfer Client Error: " + response.getStatusCode());
-                        }
-                    })
                     .toBodilessEntity();
-
-            return true;
+            log.info("Template ID [{}] successfully routed out to client: {}", templateId, targetEmail);
         } catch (Exception e) {
-            System.err.println("Network exception during outbound Brevo transaction: " + e.getMessage());
-            return false;
+            log.error("SMTP delivery transaction aborted to target: {}", targetEmail, e);
         }
     }
 }

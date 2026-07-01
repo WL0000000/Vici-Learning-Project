@@ -1,76 +1,169 @@
 # Brevo Integration Subsystem Documentation | Group 15
 
-## 1. Abstract & Operational Purpose
-The Brevo communication subsystem serves as the **Voice** at the downstream end of the Vici Learning Integration Dashboard pipeline. While background synchronization modules pull operational records from SimplyBook.me into PostgreSQL, and the rules engine runs threshold calculations to isolate operational anomalies, this subsystem bridges those internal database flags into outbound administrative actions.
+## 1. System Integration Overview
 
-This module provides staff with a synchronized, interactive **Automations Review Queue**. It enables manual administrative verification of student parameters before forcing attribute updates to the CRM contact list or triggering live transactional email reminders.
+The VICI Learning dashboard integrates directly with the Brevo CRM v3 API Engine to achieve automatic, two-way reconciliation between local academic booking timelines and client communication states.
 
----
+The primary operational goal is to flag synchronization anomalies—such as a student whose localized booking pattern has ceased but remains marked as "Active" inside the marketing ecosystem. This ensures automated communication flows match actual student behavior without creating manual administrative overhead.
 
-## 2. Core Constraint: Relational to Flat CRM Architecture Mapping
-A primary architectural hurdle in this subsystem is handling complex relational data loops inside Brevo's system capabilities under the constraints of the **Free Sandbox Tier**.
-
-### The Relational vs. CRM Mismatch
-* **Local Database Engine:** Handles multi-child families using true relational mapping definitions (1 Parent Account record can map to a separate list of multiple Students rows).
-* **Brevo Free Sandbox Tier:** Lacks premium enterprise "Custom Objects" (marked by the Crown icon in the interface). It uses a single, flat Contact model where **one email address equals exactly one contact row**.
-
-### Architectural Solution: Synchronized Parallel Arrays
-To store tracking profiles for multiple children under a single parent email without causing duplicate message dispatches to the same client inbox, this application implements **Array-Based Attribute Flattening**. Native Java collections (`List<String>` and `List<LocalDate>`) are collapsed into predictable, ordered, pipe-delimited strings (`|`) before executing outbound API requests.
-
-By ensuring your rules engine loops through a parent's children in a strictly symmetrical index position, the Brevo dashboard handles the flat text segments safely as parallel arrays:
-
-| Positional Index | `STUDENT_NAMES` Attribute (Text) | `LAST_BOOKING_DATE` Attribute (Text) |
-| :---: | :--- | :--- |
-| **`Index [0]`** | Miata Boy | 2026-05-24 |
-| **`Index [1]`** | Miata Girl | 2026-06-06 |
-
-* **Resulting CRM String View:** `Miata Boy | Miata Girl`
-* **Resulting CRM Date View:** `2026-05-24 | 2026-06-06`
-
-> ⚠️ **CRITICAL ATTRIBUTE DATATYPE REQUIREMENT:** The `LAST_BOOKING_DATE` column field **must be configured as a TEXT type attribute** within the Brevo Dashboard rather than a standard Date type. If left as a Date type field, Brevo's API routers will reject the pipe-delimited text arrays with a validation error.
-
----
-
-## 3. Custom CRM Column Layout (Contact Attributes)
-To support transparency when staff log directly into the Brevo platform, you must click the **"Select attributes ⊕"** menu on your contact table and check the following custom fields:
-
-| Attribute System Key | UI Display Type | Field Function & Mapping Context |
-| :--- | :--- | :--- |
-| `VICI_ACCOUNT_ID` | **Text** | The manual string identifier bridge linking CRM data back to the tracker sheet schema (e.g., `OV30174`). |
-| `STUDENT_NAMES` | **Text** | Collapsed text array containing child names separated by structural pipes (`\|`). |
-| `PAYMENT_STATUS` | **Text** | Credit-agnostic operational flag tracking billing states (e.g., `Good Standing`, `OVERDUE`). |
-| `LAST_BOOKING_DATE` | **Text** | Parallel text array tracking independent student lesson recency timelines. |
-
----
-
-## 4. Subsystem Code & File Architecture
-The communication package utilizes a decoupled **Mock Provider Pattern** for this standalone development sprint. This allows full visual and network verification without introducing dependencies or merge risks to your teammates' active PostgreSQL schema branches.
-
-```text
-ca.vicilearning.dashboard
-├── config
-│   └── BrevoConfig.java                -> Instantiates the global RestClient bean with target authorization header keys.
-├── comms
-│   └── BrevoCommunicationService.java  -> Core network client engine managing outbound PUT (CRM Sync) and POST (SMTP) JSON payloads.
-├── rules
-│   ├── BrevoReviewTask.java            -> Unified domain data record formatting raw Lists into flat parallel pipe strings.
-│   └── MockTaskService.java            -> Seed provider generating realistic multi-child and billing exception test targets.
-└── web
-    └── BrevoController.java            -> Orchestrates Thymeleaf model mappings, form extraction, and redirect filters.
 ```
++------------------------+             +------------------------+
+|   VICI Local DB        |             |   Brevo Remote CRM     |
+|  (Bookings & Students) |             | (Contact Segments/CSV) |
++-----------+------------+             +-----------+------------+
+            |                                      |
+            |      [1. Bulk In-Memory Fetch]       |
+            +<-------------------------------------+
+            |                                      |
+            v                                      |
++------------------------------------+             |
+|    BrevoSyncEngineService          |             |
+|  - Compares 14-day calendars       |             |
+|  - Validates parallel CSV tokens   |             |
++-----------+------------------------+             |
+            |                                      |
+            v                                      |
++------------------------------------+             |
+|    AlertStudent Repository         |             |
+|  - Identifies row discrepancies    |             |
+|  - Drives the visual view engine   |             |
++-----------+------------------------+             |
+            |                                      |
+            |    [2. Target Update Calls]          |
+            +------------------------------------->+
+
+```
+
+---
+
+## 2. Architecture & Class Directory
+
+### Core Configuration Layer
+
+- `BrevoConfig.java` Initializes and injects a thread-safe Spring `RestClient` bean. Abstractly attaches global context headers (`Content-Type`, `Accept`, and the private token key `api-key`) and establishes base service locations.
+
+### Integration & Data Ingestion Layer
+
+- `BrevoCommunicationService.java` The primary network interaction bridge. Implements structured, high-speed Jackson data records (`BrevoContactNode`, `BrevoAttributesNode`, `BrevoListContactsResponse`) to ingest payload structures safely. It encapsulates specific API transactions, custom attributes updates, and transactional SMTP template dispatches.
+
+### Domain Validation Layer
+
+- `AlertStudent.java` Database entity tracking the live status of individual students. Uses the student's normalized `name` as the persistent look-up key registry.
+
+- `AlertStudentRepository.java` Extends `JpaRepository`. Provides dedicated account aggregation scopes and exposes a optimized JPQL query (`findDiscrepancies`) mapping visual variance flags where local states conflict with remote marketing logs.
+
+### Execution Processing Engine
+
+- `BrevoSyncEngineService.java` A automated cron manager running hourly. It pulls global student parameters in a single block to minimize network latency, unpacks complex string payloads, computes active timeline states, and executes atomic upserts against anomalous entities.
+
+---
+
+## 3. Data Mapping & Property Specifications
+The synchronization pipeline links local relational data grids with Brevo's unstructured custom contact layout keys.
+
+| Brevo CRM Property Key | Data Representation | Core System Usage | Local Mapping Field |
+| :--- | :--- | :--- | :--- |
+| `VICI_ACCOUNT_ID` | `String` (Normalized Key) | Unique parent/family grouping index | `AlertStudent.accountId` |
+| `STUDENT_NAMES` | `String` (Comma-Separated) | Multi-student index array | `AlertStudent.name` (Split) |
+| `ACTIVITY_STATUS` | `String` (Comma-Separated) | Corresponding status states array | `AlertStudent.lapsedStatus` |
+| `LAST_BOOKING_DATE` | `String` (ISO Timestamp) | Chronological validation target | Evaluated via local parameters |
+
+### Crucial Parallel Token Schema Requirement
+
+The attributes `STUDENT_NAMES` and `ACTIVITY_STATUS` function as parallel indices mapped via comma-separated string streams:
+
+- **Example Value Matrix**:
+
+  - `STUDENT_NAMES`: `"Alex Smith, Taylor Smith"`
+
+  - `ACTIVITY_STATUS`: `"Active, Lapsed"`
+
+- **Resolution Pattern**: The synchronization processor parses index `0` (`alex smith`) as `Active`, and index `1` (`taylor smith`) as `Lapsed`. If a status index is absent, the system defaults the entity configuration state to `"Active"`.
+
+---
+
+## 4. Operational Logic & Rules Configuration
+
+### Timeline Evaluation Engine (Lapse Calculations)
+
+A student is flagged as `lapsedNow = true` if they have no valid engagement records inside a 14-day time window. The logic evaluates trailing histories and future schedules:
+
+
+$$\text{Lapsed State} = \left( \text{No Converted Bookings in past 14 days} \right) \;\land\; \left( \text{No Upcoming Bookings scheduled in the future} \right)$$
+
+- Exclusion Matrix: Bookings marked as soft-deleted (`deletedAt != null`) or explicitly tagged as `"cancelled"` are dropped immediately and do not reset the tracking baseline window.
+
+### Network Call Defenses (N+1 Prevention)
+
+To maintain quick processing execution and stay well within Brevo rate limits, the system avoids issuing individual validation lookups inside loops:
+
+1. The cron routine fires a single initial call to `/contacts?limit=100&offset=0`.
+
+2. The dataset is ingested into an optimized in-memory lookup map (`Map<String, String>`).
+
+3. Evaluation loops execute operations against this internal memory grid, reducing network load down to an $O(1)$ operation.
 ---
 
 
-## 5. End-to-End Execution Lifecycle
-1. Queue Page Request (GET /comms/review): The BrevoController requests unaddressed issues from MockTaskService and pushes them down the Thymeleaf pipe.
-2. Dynamic UI Rendering: The comms-review.html page uses standard system styling conventions to display the targets. The record's formatting helpers execute behind the scenes to bundle name and date arrays into flat strings.
-3. Hidden Form Packaging: The Thymeleaf markup binds the transformed properties into hidden form parameters within the operational data row.
-4. Administrative Confirmation (POST /comms/approve): When a staff member clicks "Approve and Send", the client browser submits the pre-flattened payload to the controller endpoint.
-5. Horizontal CRM Sync: The BrevoCommunicationService initiates a PUT request to /contacts/{email} to align the sandbox dashboard columns live.
-6. Transactional SMTP Dispatch: The service drops a POST request to /smtp/email, matching the correct Template ID and supplying the key-value dictionary tokens needed to compile the email.
+## 5. API & Endpoint Reference Guide
+
+All outbound connections use the secure root base path set by `${brevo.api.url:https://api.brevo.com/v3}`.
+
+`GET /contacts`
+
+- **Usage Context**: Automatically runs up-front inside synchronization procedures (`fetchViciIdToEmailMap`, `fetchStudentStatusMap`).
+
+- **Query Parameters**: `limit=100&offset=0`
+
+`PUT /contacts/{email}`
+
+- **Usage Context**: Pushes metadata updates down to a parent's record field.
+
+- **Payload Schema Matrix** (JSON):
+```json
+{
+  "attributes": {
+    "LAST_BOOKING_DATE": "2026-06-30T19:00:00Z",
+    "ACTIVITY_STATUS": "Active, Lapsed"
+  }
+}
+```
+
+`POST /smtp/email`
+
+- **Usage Context**: Dispatches customized automated notices using pre-built graphic communication layouts.
+
+- **Payload Schema Matrix** (JSON):
+
+```json
+{
+  "templateId": 42,
+  "to": [
+    {
+      "email": "parent@example.com",
+      "name": "Jane Doe"
+    }
+  ],
+  "params": {
+    "studentName": "Alex Doe",
+    "daysSinceLastBooking": 14
+  }
+}
+```
 
 ---
 
-## 6. Troubleshooting and Sandbox Limit Safeguards
-* Daily Transaction Limits: Free sandboxes are tightly restricted to 300 emails per day. The BrevoCommunicationService error interceptor checks for client response patterns to explicitly catch 429 Too Many Requests rate caps, safely tracking the failure in the system log without hanging active server execution loops.
-* Quotas Preservation: Mock arrays inside MockTaskService should remain bounded during development to prevent loop escalations from consuming your group's testing quota.
+## 6. Error Handling, Logging, and Telemetry
+
+The integration uses **SLF4J Logger abstractions** to replace standard print tracing, ensuring structured logs are easily parsed by modern monitoring systems.
+
+### Resiliency Patterns
+- **Exception Isolation**: Loop processes are isolated within explicit `try-catch` structures. A remote network timeout on a single student item won't interrupt the remaining batch operations.
+
+- **Graceful Degradation**: If data mappings fail or return empty sets during unpacking cycles, target arrays fall back to safe default parameters (`"Active"`) to prevent null pointer exceptions.
+
+- **Discrepancy Identification**: Conflicting records are continuously written to the `alert_student` data table, allowing management panels to query synchronization errors cleanly at any time:
+
+```SQL
+SELECT * FROM alert_student WHERE lapsed_now != lapsed_status;
+```

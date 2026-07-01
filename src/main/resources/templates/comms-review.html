@@ -13,17 +13,27 @@
 
 <div class="vici-layout">
 
-    <script th:replace = "fragments/side-bar :: side-bar('comms-review')"></script>
+    <script th:replace="fragments/side-bar :: side-bar('comms-review')"></script>
 
     <main class="vici-main">
 
         <div class="sync-strip">
-            <div class="d-flex align-items-center gap-2">
-                <span class="sync-status-dot"></span>
-                <div>
-                    <div class="sync-text">Brevo Service Channel Active</div>
-                    <div class="sync-sub">Prototype running on sandboxed system account environment. Supports parallel multi-child vectors.</div>
+            <div class="d-flex align-items-center justify-content-between w-100">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="sync-status-dot"></span>
+                    <div>
+                        <div class="sync-text">Brevo Service Channel Active</div>
+                        <div class="sync-sub">Two-way ledger tracking enabled. Compares database scheduling parameters with live CRM state indices.</div>
+                    </div>
                 </div>
+                <form th:action="@{/comms/sync-now}" method="post" class="mb-0">
+                    <button type="submit" class="btn-vici" style="text-decoration:none; display:inline-flex; align-items:center; gap:8px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+                            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                        </svg>
+                        Search Now
+                    </button>
+                </form>
             </div>
         </div>
 
@@ -39,58 +49,70 @@
                 <table class="table sessions-table mb-0">
                     <thead>
                         <tr>
-                            <th>Recipient Family</th>
-                            <th>Link ID</th>
-                            <th>Student Targets</th>
-                            <th>Trigger Reason</th>
-                            <th>Billing State</th>
-                            <th class="text-end">Verification Action</th>
+                            <th>Student Target Name</th>
+                            <th>Vici Link ID</th>
+                            <th>Database State</th>
+                            <th>Brevo CRM State</th>
+                            <th>Detected Discrepancy Type / Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr th:each="task : ${pendingTasks}">
+                        <tr th:each="alert : ${pendingTasks}">
                             <td>
                                 <div class="d-flex align-items-center gap-2">
-                                    <div class="student-avatar" 
-                                         th:text="${#strings.substring(task.familyName, 0, 2)}">FI</div>
+                                    <div class="student-avatar" th:text="${#strings.substring(alert.name, 0, 2)}">ST</div>
                                     <div>
-                                        <div class="student-name" th:text="${task.familyName}">Family Name</div>
-                                        <small class="text-muted" th:text="${task.email}">email@example.com</small>
+                                        <div class="student-name" th:text="${alert.name}">Student Name</div>
+                                        <small class="text-muted" th:text="${alert.parentEmail}">true.email@maildrop.cc</small>
                                     </div>
                                 </div>
                             </td>
-                            <td><code th:text="${task.viciAccountId}">OV30174</code></td>
+
+                            <td><code th:text="${alert.accountId}">VICI-0001</code></td>
+
                             <td>
-                                <div th:each="name : ${task.studentNames}" class="badge bg-light text-dark border me-1 py-1 px-2" style="font-weight:500;" th:text="${name}">Child</div>
+                                <span th:class="${alert.lapsedNow} ? 'badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1' : 'badge bg-success-subtle text-success border border-success-subtle px-2 py-1'"
+                                    th:text="${alert.lapsedNow} ? 'LAPSED' : 'ACTIVE'">DB</span>
                             </td>
+
                             <td>
-                                <span class="status-pill pill-pending" th:text="${task.triggerReason}">Flag Reason</span>
+                                <span th:class="${alert.lapsedStatus} ? 'badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1' : 'badge bg-success-subtle text-success border border-success-subtle px-2 py-1'"
+                                    th:text="${alert.lapsedStatus} ? 'LAPSED' : 'ACTIVE'">CRM</span>
                             </td>
+
                             <td>
-                                <span th:text="${task.paymentStatus}" 
-                                      th:class="${task.paymentStatus == 'OVERDUE'} ? 'text-danger fw-bold' : 'text-success'">Status</span>
-                            </td>
-                            <td class="text-end">
-                                <form th:action="@{/comms/approve}" method="post" class="mb-0">
-                                    <input type="hidden" name="taskId" th:value="${task.id}" />
-                                    <input type="hidden" name="email" th:value="${task.email}" />
-                                    <input type="hidden" name="familyName" th:value="${task.familyName}" />
-                                    <input type="hidden" name="viciAccountId" th:value="${task.viciAccountId}" />
-                                    <input type="hidden" name="templateId" th:value="${task.templateId}" />
-                                    <input type="hidden" name="reason" th:value="${task.triggerReason}" />
-                                    <input type="hidden" name="paymentStatus" th:value="${task.paymentStatus}" />
-                                    
-                                    <input type="hidden" name="studentNames" th:value="${task.getFlattenedStudentNames()}" />
-                                    <input type="hidden" name="bookingDates" th:value="${task.getFlattenedBookingDates()}" />
-                                    
-                                    <button type="submit" class="btn-vici py-1 px-3" style="font-size: 13px;">
-                                        Approve &amp; Send
-                                    </button>
-                                </form>
+                                <div th:if="${alert.lapsedNow && !alert.lapsedStatus}" class="d-flex align-items-center justify-content-between gap-3">
+                                    <small class="text-danger fw-medium">⚠️ Silent Dropout</small>
+                                    <form th:action="@{/comms/approve}" method="post" class="mb-0">
+                                        <input type="hidden" name="studentName" th:value="${alert.name}" />
+                                        <input type="hidden" name="viciAccountId" th:value="${alert.accountId}" />
+                                        <input type="hidden" name="email" th:value="${alert.parentEmail}" />
+                                        <input type="hidden" name="actionType" value="SYNC_LAPSED" />
+                                        <button type="submit" class="btn-vici py-1 px-3 style-danger" style="font-size: 13px; background-color: #dc3545;">
+                                            Approve &amp; Email Parent
+                                        </button>
+                                    </form>
+                                </div>
+
+                                <div th:if="${!alert.lapsedNow && alert.lapsedStatus}" class="d-flex align-items-center justify-content-between gap-3">
+                                    <small class="text-success fw-medium">✨ Resumed Lessons</small>
+                                    <form th:action="@{/comms/approve}" method="post" class="mb-0">
+                                        <input type="hidden" name="studentName" th:value="${alert.name}" />
+                                        <input type="hidden" name="viciAccountId" th:value="${alert.accountId}" />
+                                        <input type="hidden" name="email" th:value="${alert.parentEmail}" />
+                                        <input type="hidden" name="actionType" value="CLEAR_FLAG" />
+                                        <button type="submit" class="btn-vici py-1 px-3 style-success" style="font-size: 13px; background-color: #198754;">
+                                            Set Active (Silent)
+                                        </button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
+
                         <tr th:if="${pendingTasks.isEmpty()}">
-                            <td colspan="6" class="text-center text-muted py-4">No pending issues flagged in review queue. Channel clear.</td>
+                            <td colspan="5" class="text-center text-muted py-5 fw-medium">
+                                🎉 All synchronization data parameters are perfectly reconciled. No anomalies detected!
+                            </td>
                         </tr>
                     </tbody>
                 </table>
