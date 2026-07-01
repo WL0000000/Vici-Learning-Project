@@ -5,6 +5,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
+/**
+ * Configuration class responsible for setting up and exposing the Brevo API client.
+ * Utilizes Spring's {@link RestClient} abstracting standard HTTP headers and base configurations.
+ */
 @Configuration
 public class BrevoConfig {
 
@@ -14,6 +18,12 @@ public class BrevoConfig {
     @Value("${brevo.api.key}")
     private String apiKey;
 
+    /**
+     * Configures and initializes a thread-safe {@link RestClient} bean initialized 
+     * with Brevo authentication credentials and mandatory content headers.
+     *
+     * @return Fully initialized RestClient instance.
+     */
     @Bean
     public RestClient brevoRestClient() {
         return RestClient.builder()

@@ -2,15 +2,24 @@ package ca.vicilearning.dashboard.sync;
 
 import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
 import ca.vicilearning.dashboard.domain.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
+/**
+ * Engine management system handling scheduled synchronization processing windows.
+ * Reconciles local database states against distant telemetry datasets pulled out from Brevo CRM.
+ */
 @Service
 public class BrevoSyncEngineService {
+
+    private static final Logger log = LoggerFactory.getLogger(BrevoSyncEngineService.class);
+    private static final int LAPSE_THRESHOLD_DAYS = 14;
+    private static final String STATUS_LAPSED = "Lapsed";
 
     private final StudentRepository studentRepository;
     private final BookingRepository bookingRepository;
@@ -27,76 +36,101 @@ public class BrevoSyncEngineService {
         this.communicationService = communicationService;
     }
 
+    /**
+     * Orchestrates background two-way synchronization windows scheduled sequentially.
+     * Pulls bulk states up-front to run in-memory processing mappings efficiently.
+     */
     @Scheduled(cron = "0 0 * * * *")
     public void runTwoWayReconciliationSync() {
-        System.out.println("\n=== [CRON BACKGROUND SYNC STARTING] ===");
+        log.info("Initiating automatic structured Brevo synchronization sequence...");
         
-        // 1. Fetch live student statuses from Brevo upfront (prevents N+1 network lookups)
+        // Step 1: Bulk load remote configurations to insulate loop pipelines from network latency issues
         Map<String, String> brevoStudentStatuses = communicationService.fetchStudentStatusMap();
-        
-        List<Student> allStudents = studentRepository.findByDeletedAtIsNull();
-        LocalDateTime thresholdDateTime = LocalDateTime.now().minusDays(14);
+        List<Student> activeStudents = studentRepository.findByDeletedAtIsNull();
 
-        System.out.println("[CRON] Reconciling " + (allStudents != null ? allStudents.size() : 0) + " active students...");
-
-        if (allStudents == null || allStudents.isEmpty()) {
-            System.out.println("=== [CRON BACKGROUND SYNC COMPLETE] ===\n");
+        if (activeStudents == null || activeStudents.isEmpty()) {
+            log.info("No active student nodes identified for alignment checking processing window.");
             return;
         }
 
-        for (Student student : allStudents) {
-            String studentName = student.getName();
-            String accountId = student.getAccountId();
+        log.info("Synchronizing {} student tracking configurations against active database rows...", activeStudents.size());
+        LocalDateTime thresholdDateTime = LocalDateTime.now().minusDays(LAPSE_THRESHOLD_DAYS);
 
-            if (studentName == null || accountId == null || studentName.isBlank() || accountId.isBlank()) {
+        for (Student student : activeStudents) {
+            try {
+                reconcileSingleStudent(student, brevoStudentStatuses, thresholdDateTime);
+            } catch (Exception ex) {
+                log.error("Anomalous fault encountered running alignment computations for ID: {}", student.getId(), ex);
+            }
+        }
+        
+        log.info("Two-way tracking alignment routines finalized successfully.");
+    }
+
+    /**
+     * Evaluates data records for an individual target student matrix layout frame.
+     */
+    private void reconcileSingleStudent(Student student, Map<String, String> brevoStatuses, LocalDateTime baselineThreshold) {
+        String studentName = student.getName();
+        String accountId = student.getAccountId();
+
+        if (studentName == null || accountId == null || studentName.isBlank() || accountId.isBlank()) {
+            return;
+        }
+
+        // Parse operational timeline logs matching target ID specifications
+        List<Booking> structuralBookings = bookingRepository.findByStudentId(student.getId());
+        boolean lapsedNow = evaluateLapseCondition(structuralBookings, baselineThreshold);
+
+        // Resolve status tracking profiles recorded over Brevo servers
+        String statusFromBrevo = brevoStatuses.getOrDefault(studentName.trim().toLowerCase(), "Active");
+        boolean isLapsedInBrevo = STATUS_LAPSED.equalsIgnoreCase(statusFromBrevo.trim());
+
+        // Upsert standard alert table structural storage logs
+        AlertStudent alertEntity = alertStudentRepository.findById(studentName.trim())
+                .orElseGet(() -> {
+                    AlertStudent newRecord = new AlertStudent();
+                    newRecord.setName(studentName.trim());
+                    return newRecord;
+                });
+
+        alertEntity.setAccountId(accountId.trim());
+        alertEntity.setLapsedNow(lapsedNow);
+        alertEntity.setLapsedStatus(isLapsedInBrevo);
+        alertEntity.setLastCheckedAt(LocalDateTime.now());
+        
+        alertStudentRepository.save(alertEntity);
+    }
+
+    /**
+     * Determines whether student tracking flows fall behind active operational constraints.
+     */
+    private boolean evaluateLapseCondition(List<Booking> bookings, LocalDateTime baselineThreshold) {
+        if (bookings == null || bookings.isEmpty()) {
+            return true;
+        }
+
+        boolean hasRecentConfirmedBooking = false;
+        boolean hasUpcomingConfirmedBooking = false;
+        LocalDateTime now = LocalDateTime.now();
+
+        for (Booking booking : bookings) {
+            // Drop cancelled or deleted bookings from data pool tracking pipelines
+            if (booking.getDeletedAt() != null || "cancelled".equalsIgnoreCase(booking.getStatus())) {
                 continue;
             }
-
-            List<Booking> historicalBookings = bookingRepository.findByStudentId(student.getId());
-            boolean hasRecentConfirmedBooking = false;
-            boolean hasUpcomingConfirmedBooking = false;
-
-            if (historicalBookings != null) {
-                for (Booking booking : historicalBookings) {
-                    if (booking.getDeletedAt() != null || "cancelled".equalsIgnoreCase(booking.getStatus())) {
-                        continue;
-                    }
-                    LocalDateTime start = booking.getStartTime();
-                    if (start != null) {
-                        if (start.isAfter(thresholdDateTime) && start.isBefore(LocalDateTime.now())) {
-                            hasRecentConfirmedBooking = true;
-                        }
-                        if (start.isAfter(LocalDateTime.now())) {
-                            hasUpcomingConfirmedBooking = true;
-                        }
-                    }
+            
+            LocalDateTime startTime = booking.getStartTime();
+            if (startTime != null) {
+                if (startTime.isAfter(baselineThreshold) && startTime.isBefore(now)) {
+                    hasRecentConfirmedBooking = true;
+                }
+                if (startTime.isAfter(now)) {
+                    hasUpcomingConfirmedBooking = true;
                 }
             }
-
-            boolean lapsedNow = !hasRecentConfirmedBooking && !hasUpcomingConfirmedBooking;
-
-            // 2. Resolve true current status from Brevo map instead of defaulting to false
-            String statusFromBrevo = brevoStudentStatuses.getOrDefault(studentName.trim().toLowerCase(), "Active");
-            boolean isLapsedInBrevo = "Lapsed".equalsIgnoreCase(statusFromBrevo.trim());
-
-            Optional<AlertStudent> existingAlertOpt = alertStudentRepository.findById(studentName.trim());
-            
-            AlertStudent alertRow;
-            if (existingAlertOpt.isPresent()) {
-                alertRow = existingAlertOpt.get();
-            } else {
-                alertRow = new AlertStudent();
-                alertRow.setName(studentName.trim());
-            }
-
-            alertRow.setAccountId(accountId.trim());
-            alertRow.setLapsedNow(lapsedNow);
-            alertRow.setLapsedStatus(isLapsedInBrevo); // DYNAMIC RECONCILIATION SUCCESS!
-            alertRow.setLastCheckedAt(LocalDateTime.now());
-            
-            alertStudentRepository.save(alertRow);
         }
-        System.out.println("CRON SUCCESS: Calendar anomalies successfully aligned.");
-        System.out.println("=== [CRON BACKGROUND SYNC COMPLETE] ===\n");
+
+        return !hasRecentConfirmedBooking && !hasUpcomingConfirmedBooking;
     }
 }
