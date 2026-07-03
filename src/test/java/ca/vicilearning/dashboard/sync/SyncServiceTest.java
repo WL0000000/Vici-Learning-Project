@@ -159,7 +159,7 @@ class SyncServiceTest {
         student.setId(5L);
         when(props.restConfigured()).thenReturn(true);
         when(props.accountIdFieldTitle()).thenReturn("Account_ID");
-        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(student));
+        when(studentRepo.findByDeletedAtIsNullAndAccountIdIsNull()).thenReturn(List.of(student));
         when(clientAdapter.extractAccountId(any(), eq("Account_ID"))).thenReturn("VICI-001");
 
         SyncLog result = syncService.sync();
@@ -168,6 +168,55 @@ class SyncServiceTest {
         assertThat(result.getAccountIdsLinked()).isEqualTo(1);
         assertThat(result.isSuccess()).isTrue();
         verify(studentRepo).save(student);
+    }
+
+    @Test
+    void accountIdStep_makesNoRestCalls_whenEveryStudentAlreadyLinked() {
+        when(performerAdapter.toTutors(any())).thenReturn(List.of());
+        when(serviceAdapter.toServices(any())).thenReturn(List.of());
+        when(clientAdapter.toStudents(any())).thenReturn(List.of());
+        when(studentRepo.findAll()).thenReturn(List.of());
+        when(tutorRepo.findAll()).thenReturn(List.of());
+        when(serviceRepo.findAll()).thenReturn(List.of());
+        when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
+
+        // REST is configured, but the backlog query returns nothing: at steady state every
+        // active student already has an Account_ID, so the step must hit REST v2 zero times.
+        when(props.restConfigured()).thenReturn(true);
+        when(studentRepo.findByDeletedAtIsNullAndAccountIdIsNull()).thenReturn(List.of());
+
+        SyncLog result = syncService.sync();
+
+        assertThat(result.getAccountIdsLinked()).isEqualTo(0);
+        assertThat(result.isSuccess()).isTrue();
+        verifyNoInteractions(restClient);
+    }
+
+    @Test
+    void syncStudents_preservesExistingAccountId_soUpsertDoesNotBlankIt() {
+        // A student already linked in our DB; the adapter re-delivers it with accountId == null
+        // (JSON-RPC can't read custom fields). The upsert must keep the known Account_ID.
+        Student existing = new Student();
+        existing.setId(7L);
+        existing.setAccountId("VICI-007");
+
+        Student fromApi = new Student();  // same id, freshly adapted, no accountId
+        fromApi.setId(7L);
+
+        when(performerAdapter.toTutors(any())).thenReturn(List.of());
+        when(serviceAdapter.toServices(any())).thenReturn(List.of());
+        when(clientAdapter.toStudents(any())).thenReturn(List.of(fromApi));
+        when(studentRepo.findAll()).thenReturn(List.of(existing));
+        when(tutorRepo.findAll()).thenReturn(List.of());
+        when(serviceRepo.findAll()).thenReturn(List.of());
+        when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
+
+        syncService.sync();
+
+        // The carry-over ran before saveAll, so the upserted student keeps its Account_ID.
+        assertThat(fromApi.getAccountId()).isEqualTo("VICI-007");
     }
 
     @Test
