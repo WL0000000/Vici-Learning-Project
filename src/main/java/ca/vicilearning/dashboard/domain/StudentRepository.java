@@ -8,4 +8,8 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     long countByDeletedAtIsNull();
 
     java.util.List<Student> findByDeletedAtIsNull();
+
+    // Active students that still need their Account_ID resolved from REST v2. Lets the sync
+    // fetch only the unlinked backlog instead of every student on every run (avoids an N+1).
+    java.util.List<Student> findByDeletedAtIsNullAndAccountIdIsNull();
 }

@@ -173,6 +173,22 @@ public class SyncService {
 
     private void syncStudents(SyncLog entry) {
         List<Student> students = clientAdapter.toStudents(client.getClientList());
+
+        // The JSON-RPC client list cannot read the Account_ID custom field, so every freshly
+        // adapted student has accountId == null. Carry over any Account_ID we previously
+        // resolved via REST v2 before the upsert; otherwise saveAll's merge would blank the
+        // column each sync and force syncAccountIds to re-fetch every student (an N+1 against
+        // REST v2). Preserving it lets that step fetch only the still-unlinked backlog.
+        Map<Long, String> knownAccountIds = studentRepo.findAll().stream()
+                .filter(s -> s.getAccountId() != null)
+                .collect(Collectors.toMap(Student::getId, Student::getAccountId));
+        for (Student s : students) {
+            String known = knownAccountIds.get(s.getId());
+            if (known != null) {
+                s.setAccountId(known);
+            }
+        }
+
         studentRepo.saveAll(students);
         int removed = reconcileDeletions(
                 studentRepo.findAll(), students,
@@ -206,12 +222,17 @@ public class SyncService {
     }
 
     /**
-     * Populates each active student's Account_ID (the Brevo link) from SimplyBook REST v2.
+     * Populates the Account_ID (the Brevo link) for students that don't have one yet, from
+     * SimplyBook REST v2. This is one REST call per <em>unlinked</em> student, not per student:
+     * syncStudents preserves already-resolved Account_IDs across upserts, so at steady state this
+     * step makes zero calls and only works through the backlog of newly-added students. That is
+     * what lets the sync scale toward the 300+/1000+ student targets without hammering REST v2
+     * every hour. A failure for one client is logged and skipped so a single bad record never
+     * aborts the whole step.
      *
-     * <p>This is one REST call per student. That's fine at current scale (~70 students) but
-     * is an N+1 pattern; when we approach the 300+/1000+ targets this should move to a bulk
-     * strategy or run incrementally (only students missing an Account_ID). A failure for one
-     * client is logged and skipped so a single bad record never aborts the whole step.
+     * <p>Trade-off: an Account_ID that is <em>changed</em> upstream after we first read it is not
+     * re-fetched here. The field is created once and then stable in practice; if it ever needs to
+     * be re-pulled, clear the local value (set it null) and the next sync will resolve it again.
      *
      * <p>Skipped cleanly (not failed) when REST creds aren't configured yet, so teammates
      * without REST keys still get green syncs for the JSON-RPC data.
@@ -223,7 +244,7 @@ public class SyncService {
             return;
         }
 
-        List<Student> students = studentRepo.findByDeletedAtIsNull();
+        List<Student> students = studentRepo.findByDeletedAtIsNullAndAccountIdIsNull();
         String fieldTitle = props.accountIdFieldTitle();
         int linked = 0;
 
@@ -236,8 +257,8 @@ public class SyncService {
                 log.warn("Account_ID fetch failed for client {}: {}", student.getId(), e.getMessage());
                 continue;
             }
-            // Only write when the value actually changed, to avoid pointless updates.
-            if (accountId != null && !accountId.equals(student.getAccountId())) {
+            // These students had no Account_ID, so any non-blank value we read is new.
+            if (accountId != null) {
                 student.setAccountId(accountId);
                 studentRepo.save(student);
                 linked++;
