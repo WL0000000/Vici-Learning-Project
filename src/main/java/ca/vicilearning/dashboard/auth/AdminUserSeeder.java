@@ -24,8 +24,8 @@ public class AdminUserSeeder implements ApplicationRunner {
 
     public AdminUserSeeder(AppUserService users,
                            AppUserRepository repo,
-                           @Value("${ADMIN_USERNAME:admin}") String adminUsername,
-                           @Value("${ADMIN_PASSWORD:changeme}") String adminPassword) {
+                           @Value("${ADMIN_USERNAME:Admin}") String adminUsername,
+                           @Value("${ADMIN_PASSWORD:ViciLearning2026}") String adminPassword) {
         this.users = users;
         this.repo = repo;
         this.adminUsername = adminUsername;

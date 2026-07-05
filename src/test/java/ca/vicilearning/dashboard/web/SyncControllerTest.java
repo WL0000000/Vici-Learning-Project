@@ -34,8 +34,8 @@ class SyncControllerTest {
     @MockBean private BookingRepository bookingRepo;
 
     @Test
-    @WithMockUser
-    void syncPageLoadsForLoggedInUser() throws Exception {
+    @WithMockUser(roles = "ADMIN")
+    void syncPageLoadsForAdmin() throws Exception {
         // empty list is fine here, just checking the page actually renders
         when(syncLogRepo.findByOrderByStartedAtDesc(any())).thenReturn(Collections.emptyList());
 
@@ -51,7 +51,15 @@ class SyncControllerTest {
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "TUTOR")
+    void syncPageForbiddenForTutor() throws Exception {
+        // The sync console is admin-only; a tutor must be denied (403), not shown the page.
+        mockMvc.perform(get("/sync"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void syncNowTriggersServiceAndRedirects() throws Exception {
         // this is the important one, making sure the post actually calls sync()
         mockMvc.perform(post("/sync/now").with(csrf()))
