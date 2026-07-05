@@ -1,0 +1,21 @@
+CMPT 276 Group 15: Iteration 1 Submission
+Vici Learning Integration Dashboard
+
+Git repository:
+https://github.com/WL0000000/Vici-Learning-Project
+
+Web app (Render):
+https://vici-learning-project.onrender.com
+
+Screencast:
+https://youtu.be/MfDHrTAKWZ0
+
+
+Admin login, Works on Render:
+username: Admin
+password: ViciLearning2026
+
+Notes:
+- Tutor accounts can be created from the registration page. New
+  accounts get the TUTOR role, which shows the restricted view.
+- The admin account above has full access for grading.
