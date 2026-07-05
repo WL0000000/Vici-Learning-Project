@@ -29,6 +29,12 @@ public class SyncLog {
     private int servicesRemoved;
     private int bookingsRemoved;
 
+    // Invoices and memberships come from REST v2 (not JSON-RPC), so they get their own counters.
+    private int invoicesUpserted;
+    private int invoicesRemoved;
+    private int membershipsUpserted;
+    private int membershipsRemoved;
+
     // Count of students whose Account_ID (Brevo link) was set/updated from REST v2 this run.
     private int accountIdsLinked;
 
@@ -69,6 +75,18 @@ public class SyncLog {
 
     public int getBookingsRemoved() { return bookingsRemoved; }
     public void setBookingsRemoved(int bookingsRemoved) { this.bookingsRemoved = bookingsRemoved; }
+
+    public int getInvoicesUpserted() { return invoicesUpserted; }
+    public void setInvoicesUpserted(int invoicesUpserted) { this.invoicesUpserted = invoicesUpserted; }
+
+    public int getInvoicesRemoved() { return invoicesRemoved; }
+    public void setInvoicesRemoved(int invoicesRemoved) { this.invoicesRemoved = invoicesRemoved; }
+
+    public int getMembershipsUpserted() { return membershipsUpserted; }
+    public void setMembershipsUpserted(int membershipsUpserted) { this.membershipsUpserted = membershipsUpserted; }
+
+    public int getMembershipsRemoved() { return membershipsRemoved; }
+    public void setMembershipsRemoved(int membershipsRemoved) { this.membershipsRemoved = membershipsRemoved; }
 
     public int getAccountIdsLinked() { return accountIdsLinked; }
     public void setAccountIdsLinked(int accountIdsLinked) { this.accountIdsLinked = accountIdsLinked; }

@@ -26,10 +26,14 @@ class SyncServiceTest {
     @Mock PerformerAdapter   performerAdapter;
     @Mock ServiceAdapter     serviceAdapter;
     @Mock BookingAdapter     bookingAdapter;
+    @Mock InvoiceAdapter     invoiceAdapter;
+    @Mock MembershipAdapter  membershipAdapter;
     @Mock StudentRepository  studentRepo;
     @Mock TutorRepository    tutorRepo;
     @Mock ServiceRepository  serviceRepo;
     @Mock BookingRepository  bookingRepo;
+    @Mock InvoiceRepository  invoiceRepo;
+    @Mock MembershipRepository membershipRepo;
     @Mock SyncLogRepository  syncLogRepo;
     @Mock PlatformTransactionManager txManager;
 
@@ -40,6 +44,16 @@ class SyncServiceTest {
         // Make each step's TransactionTemplate run its action; commit/rollback are no-ops
         // on the mock, so step bodies execute exactly as in production minus real DB tx.
         when(txManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+    }
+
+    // When REST is configured, the invoice + membership steps run alongside the Account_ID
+    // step. Tests focused on Account_ID stub those to no-ops so the unrelated REST steps don't
+    // NPE on the (mocked) repositories.
+    private void stubEmptyInvoiceAndMembershipSteps() {
+        when(invoiceAdapter.toInvoices(any(), any())).thenReturn(List.of());
+        when(membershipAdapter.toMemberships(any(), any())).thenReturn(List.of());
+        when(invoiceRepo.findAll()).thenReturn(List.of());
+        when(membershipRepo.findAll()).thenReturn(List.of());
     }
 
     @Test
@@ -161,6 +175,7 @@ class SyncServiceTest {
         when(props.accountIdFieldTitle()).thenReturn("Account_ID");
         when(studentRepo.findByDeletedAtIsNullAndAccountIdIsNull()).thenReturn(List.of(student));
         when(clientAdapter.extractAccountId(any(), eq("Account_ID"))).thenReturn("VICI-001");
+        stubEmptyInvoiceAndMembershipSteps();
 
         SyncLog result = syncService.sync();
 
@@ -182,15 +197,17 @@ class SyncServiceTest {
         when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
 
         // REST is configured, but the backlog query returns nothing: at steady state every
-        // active student already has an Account_ID, so the step must hit REST v2 zero times.
+        // active student already has an Account_ID, so the step must fetch client fields zero
+        // times (the invoice/membership steps still run, hence not verifyNoInteractions).
         when(props.restConfigured()).thenReturn(true);
         when(studentRepo.findByDeletedAtIsNullAndAccountIdIsNull()).thenReturn(List.of());
+        stubEmptyInvoiceAndMembershipSteps();
 
         SyncLog result = syncService.sync();
 
         assertThat(result.getAccountIdsLinked()).isEqualTo(0);
         assertThat(result.isSuccess()).isTrue();
-        verifyNoInteractions(restClient);
+        verify(restClient, never()).getClientFieldValues(anyLong());
     }
 
     @Test
@@ -217,6 +234,64 @@ class SyncServiceTest {
 
         // The carry-over ran before saveAll, so the upserted student keeps its Account_ID.
         assertThat(fromApi.getAccountId()).isEqualTo("VICI-007");
+    }
+
+    @Test
+    void invoiceAndMembershipSteps_upsertAndReconcile_whenConfigured() {
+        // JSON-RPC + Account_ID steps are no-ops so we isolate the REST v2 invoice/membership steps.
+        when(performerAdapter.toTutors(any())).thenReturn(List.of());
+        when(serviceAdapter.toServices(any())).thenReturn(List.of());
+        when(clientAdapter.toStudents(any())).thenReturn(List.of());
+        when(studentRepo.findAll()).thenReturn(List.of());
+        when(tutorRepo.findAll()).thenReturn(List.of());
+        when(serviceRepo.findAll()).thenReturn(List.of());
+        when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
+        when(props.restConfigured()).thenReturn(true);
+        when(studentRepo.findByDeletedAtIsNullAndAccountIdIsNull()).thenReturn(List.of());
+
+        Invoice liveInvoice = new Invoice();
+        liveInvoice.setId(1L);
+        Invoice staleInvoice = new Invoice();  // in our DB but no longer upstream
+        staleInvoice.setId(2L);
+        when(invoiceAdapter.toInvoices(any(), any())).thenReturn(List.of(liveInvoice));
+        when(invoiceRepo.findAll()).thenReturn(List.of(liveInvoice, staleInvoice));
+
+        Membership membership = new Membership();
+        membership.setId(10L);
+        when(membershipAdapter.toMemberships(any(), any())).thenReturn(List.of(membership));
+        when(membershipRepo.findAll()).thenReturn(List.of(membership));
+
+        SyncLog result = syncService.sync();
+
+        assertThat(result.getInvoicesUpserted()).isEqualTo(1);
+        assertThat(result.getInvoicesRemoved()).isEqualTo(1);
+        assertThat(staleInvoice.getDeletedAt()).isNotNull();   // gone upstream → soft-deleted
+        assertThat(liveInvoice.getDeletedAt()).isNull();       // still present → left alone
+        assertThat(result.getMembershipsUpserted()).isEqualTo(1);
+        assertThat(result.getMembershipsRemoved()).isEqualTo(0);
+        assertThat(result.isSuccess()).isTrue();
+    }
+
+    @Test
+    void invoiceAndMembershipSteps_skippedCleanly_whenRestNotConfigured() {
+        when(performerAdapter.toTutors(any())).thenReturn(List.of());
+        when(serviceAdapter.toServices(any())).thenReturn(List.of());
+        when(clientAdapter.toStudents(any())).thenReturn(List.of());
+        when(studentRepo.findAll()).thenReturn(List.of());
+        when(tutorRepo.findAll()).thenReturn(List.of());
+        when(serviceRepo.findAll()).thenReturn(List.of());
+        when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
+
+        // restConfigured() defaults false → both REST v2 steps must no-op, not fail, and never
+        // touch their adapters or repositories.
+        SyncLog result = syncService.sync();
+
+        assertThat(result.getInvoicesUpserted()).isEqualTo(0);
+        assertThat(result.getMembershipsUpserted()).isEqualTo(0);
+        assertThat(result.isSuccess()).isTrue();
+        verifyNoInteractions(invoiceAdapter, membershipAdapter, invoiceRepo, membershipRepo);
     }
 
     @Test

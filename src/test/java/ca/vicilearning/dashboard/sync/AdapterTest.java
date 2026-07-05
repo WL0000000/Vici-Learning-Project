@@ -1,6 +1,8 @@
 package ca.vicilearning.dashboard.sync;
 
 import ca.vicilearning.dashboard.domain.Booking;
+import ca.vicilearning.dashboard.domain.Invoice;
+import ca.vicilearning.dashboard.domain.Membership;
 import ca.vicilearning.dashboard.domain.Service;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.Tutor;
@@ -297,5 +299,134 @@ class AdapterTest {
             s.setName("Service");
             return s;
         }
+    }
+
+    // ── InvoiceAdapter ────────────────────────────────────────────────────────
+
+    @Nested
+    class InvoiceAdapterTests {
+
+        private final InvoiceAdapter adapter = new InvoiceAdapter();
+
+        @Test
+        void parsesAndLinksToStudentByClientId() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    {"data":[
+                      {"id":"501","client_id":"1","number":"2026-A","status":"Pending",
+                       "amount":"150.00","currency":"CAD","datetime":"2026-06-01 09:30:00"}
+                    ]}
+                    """);
+            Student alice = studentWithId(1L);
+
+            List<Invoice> invoices = adapter.toInvoices(json, Map.of(1L, alice));
+
+            assertThat(invoices).hasSize(1);
+            Invoice inv = invoices.get(0);
+            assertThat(inv.getId()).isEqualTo(501L);
+            assertThat(inv.getStudent()).isSameAs(alice);
+            assertThat(inv.getNumber()).isEqualTo("2026-A");
+            assertThat(inv.getStatus()).isEqualTo("pending");          // lower-cased
+            assertThat(inv.isPaid()).isFalse();
+            assertThat(inv.getAmount()).isEqualByComparingTo("150.00");
+            assertThat(inv.getIssuedAt()).isEqualTo(LocalDateTime.of(2026, 6, 1, 9, 30, 0));
+        }
+
+        @Test
+        void keepsInvoiceWithNullStudent_whenClientNotTracked() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"502","client_id":"999","total":"80","status":"paid"}]
+                    """);
+
+            List<Invoice> invoices = adapter.toInvoices(json, Map.of());  // 999 not present
+
+            assertThat(invoices).hasSize(1);
+            assertThat(invoices.get(0).getStudent()).isNull();
+            assertThat(invoices.get(0).isPaid()).isTrue();
+            assertThat(invoices.get(0).getAmount()).isEqualByComparingTo("80");   // "total" fallback
+        }
+
+        @Test
+        void nestedClientIdAndMissingAmountTolerated() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"503","client":{"id":"1"},"status":"cancelled"}]
+                    """);
+
+            List<Invoice> invoices = adapter.toInvoices(json, Map.of(1L, studentWithId(1L)));
+
+            assertThat(invoices.get(0).getStudent()).isNotNull();   // resolved via nested client.id
+            assertThat(invoices.get(0).getAmount()).isNull();       // no amount field → null, not 0
+        }
+
+        @Test
+        void skipsEntryWithZeroId() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"0","status":"paid"},{"id":"504","status":"paid"}]
+                    """);
+
+            List<Invoice> invoices = adapter.toInvoices(json, Map.of());
+
+            assertThat(invoices).hasSize(1);
+            assertThat(invoices.get(0).getId()).isEqualTo(504L);
+        }
+    }
+
+    // ── MembershipAdapter ─────────────────────────────────────────────────────
+
+    @Nested
+    class MembershipAdapterTests {
+
+        private final MembershipAdapter adapter = new MembershipAdapter();
+
+        @Test
+        void parsesRemainingBalanceAndActiveFlag() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    {"data":[
+                      {"id":"9","client_id":"1","name":"10-Pack","is_active":"1","remaining":"3",
+                       "start_date":"2026-05-01","end_date":"2026-08-01"}
+                    ]}
+                    """);
+            Student alice = studentWithId(1L);
+
+            List<Membership> memberships = adapter.toMemberships(json, Map.of(1L, alice));
+
+            assertThat(memberships).hasSize(1);
+            Membership m = memberships.get(0);
+            assertThat(m.getStudent()).isSameAs(alice);
+            assertThat(m.getName()).isEqualTo("10-Pack");
+            assertThat(m.isActive()).isTrue();
+            assertThat(m.getRemainingCount()).isEqualTo(3);
+            assertThat(m.getStartDate()).isEqualTo(LocalDateTime.of(2026, 5, 1, 0, 0, 0));
+        }
+
+        @Test
+        void zeroRemainingIsKept_notTreatedAsMissing() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"9","client_id":"1","name":"Pack","active":true,"count":"0"}]
+                    """);
+
+            List<Membership> memberships = adapter.toMemberships(json, Map.of(1L, studentWithId(1L)));
+
+            // 0 is a real balance ("can't book at 0"), must not be dropped to null.
+            assertThat(memberships.get(0).getRemainingCount()).isEqualTo(0);
+        }
+
+        @Test
+        void defaultsActiveTrue_whenFlagAbsent() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"9","client_id":"1","name":"Pack"}]
+                    """);
+
+            List<Membership> memberships = adapter.toMemberships(json, Map.of(1L, studentWithId(1L)));
+
+            assertThat(memberships.get(0).isActive()).isTrue();
+            assertThat(memberships.get(0).getRemainingCount()).isNull();   // no balance field
+        }
+    }
+
+    private static Student studentWithId(long id) {
+        Student s = new Student();
+        s.setId(id);
+        s.setName("Test Student");
+        return s;
     }
 }
