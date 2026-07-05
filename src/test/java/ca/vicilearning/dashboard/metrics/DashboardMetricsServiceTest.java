@@ -97,4 +97,53 @@ class DashboardMetricsServiceTest {
         s.setAccountId(String.format("VICI-%04d", id));
         return s;
     }
+
+    @Test
+    void actionRequired_flagsNoBookingGap_andCancellationPattern() {
+        Student staleStudent = student(1L, "Jane Doe");
+        Student healthyStudent = student(2L, "Healthy Student");
+        Student cancelHeavyStudent = student(3L, "Cancel Heavy");
+
+        when(studentRepo.findByDeletedAtIsNull())
+                .thenReturn(List.of(staleStudent, healthyStudent, cancelHeavyStudent));
+
+        when(bookingRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                // last booking was 30 days ago -> should trigger NO_BOOKING
+                booking(1, staleStudent, "confirmed", now.minusDays(30), 60),
+                // no flag expected here
+                booking(2, healthyStudent, "confirmed", now.minusDays(2), 60),
+                // should trigger CANCELLATIONS
+                booking(3, cancelHeavyStudent, "cancelled", now, 60),
+                booking(4, cancelHeavyStudent, "cancelled", now, 60),
+                booking(5, cancelHeavyStudent, "cancelled", now, 60),
+                // also has a recent confirmed booking so it should NOT get flagged for no-booking
+                booking(6, cancelHeavyStudent, "confirmed", now.minusDays(1), 60)));
+
+        List<DashboardMetricsService.ActionItem> items = service.actionRequired();
+
+        assertThat(items).extracting(DashboardMetricsService.ActionItem::studentName)
+                .containsExactlyInAnyOrder("Jane Doe", "Cancel Heavy");
+
+        DashboardMetricsService.ActionItem janeItem = items.stream()
+                .filter(i -> i.studentName().equals("Jane Doe")).findFirst().orElseThrow();
+        assertThat(janeItem.type()).isEqualTo("NO_BOOKING");
+        assertThat(janeItem.reason()).contains("30 days");
+
+        DashboardMetricsService.ActionItem cancelItem = items.stream()
+                .filter(i -> i.studentName().equals("Cancel Heavy")).findFirst().orElseThrow();
+        assertThat(cancelItem.type()).isEqualTo("CANCELLATIONS");
+        assertThat(cancelItem.reason()).contains("3 cancellations");
+    }
+
+    @Test
+    void actionRequired_returnsEmpty_whenNoStudentsNeedAttention() {
+        Student healthyStudent = student(1L, "All Good");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(healthyStudent));
+        when(bookingRepo.findByDeletedAtIsNull())
+                .thenReturn(List.of(booking(1, healthyStudent, "confirmed", now.minusDays(1), 60)));
+
+        List<DashboardMetricsService.ActionItem> items = service.actionRequired();
+
+        assertThat(items).isEmpty();
+    }
 }
