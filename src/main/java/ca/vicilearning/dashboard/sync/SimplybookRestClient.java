@@ -2,11 +2,15 @@ package ca.vicilearning.dashboard.sync;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+
+import java.util.List;
+import java.util.function.BiFunction;
 
 /**
  * Client for SimplyBook.me's REST API v2 ({@code user-api-v2.simplybook.me}).
@@ -28,6 +32,11 @@ public class SimplybookRestClient {
     private final ObjectMapper mapper;
 
     private volatile String token;
+
+    // Rows requested per page for paginated endpoints, and a hard cap on pages walked so a
+    // misbehaving API (e.g. one that never returns a short final page) can't loop forever.
+    private static final int PAGE_SIZE = 100;
+    private static final int MAX_PAGES = 1000;
 
     public SimplybookRestClient(SimplybookProperties props,
                                 RestClient.Builder builder,
@@ -63,6 +72,32 @@ public class SimplybookRestClient {
      */
     public JsonNode getInvoices(int page, int onPage) {
         return adminGet("/admin/invoices?page=" + page + "&on_page=" + onPage);
+    }
+
+    /** Every invoice across all pages, flattened into one array. */
+    public ArrayNode getAllInvoices() {
+        return fetchAllPages(this::getInvoices);
+    }
+
+    /** Every membership across all pages, flattened into one array. */
+    public ArrayNode getAllMemberships() {
+        return fetchAllPages(this::getMemberships);
+    }
+
+    /**
+     * Walks a paginated endpoint from page 1 and concatenates every row into one array. Stops
+     * when a page returns fewer than {@link #PAGE_SIZE} rows (the last page) or nothing, so it
+     * doesn't depend on any particular pagination-metadata field. {@link #MAX_PAGES} bounds the
+     * walk defensively. Each page request re-uses {@link #adminGet}, so auth/retry still apply.
+     */
+    private ArrayNode fetchAllPages(BiFunction<Integer, Integer, JsonNode> pageFetcher) {
+        ArrayNode all = mapper.createArrayNode();
+        for (int page = 1; page <= MAX_PAGES; page++) {
+            List<JsonNode> rows = AdapterUtils.asList(pageFetcher.apply(page, PAGE_SIZE));
+            rows.forEach(all::add);
+            if (rows.size() < PAGE_SIZE) break;   // short (or empty) page → last page
+        }
+        return all;
     }
 
     // ── Token management ─────────────────────────────────────────────────────

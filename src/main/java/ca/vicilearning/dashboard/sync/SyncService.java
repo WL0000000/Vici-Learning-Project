@@ -36,10 +36,14 @@ public class SyncService {
     private final PerformerAdapter        performerAdapter;
     private final ServiceAdapter          serviceAdapter;
     private final BookingAdapter          bookingAdapter;
+    private final InvoiceAdapter          invoiceAdapter;
+    private final MembershipAdapter       membershipAdapter;
     private final StudentRepository       studentRepo;
     private final TutorRepository         tutorRepo;
     private final ServiceRepository       serviceRepo;
     private final BookingRepository       bookingRepo;
+    private final InvoiceRepository       invoiceRepo;
+    private final MembershipRepository    membershipRepo;
     private final SyncLogRepository       syncLogRepo;
 
     // Ensures only one sync runs at a time: the hourly scheduler and a manual
@@ -58,10 +62,14 @@ public class SyncService {
                        PerformerAdapter performerAdapter,
                        ServiceAdapter serviceAdapter,
                        BookingAdapter bookingAdapter,
+                       InvoiceAdapter invoiceAdapter,
+                       MembershipAdapter membershipAdapter,
                        StudentRepository studentRepo,
                        TutorRepository tutorRepo,
                        ServiceRepository serviceRepo,
                        BookingRepository bookingRepo,
+                       InvoiceRepository invoiceRepo,
+                       MembershipRepository membershipRepo,
                        SyncLogRepository syncLogRepo,
                        PlatformTransactionManager transactionManager) {
         this.client          = client;
@@ -71,10 +79,14 @@ public class SyncService {
         this.performerAdapter = performerAdapter;
         this.serviceAdapter  = serviceAdapter;
         this.bookingAdapter  = bookingAdapter;
+        this.invoiceAdapter  = invoiceAdapter;
+        this.membershipAdapter = membershipAdapter;
         this.studentRepo     = studentRepo;
         this.tutorRepo       = tutorRepo;
         this.serviceRepo     = serviceRepo;
         this.bookingRepo     = bookingRepo;
+        this.invoiceRepo     = invoiceRepo;
+        this.membershipRepo  = membershipRepo;
         this.syncLogRepo     = syncLogRepo;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
@@ -114,6 +126,11 @@ public class SyncService {
         // Runs after students so their rows exist; uses REST v2 (not JSON-RPC) for the
         // Account_ID custom field. Its own step so a REST outage can't fail booking sync.
         runStep("accountIds", () -> syncAccountIds(entry), failures);
+        // Invoices and memberships also come from REST v2 and link back to students, so they
+        // run after the student sync. Each is its own step: a REST outage or a bad record on
+        // one must not fail the other or the JSON-RPC data synced above.
+        runStep("invoices",    () -> syncInvoices(entry),    failures);
+        runStep("memberships", () -> syncMemberships(entry), failures);
 
         entry.setSuccess(failures.isEmpty());
         if (!failures.isEmpty()) {
@@ -123,12 +140,15 @@ public class SyncService {
         syncLogRepo.save(entry);
 
         log.info("Sync finished (success={}): tutors={}(-{}) services={}(-{}) "
-                        + "students={}(-{}) bookings={}(-{}) accountIdsLinked={}",
+                        + "students={}(-{}) bookings={}(-{}) invoices={}(-{}) "
+                        + "memberships={}(-{}) accountIdsLinked={}",
                 entry.isSuccess(),
                 entry.getTutorsUpserted(),   entry.getTutorsRemoved(),
                 entry.getServicesUpserted(), entry.getServicesRemoved(),
                 entry.getStudentsUpserted(), entry.getStudentsRemoved(),
                 entry.getBookingsUpserted(), entry.getBookingsRemoved(),
+                entry.getInvoicesUpserted(), entry.getInvoicesRemoved(),
+                entry.getMembershipsUpserted(), entry.getMembershipsRemoved(),
                 entry.getAccountIdsLinked());
         return entry;
     }
@@ -265,6 +285,54 @@ public class SyncService {
             }
         }
         entry.setAccountIdsLinked(linked);
+    }
+
+    /**
+     * Syncs invoices from REST v2 for the "unpaid families" rule and the cash-flow overview.
+     * Skipped cleanly (not failed) when REST creds aren't configured, mirroring the Account_ID
+     * step, so teammates without REST keys still get green syncs for the JSON-RPC data.
+     *
+     * <p>Unlike bookings there is no date window: {@link SimplybookRestClient#getAllInvoices()}
+     * returns every invoice, so a full reconcile is correct — any local invoice absent from the
+     * result was genuinely removed upstream.
+     */
+    private void syncInvoices(SyncLog entry) {
+        if (!props.restConfigured()) {
+            log.info("REST v2 not configured; skipping invoice sync");
+            entry.setInvoicesUpserted(0);
+            entry.setInvoicesRemoved(0);
+            return;
+        }
+        Map<Long, Student> studentMap = toMap(studentRepo.findAll(), Student::getId);
+        List<Invoice> invoices = invoiceAdapter.toInvoices(restClient.getAllInvoices(), studentMap);
+        invoiceRepo.saveAll(invoices);
+        int removed = reconcileDeletions(
+                invoiceRepo.findAll(), invoices,
+                Invoice::getId, Invoice::getDeletedAt, Invoice::setDeletedAt, invoiceRepo);
+        entry.setInvoicesUpserted(invoices.size());
+        entry.setInvoicesRemoved(removed);
+    }
+
+    /**
+     * Syncs client memberships from REST v2 (the "can't book at 0" balances). Same gating and
+     * full-reconcile rationale as {@link #syncInvoices}.
+     */
+    private void syncMemberships(SyncLog entry) {
+        if (!props.restConfigured()) {
+            log.info("REST v2 not configured; skipping membership sync");
+            entry.setMembershipsUpserted(0);
+            entry.setMembershipsRemoved(0);
+            return;
+        }
+        Map<Long, Student> studentMap = toMap(studentRepo.findAll(), Student::getId);
+        List<Membership> memberships =
+                membershipAdapter.toMemberships(restClient.getAllMemberships(), studentMap);
+        membershipRepo.saveAll(memberships);
+        int removed = reconcileDeletions(
+                membershipRepo.findAll(), memberships,
+                Membership::getId, Membership::getDeletedAt, Membership::setDeletedAt, membershipRepo);
+        entry.setMembershipsUpserted(memberships.size());
+        entry.setMembershipsRemoved(removed);
     }
 
     private <T, K> Map<K, T> toMap(List<T> list, Function<T, K> keyFn) {
