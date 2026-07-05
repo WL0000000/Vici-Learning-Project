@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vici Learning — Login</title>
+    <title>Vici Learning — Register</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link th:href="@{/css/main.css}" rel="stylesheet">
     <style>
-        /* login page styles, keeping here for now since its just the ine page */
+        /* Registration page styles — kept inline to mirror the login card. */
 
         .login-page {
             min-height: 100vh;
@@ -27,7 +27,6 @@
             box-shadow: 0 4px 24px rgba(21, 49, 92, 0.07);
         }
 
-        /* brand at top of card */
         .login-brand {
             display: flex;
             align-items: center;
@@ -78,7 +77,6 @@
             margin-bottom: 28px;
         }
 
-        /* form fields */
         .login-label {
             font-size: 11.5px;
             font-weight: 700;
@@ -110,7 +108,6 @@
             box-shadow: 0 0 0 3px rgba(21, 49, 92, 0.08);
         }
 
-        /* submit button */
         .login-btn {
             width: 100%;
             height: 44px;
@@ -130,7 +127,6 @@
             background: #1a4a3a;
         }
 
-        /* error / success messages */
         .login-alert {
             border-radius: 9px;
             padding: 10px 14px;
@@ -145,13 +141,6 @@
             border: 1px solid #f0c4bb;
         }
 
-        .login-alert-success {
-            background: #e8f5ee;
-            color: #2a7a52;
-            border: 1px solid #b8dfc9;
-        }
-
-        /* little divider + staff only note at bottom */
         .login-footer {
             margin-top: 20px;
             text-align: center;
@@ -185,36 +174,32 @@
                 <div class="login-brand-sub">Staff Console</div>
             </div>
         </div>
-        <div class="login-heading">Welcome back</div>
-        <div class="login-sub">Sign in to access the dashboard</div>
+        <div class="login-heading">Create an account</div>
+        <div class="login-sub">Register for staff access to the dashboard</div>
 
-        <!-- error message if login failed -->
-        <div class="login-alert login-alert-error" th:if="${param.error}">
-            Incorrect username or password.
+        <!-- validation / duplicate-username error -->
+        <div class="login-alert login-alert-error" th:if="${error}" th:text="${error}">
+            Something went wrong.
         </div>
 
-        <!-- logged out message -->
-        <div class="login-alert login-alert-success" th:if="${param.logout}">
-            You have been logged out.
-        </div>
-
-        <!-- just-registered message -->
-        <div class="login-alert login-alert-success" th:if="${param.registered}">
-            Account created. Please sign in.
-        </div>
-
-        <form th:action="@{/login}" method="post">
+        <form th:action="@{/register}" method="post">
             <label class="login-label" for="username">Username</label>
-            <input class="login-input" type="text" id="username" name="username" placeholder="Enter username" autofocus/>
+            <input class="login-input" type="text" id="username" name="username"
+                   th:value="${username}" placeholder="Choose a username" autofocus required/>
 
             <label class="login-label" for="password">Password</label>
-            <input class="login-input" type="password" id="password" name="password" placeholder="Enter password"/>
+            <input class="login-input" type="password" id="password" name="password"
+                   placeholder="At least 8 characters" required/>
 
-            <button type="submit" class="login-btn">Sign In</button>
+            <label class="login-label" for="confirmPassword">Confirm password</label>
+            <input class="login-input" type="password" id="confirmPassword" name="confirmPassword"
+                   placeholder="Re-enter password" required/>
+
+            <button type="submit" class="login-btn">Create Account</button>
         </form>
 
         <div class="login-footer">
-            Need an account? <a th:href="@{/register}">Register</a>
+            Already have an account? <a th:href="@{/login}">Sign in</a>
         </div>
 
     </div>
