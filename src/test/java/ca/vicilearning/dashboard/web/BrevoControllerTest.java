@@ -26,7 +26,7 @@ class BrevoControllerTest {
     @Autowired AlertStudentRepository alertStudentRepo;
 
     @Test
-    @WithMockUser(username = "admin", roles = "USER")
+    @WithMockUser(username = "admin", roles = "ADMIN")
     void comms_review_page_loads_successfully() throws Exception {
         mockMvc.perform(get("/comms/review"))
                 .andExpect(status().isOk())
@@ -35,11 +35,19 @@ class BrevoControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "admin", roles = "USER")
+    @WithMockUser(username = "admin", roles = "ADMIN")
     void comms_review_shows_empty_list_when_no_alerts() throws Exception {
         // if the alert table is empty, the page should still render fine
         mockMvc.perform(get("/comms/review"))
                 .andExpect(status().isOk())
                 .andExpect(model().attributeExists("pendingTasks"));
+    }
+
+    @Test
+    @WithMockUser(username = "tutor", roles = "TUTOR")
+    void comms_review_forbiddenForTutor() throws Exception {
+        // The automations/communications queue is admin-only.
+        mockMvc.perform(get("/comms/review"))
+                .andExpect(status().isForbidden());
     }
 }

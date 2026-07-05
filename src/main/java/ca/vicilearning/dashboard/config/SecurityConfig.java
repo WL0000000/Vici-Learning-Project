@@ -16,8 +16,13 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             // /register and /login are public so unauthenticated visitors can sign up and log in.
+            // Admin-only areas: the sync console and the Brevo automations/communications queue
+            // both expose or act on sensitive data (billing links, family contact info), so they
+            // require ADMIN. Tutors keep access to the students and overview pages, but the
+            // sensitive columns there are hidden in the view (see students.html).
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/register", "/css/**", "/js/**").permitAll()
+                .requestMatchers("/sync/**", "/comms/**").hasRole("ADMIN")
                 .anyRequest().authenticated())
             .formLogin(form -> form
                 .loginPage("/login")
