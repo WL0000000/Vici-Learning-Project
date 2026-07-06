@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -124,9 +125,10 @@
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Account ID</th>
-                            <th>Email</th>
-                            <th>Phone</th>
+                            <!-- Sensitive columns: billing link + contact info are ADMIN-only. -->
+                            <th sec:authorize="hasRole('ADMIN')">Account ID</th>
+                            <th sec:authorize="hasRole('ADMIN')">Email</th>
+                            <th sec:authorize="hasRole('ADMIN')">Phone</th>
                             <th class="text-end">Sessions (wk)</th>
                             <th class="text-end">Hours (wk)</th>
                         </tr>
@@ -134,13 +136,13 @@
                     <tbody>
                         <tr th:each="s : ${students}">
                             <td style="font-weight:600;" th:text="${s.name}">—</td>
-                            <td>
+                            <td sec:authorize="hasRole('ADMIN')">
                                 <span class="status-pill pill-confirmed"
                                       th:if="${s.accountId != null}" th:text="${s.accountId}">VICI-0000</span>
                                 <span class="text-muted" th:if="${s.accountId == null}">— not linked —</span>
                             </td>
-                            <td class="text-muted" th:text="${s.email != null ? s.email : '—'}">—</td>
-                            <td class="text-muted" th:text="${s.phone != null ? s.phone : '—'}">—</td>
+                            <td class="text-muted" sec:authorize="hasRole('ADMIN')" th:text="${s.email != null ? s.email : '—'}">—</td>
+                            <td class="text-muted" sec:authorize="hasRole('ADMIN')" th:text="${s.phone != null ? s.phone : '—'}">—</td>
                             <td class="text-end" th:text="${s.sessionsThisWeek}">0</td>
                             <td class="text-end" style="font-weight:700;" th:text="${s.hoursThisWeek}">0</td>
                         </tr>
