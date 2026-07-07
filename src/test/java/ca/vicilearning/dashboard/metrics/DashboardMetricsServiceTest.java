@@ -158,6 +158,41 @@ class DashboardMetricsServiceTest {
         assertThat(rows.get(0).accountId()).isEqualTo("VICI-0001");
     }
 
+    @Test
+    void familyGroups_groupsSiblingsBySharedAccountId_withCombinedHours() {
+        // Two siblings share VICI-0001; a lone student and an account-less student stand apart.
+        Student sam = studentWithAccount(1L, "Sam Tran", "VICI-0001");
+        Student sara = studentWithAccount(2L, "Sara Tran", "VICI-0001");
+        Student lone = studentWithAccount(3L, "Ivy Kim", "VICI-0002");
+        Student unlinked = studentWithAccount(4L, "No Account", null);
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(sam, sara, lone, unlinked));
+        // Sam: 1h this week, Sara: 2h this week → family total 3h over 2 sessions.
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of(
+                booking(1, sam, "confirmed", now, 60),
+                booking(2, sara, "confirmed", now, 120)));
+
+        List<DashboardMetricsService.FamilyGroup> families = service.familyGroups();
+
+        // Only the shared account is a "family"; the lone and unlinked students are excluded.
+        assertThat(families).hasSize(1);
+        DashboardMetricsService.FamilyGroup tran = families.get(0);
+        assertThat(tran.accountId()).isEqualTo("VICI-0001");
+        assertThat(tran.size()).isEqualTo(2);
+        // Members sorted by name.
+        assertThat(tran.members()).extracting(DashboardMetricsService.FamilyMember::name)
+                .containsExactly("Sam Tran", "Sara Tran");
+        assertThat(tran.sessionsThisWeek()).isEqualTo(2);
+        assertThat(tran.hoursThisWeek()).isEqualTo(3.0);
+    }
+
+    private Student studentWithAccount(long id, String name, String accountId) {
+        Student s = new Student();
+        s.setId(id);
+        s.setName(name);
+        s.setAccountId(accountId);
+        return s;
+    }
+
     private Booking booking(long id, Student student, String status, LocalDateTime start, int minutes) {
         Booking b = new Booking();
         b.setId(id);

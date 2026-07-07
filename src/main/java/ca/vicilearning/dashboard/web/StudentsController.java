@@ -116,6 +116,7 @@ public class StudentsController {
         }
 
         model.addAttribute("students", metrics.studentRows());
+        model.addAttribute("families", metrics.familyGroups());
         model.addAttribute("upcoming", metrics.upcoming(10));
         return "students";
     }

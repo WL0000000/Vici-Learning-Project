@@ -190,15 +190,7 @@ public class DashboardMetricsService {
      * Brevo+SimplyBook join made live: identity + Account_ID alongside computed weekly hours.
      */
     public List<StudentRow> studentRows() {
-        LocalDate weekStart = weekStart(today());
-
-        Map<Long, double[]> byStudent = new LinkedHashMap<>(); // [hours, sessions]
-        for (Booking b : activeBetween(weekStart, weekStart.plusWeeks(1))) {
-            if (!isCounted(b)) continue;
-            double[] cell = byStudent.computeIfAbsent(b.getStudent().getId(), k -> new double[]{0.0, 0.0});
-            cell[0] += hoursOf(b);
-            cell[1] += 1;
-        }
+        Map<Long, double[]> byStudent = hoursThisWeekByStudent();
 
         return studentRepo.findByDeletedAtIsNull().stream()
                 .sorted(Comparator.comparing(Student::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
@@ -209,6 +201,56 @@ public class DashboardMetricsService {
                             (int) cell[1], round1(cell[0]));
                 })
                 .toList();
+    }
+
+    /**
+     * Active students rolled up by shared Account_ID — the "sibling" view. Two students that
+     * share an {@code accountId} (the SimplyBook.me custom field linking them to one Brevo
+     * account) are siblings in the same family; this groups them so the client can see
+     * Account_ID → [Student A, Student B, …] at a glance without any new integration.
+     *
+     * <p>Only accounts with 2+ active students are returned (a lone student isn't a "family"),
+     * and students with no Account_ID are skipped (they can't be grouped). Groups are sorted by
+     * Account_ID, members by name, and each group carries this week's combined hours/sessions.
+     */
+    public List<FamilyGroup> familyGroups() {
+        Map<Long, double[]> byStudent = hoursThisWeekByStudent();
+
+        // Preserve insertion order per key so members stay sorted by the pre-sorted stream below.
+        Map<String, List<FamilyMember>> byAccount = new LinkedHashMap<>();
+        studentRepo.findByDeletedAtIsNull().stream()
+                .filter(s -> s.getAccountId() != null && !s.getAccountId().isBlank())
+                .sorted(Comparator.comparing(Student::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .forEach(s -> {
+                    double[] cell = byStudent.getOrDefault(s.getId(), new double[]{0.0, 0.0});
+                    byAccount.computeIfAbsent(s.getAccountId(), k -> new ArrayList<>())
+                            .add(new FamilyMember(s.getId(), s.getName(), s.getEmail(), s.getPhone(),
+                                    (int) cell[1], round1(cell[0])));
+                });
+
+        return byAccount.entrySet().stream()
+                .filter(e -> e.getValue().size() >= 2)
+                .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
+                .map(e -> {
+                    List<FamilyMember> members = e.getValue();
+                    int sessions = members.stream().mapToInt(FamilyMember::sessionsThisWeek).sum();
+                    double hours = members.stream().mapToDouble(FamilyMember::hoursThisWeek).sum();
+                    return new FamilyGroup(e.getKey(), members, sessions, round1(hours));
+                })
+                .toList();
+    }
+
+    /** This week's booked [hours, sessions] per active student id, cancellations excluded. */
+    private Map<Long, double[]> hoursThisWeekByStudent() {
+        LocalDate weekStart = weekStart(today());
+        Map<Long, double[]> byStudent = new LinkedHashMap<>(); // [hours, sessions]
+        for (Booking b : activeBetween(weekStart, weekStart.plusWeeks(1))) {
+            if (!isCounted(b)) continue;
+            double[] cell = byStudent.computeIfAbsent(b.getStudent().getId(), k -> new double[]{0.0, 0.0});
+            cell[0] += hoursOf(b);
+            cell[1] += 1;
+        }
+        return byStudent;
     }
 
     /**
@@ -374,6 +416,15 @@ public class DashboardMetricsService {
 
     public record StudentRow(Long id, String name, String accountId, String email, String phone,
                              int sessionsThisWeek, double hoursThisWeek) {}
+
+    /** A family: the students (siblings) sharing one Account_ID, with this week's combined totals. */
+    public record FamilyGroup(String accountId, List<FamilyMember> members,
+                              int sessionsThisWeek, double hoursThisWeek) {
+        public int size() { return members.size(); }
+    }
+
+    public record FamilyMember(Long id, String name, String email, String phone,
+                               int sessionsThisWeek, double hoursThisWeek) {}
 
     public record ActionItem(Long studentId, String studentName, String type, String reason,
                               LocalDate lastSession, int severity) {}
