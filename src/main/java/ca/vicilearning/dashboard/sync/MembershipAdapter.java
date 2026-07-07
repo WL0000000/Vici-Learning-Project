@@ -48,7 +48,7 @@ public class MembershipAdapter {
     }
 
     // Defaults to active when upstream omits the flag: a membership we can see but whose state
-    // is unstated is safer treated as live than silently ignored by the "low balance" rule.
+    // is unstated is safer treated as live than silently ignored by any downstream alerting.
     private boolean resolveActive(JsonNode node) {
         if (node.has("is_active")) return AdapterUtils.parseBool(node.path("is_active"));
         if (node.has("active"))    return AdapterUtils.parseBool(node.path("active"));
@@ -56,6 +56,7 @@ public class MembershipAdapter {
     }
 
     // Remaining balance under whichever name the endpoint uses; null when none is present.
+    // Provisional: under a status/renewal membership model this is expected to be null throughout.
     private Integer resolveRemaining(JsonNode node) {
         for (String field : new String[]{"remaining", "visits_remaining", "count", "left"}) {
             JsonNode value = node.path(field);
