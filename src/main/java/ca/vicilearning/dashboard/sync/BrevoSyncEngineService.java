@@ -44,18 +44,13 @@ public class BrevoSyncEngineService {
     public void runTwoWayReconciliationSync() {
         log.info("Initiating automatic structured Brevo synchronization sequence...");
         
-        // Step 1: Bulk load remote configurations to insulate loop pipelines from network latency issues
-        Map<String, String> brevoStudentStatuses = communicationService.fetchStudentStatusMap();
+        // 1. Capture the multi-tiered structural configuration map
+        Map<String, Map<String, String>> brevoStudentStatuses = communicationService.fetchStudentStatusMap();
+        
         List<Student> activeStudents = studentRepository.findByDeletedAtIsNull();
-
-        if (activeStudents == null || activeStudents.isEmpty()) {
-            log.info("No active student nodes identified for alignment checking processing window.");
-            return;
-        }
-
-        log.info("Synchronizing {} student tracking configurations against active database rows...", activeStudents.size());
         LocalDateTime thresholdDateTime = LocalDateTime.now().minusDays(LAPSE_THRESHOLD_DAYS);
-
+        
+        log.info("Synchronizing {} student tracking configurations...", activeStudents.size());
         for (Student student : activeStudents) {
             try {
                 reconcileSingleStudent(student, brevoStudentStatuses, thresholdDateTime);
@@ -63,14 +58,10 @@ public class BrevoSyncEngineService {
                 log.error("Anomalous fault encountered running alignment computations for ID: {}", student.getId(), ex);
             }
         }
-        
         log.info("Two-way tracking alignment routines finalized successfully.");
     }
 
-    /**
-     * Evaluates data records for an individual target student matrix layout frame.
-     */
-    private void reconcileSingleStudent(Student student, Map<String, String> brevoStatuses, LocalDateTime baselineThreshold) {
+    private void reconcileSingleStudent(Student student, Map<String, Map<String, String>> brevoStatuses, LocalDateTime baselineThreshold) {
         String studentName = student.getName();
         String accountId = student.getAccountId();
 
@@ -78,15 +69,26 @@ public class BrevoSyncEngineService {
             return;
         }
 
-        // Parse operational timeline logs matching target ID specifications
         List<Booking> structuralBookings = bookingRepository.findByStudentId(student.getId());
         boolean lapsedNow = evaluateLapseCondition(structuralBookings, baselineThreshold);
 
-        // Resolve status tracking profiles recorded over Brevo servers
-        String statusFromBrevo = brevoStatuses.getOrDefault(studentName.trim().toLowerCase(), "Active");
+        // 2. SEARCH FOR STATUS VIA ACCOUNT ID FIRST:
+        String statusFromBrevo = "Active"; // Default fallback if family record is missing
+        
+        Map<String, String> familyBucket = brevoStatuses.get(accountId.trim().toUpperCase());
+        if (familyBucket != null) {
+            // If the family account exists, look up the target child's name inside it
+            statusFromBrevo = familyBucket.getOrDefault(studentName.trim().toLowerCase(), "Active");
+        }
+
         boolean isLapsedInBrevo = STATUS_LAPSED.equalsIgnoreCase(statusFromBrevo.trim());
 
-        // Upsert standard alert table structural storage logs
+        // 3. Proactive cleanup database gate
+        if (lapsedNow == isLapsedInBrevo) {
+            alertStudentRepository.deleteById(studentName.trim());
+            return; 
+        }
+
         AlertStudent alertEntity = alertStudentRepository.findById(studentName.trim())
                 .orElseGet(() -> {
                     AlertStudent newRecord = new AlertStudent();
