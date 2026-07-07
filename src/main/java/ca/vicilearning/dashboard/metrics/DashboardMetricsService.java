@@ -2,10 +2,13 @@ package ca.vicilearning.dashboard.metrics;
 
 import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
+import ca.vicilearning.dashboard.domain.Invoice;
+import ca.vicilearning.dashboard.domain.InvoiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -18,6 +21,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Computes dashboard metrics from the local database — the layer that turns synced/seeded
@@ -33,10 +37,13 @@ public class DashboardMetricsService {
 
     private final BookingRepository bookingRepo;
     private final StudentRepository studentRepo;
+    private final InvoiceRepository invoiceRepo;
 
-    public DashboardMetricsService(BookingRepository bookingRepo, StudentRepository studentRepo) {
+    public DashboardMetricsService(BookingRepository bookingRepo, StudentRepository studentRepo,
+                                    InvoiceRepository invoiceRepo) {
         this.bookingRepo = bookingRepo;
         this.studentRepo = studentRepo;
+        this.invoiceRepo = invoiceRepo;
     }
 
     // ── Public metrics ─────────────────────────────────────────────────────────
@@ -202,6 +209,39 @@ public class DashboardMetricsService {
                 .toList();
     }
 
+    /**
+     * Unpaid invoices for the overview page's cash-flow section, oldest-issued first (the
+     * most overdue is the most actionable). {@code limit} caps how many rows are shown.
+     */
+    public List<PendingInvoice> pendingInvoices(int limit) {
+        return unpaidInvoices().stream()
+                .sorted(Comparator.comparing(Invoice::getIssuedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .limit(limit)
+                .map(inv -> new PendingInvoice(
+                        inv.getId(),
+                        inv.getStudent() != null ? inv.getStudent().getName() : "Unlinked client",
+                        inv.getNumber(),
+                        inv.getAmount(),
+                        inv.getCurrency(),
+                        inv.getIssuedAt()))
+                .toList();
+    }
+
+    /** Count and total of every unpaid invoice, for the overview stat card. */
+    public PendingInvoicesSummary pendingInvoicesSummary() {
+        List<Invoice> unpaid = unpaidInvoices();
+        BigDecimal total = unpaid.stream()
+                .map(Invoice::getAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new PendingInvoicesSummary(unpaid.size(), total);
+    }
+
+    private List<Invoice> unpaidInvoices() {
+        return invoiceRepo.findByDeletedAtIsNull().stream().filter(i -> !i.isPaid()).toList();
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private List<Booking> activeBetween(LocalDate fromInclusive, LocalDate toExclusive) {
@@ -259,4 +299,9 @@ public class DashboardMetricsService {
 
     public record ActionItem(Long studentId, String studentName, String type, String reason,
                               LocalDate lastSession, int severity) {}
+
+    public record PendingInvoice(Long id, String studentName, String number, BigDecimal amount,
+                                  String currency, LocalDateTime issuedAt) {}
+
+    public record PendingInvoicesSummary(int count, BigDecimal totalAmount) {}
 }

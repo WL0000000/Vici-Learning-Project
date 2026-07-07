@@ -2,6 +2,8 @@ package ca.vicilearning.dashboard.metrics;
 
 import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
+import ca.vicilearning.dashboard.domain.Invoice;
+import ca.vicilearning.dashboard.domain.InvoiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
 import org.junit.jupiter.api.Test;
@@ -10,6 +12,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -23,6 +26,7 @@ class DashboardMetricsServiceTest {
 
     @Mock BookingRepository bookingRepo;
     @Mock StudentRepository studentRepo;
+    @Mock InvoiceRepository invoiceRepo;
     @InjectMocks DashboardMetricsService service;
 
     private final LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
@@ -145,5 +149,44 @@ class DashboardMetricsServiceTest {
         List<DashboardMetricsService.ActionItem> items = service.actionRequired();
 
         assertThat(items).isEmpty();
+    }
+
+    @Test
+    void pendingInvoices_excludesPaid_andSortsOldestIssuedFirst() {
+        Student jane = student(1L, "Jane Doe");
+        when(invoiceRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                invoice(1L, jane, "paid", "50.00", now.minusDays(10)),
+                invoice(2L, jane, "pending", "75.00", now.minusDays(2)),
+                invoice(3L, null, "pending", "25.00", now.minusDays(20))));
+
+        List<DashboardMetricsService.PendingInvoice> pending = service.pendingInvoices(10);
+
+        assertThat(pending).extracting(DashboardMetricsService.PendingInvoice::id)
+                .containsExactly(3L, 2L);
+        assertThat(pending.get(0).studentName()).isEqualTo("Unlinked client");
+    }
+
+    @Test
+    void pendingInvoicesSummary_sumsUnpaidAmounts_ignoringPaidAndNullAmounts() {
+        Student jane = student(1L, "Jane Doe");
+        when(invoiceRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                invoice(1L, jane, "paid", "50.00", now),
+                invoice(2L, jane, "pending", "75.00", now),
+                invoice(3L, jane, "pending", null, now)));
+
+        DashboardMetricsService.PendingInvoicesSummary summary = service.pendingInvoicesSummary();
+
+        assertThat(summary.count()).isEqualTo(2);
+        assertThat(summary.totalAmount()).isEqualByComparingTo(new BigDecimal("75.00"));
+    }
+
+    private Invoice invoice(long id, Student student, String status, String amount, LocalDateTime issuedAt) {
+        Invoice inv = new Invoice();
+        inv.setId(id);
+        inv.setStudent(student);
+        inv.setStatus(status);
+        inv.setAmount(amount == null ? null : new BigDecimal(amount));
+        inv.setIssuedAt(issuedAt);
+        return inv;
     }
 }
