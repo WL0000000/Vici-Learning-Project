@@ -29,6 +29,8 @@ public class HomeController {
         model.addAttribute("overview", metrics.overview());
         model.addAttribute("upcoming", metrics.upcoming(6));
         model.addAttribute("actionItems", metrics.actionRequired());
+        model.addAttribute("invoiceSummary", metrics.pendingInvoicesSummary());
+        model.addAttribute("pendingInvoices", metrics.pendingInvoices(8));
 
         // same logic as SyncController, just need the most recent log to show on the homepage strip
         List<SyncLog> logs = syncLogRepo.findByOrderByStartedAtDesc(PageRequest.of(0, 1));
