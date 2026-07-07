@@ -38,6 +38,7 @@ class StudentsControllerTest {
         when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2)).thenReturn(Collections.emptyList());
         when(metrics.studentRows()).thenReturn(Collections.emptyList());
         when(metrics.upcoming(10)).thenReturn(Collections.emptyList());
+        when(metrics.familyGroups()).thenReturn(Collections.emptyList());
         when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false)).thenReturn(Collections.emptyList());
 
         mockMvc.perform(get("/students"))
@@ -92,6 +93,7 @@ class StudentsControllerTest {
         when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2)).thenReturn(Collections.emptyList());
         when(metrics.studentRows()).thenReturn(Collections.emptyList());
         when(metrics.upcoming(10)).thenReturn(Collections.emptyList());
+        when(metrics.familyGroups()).thenReturn(Collections.emptyList());
         when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false)).thenReturn(Collections.emptyList());
     }
 }

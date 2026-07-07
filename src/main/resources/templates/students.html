@@ -197,6 +197,51 @@
             </div>
         </div>
 
+        <!-- ── Families / siblings: active students rolled up by shared Account_ID ─
+             Keyed on Account_ID (an ADMIN-only field), so the whole panel is ADMIN-only. -->
+        <div class="vici-panel mb-3" sec:authorize="hasRole('ADMIN')">
+            <div class="vici-panel-header">
+                <div>
+                    <h2>Families</h2>
+                    <p>Students sharing one Account_ID — siblings grouped together</p>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table sessions-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Account ID</th>
+                            <th>Students</th>
+                            <th class="text-end">Siblings</th>
+                            <th class="text-end">Sessions (wk)</th>
+                            <th class="text-end">Hours (wk)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="f : ${families}">
+                            <td>
+                                <span class="status-pill pill-confirmed" th:text="${f.accountId}">VICI-0000</span>
+                            </td>
+                            <td>
+                                <span th:each="m,it : ${f.members}">
+                                    <span style="font-weight:600;" th:text="${m.name}">—</span
+                                    ><span th:unless="${it.last}" class="text-muted">, </span>
+                                </span>
+                            </td>
+                            <td class="text-end" th:text="${f.size()}">0</td>
+                            <td class="text-end" th:text="${f.sessionsThisWeek}">0</td>
+                            <td class="text-end" style="font-weight:700;" th:text="${f.hoursThisWeek}">0</td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(families)}">
+                            <td colspan="5" class="text-center text-muted p-4">
+                                No families — no Account_ID is shared by two or more students.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- ── Upcoming sessions ───────────────────────────────────────────────── -->
         <div class="vici-panel">
             <div class="vici-panel-header">

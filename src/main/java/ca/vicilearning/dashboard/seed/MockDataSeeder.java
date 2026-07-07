@@ -160,17 +160,28 @@ public class MockDataSeeder implements ApplicationRunner {
 
     private List<Student> buildStudents(LocalDateTime now, Random rng) {
         List<Student> students = new ArrayList<>();
+        int accountNumber = 0;              // last-assigned Account_ID sequence number
+        String siblingLastName = null;      // shared surname of the current family, when applicable
         for (int i = 0; i < studentCount; i++) {
-            String name = FIRST_NAMES[rng.nextInt(FIRST_NAMES.length)] + " "
-                    + LAST_NAMES[rng.nextInt(LAST_NAMES.length)];
+            // ~18% of students (never the first) are siblings: they reuse the previous student's
+            // Account_ID and surname, so one Brevo account maps to multiple students — the exact
+            // shape the Families rollup groups by. The rest each open a new account.
+            boolean sibling = i > 0 && rng.nextDouble() < 0.18;
+            String lastName = sibling ? siblingLastName : LAST_NAMES[rng.nextInt(LAST_NAMES.length)];
+            if (!sibling) {
+                accountNumber++;
+                siblingLastName = lastName;
+            }
+
+            String name = FIRST_NAMES[rng.nextInt(FIRST_NAMES.length)] + " " + lastName;
             Student s = new Student();
             s.setId(STUDENT_ID_BASE + i);
             s.setName(name);
             s.setEmail(emailFrom(name + i, "example.com"));
             s.setPhone(randomPhone(rng));
-            // The Brevo join key. Sequential here; in production it comes from SimplyBook's
-            // Account_ID custom field via the REST v2 client.
-            s.setAccountId(String.format("VICI-%04d", i + 1));
+            // The Brevo join key. Sequential here (siblings share one); in production it comes
+            // from SimplyBook's Account_ID custom field via the REST v2 client.
+            s.setAccountId(String.format("VICI-%04d", accountNumber));
             s.setCreatedAt(now.minusDays(30 + rng.nextInt(700)));
             s.setSyncedAt(now);
             students.add(s);
