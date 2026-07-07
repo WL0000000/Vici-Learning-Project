@@ -59,8 +59,9 @@ public class SimplybookRestClient {
     }
 
     /**
-     * GET /admin/clients/memberships (paginated) — membership balances behind the
-     * "can't book at 0" model. Wired in here so the next phase can consume it directly.
+     * GET /admin/clients/memberships (paginated) — client membership records. (Originally framed
+     * as "can't book at 0" balances; the credit model is unconfirmed — see
+     * {@link ca.vicilearning.dashboard.domain.Membership}.) Wired in so the next phase can consume it.
      */
     public JsonNode getMemberships(int page, int onPage) {
         return adminGet("/admin/clients/memberships?page=" + page + "&on_page=" + onPage);

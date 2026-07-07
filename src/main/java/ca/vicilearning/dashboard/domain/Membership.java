@@ -5,8 +5,14 @@ import java.time.LocalDateTime;
 
 /**
  * A client membership from SimplyBook.me REST API v2 (JSON-RPC cannot return memberships).
- * Behind the "can't book at 0" model: {@code remainingCount} is the balance of pre-paid
- * sessions a family has left, which the rules layer can use to flag families running low.
+ *
+ * <p><b>Model unconfirmed.</b> This was originally built assuming a pre-paid "credit" model
+ * where {@code remainingCount} is the balance of sessions a family has left (the "can't book at
+ * 0" idea). The client has since indicated membership may instead be a plain active/inactive
+ * plan — possibly with a renewal/expiry date — and no session countdown. Until that's confirmed
+ * with Sara, treat {@code remainingCount} as optional/provisional: the {@code active} flag plus
+ * {@code startDate}/{@code endDate} already support a status-or-renewal model with no schema
+ * change. Do not build balance-alerting UI on {@code remainingCount} until the model is confirmed.
  *
  * <p>Linked to a {@link Student} by SimplyBook client id when available; the link is optional
  * for the same reason as {@link Invoice} — we keep the record even for untracked clients.
@@ -27,8 +33,9 @@ public class Membership {
     @Column(nullable = false)
     private boolean active;
 
-    // Remaining pre-paid sessions/visits on this membership. null when upstream doesn't
-    // expose a countable balance (e.g. an unlimited membership).
+    // Remaining pre-paid sessions/visits under the (unconfirmed) credit model. null when
+    // upstream exposes no countable balance — which may be always, if membership is really a
+    // status/renewal plan. Kept and still parsed defensively pending confirmation from Sara.
     private Integer remainingCount;
 
     private LocalDateTime startDate;
