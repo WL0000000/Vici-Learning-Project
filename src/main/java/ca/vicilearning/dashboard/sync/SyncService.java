@@ -314,8 +314,9 @@ public class SyncService {
     }
 
     /**
-     * Syncs client memberships from REST v2 (the "can't book at 0" balances). Same gating and
-     * full-reconcile rationale as {@link #syncInvoices}.
+     * Syncs client memberships from REST v2. (Originally framed as "can't book at 0" balances;
+     * the credit model is unconfirmed — see {@link ca.vicilearning.dashboard.domain.Membership}.)
+     * Same gating and full-reconcile rationale as {@link #syncInvoices}.
      */
     private void syncMemberships(SyncLog entry) {
         if (!props.restConfigured()) {

@@ -161,6 +161,43 @@
                 </div>
             </div>
         </div>
+
+        <!-- pending invoices: cash-flow visibility, pulled from SimplyBook REST v2 -->
+        <div class="vici-panel mt-3">
+            <div class="vici-panel-header">
+                <div>
+                    <h2>Pending Invoices</h2>
+                    <p th:text="${invoiceSummary.count} + ' unpaid &middot; $' + ${#numbers.formatDecimal(invoiceSummary.totalAmount, 1, 2)} + ' outstanding'">—</p>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table sessions-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Invoice #</th>
+                            <th>Issued</th>
+                            <th class="text-end">Amount</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="inv : ${pendingInvoices}">
+                            <td style="font-weight:600;" th:text="${inv.studentName}">—</td>
+                            <td class="text-muted" th:text="${inv.number != null ? inv.number : '#' + inv.id}">—</td>
+                            <td class="text-muted"
+                                th:text="${inv.issuedAt != null ? #temporals.format(inv.issuedAt, 'MMM d, yyyy') : '—'}">—</td>
+                            <td class="text-end" style="font-weight:700;"
+                                th:text="${inv.amount != null ? '$' + #numbers.formatDecimal(inv.amount, 1, 2) + (inv.currency != null ? ' ' + inv.currency : '') : '—'}">—</td>
+                            <td><span class="status-pill pill-pending">Unpaid</span></td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(pendingInvoices)}">
+                            <td colspan="5" class="text-center text-muted" style="padding:24px;">No pending invoices.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </main>
 </div>
 
