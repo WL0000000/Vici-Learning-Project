@@ -73,30 +73,58 @@ public class DashboardMetricsService {
      * through {@code weeksAhead} after it. Empty weeks are included (zeroes) so a chart/table
      * shows a continuous timeline. This is the automated replacement for the spreadsheet's
      * hand-typed weekly "BOOKED" columns.
+     *
+     * @deprecated thin wrapper kept for existing callers/tests — prefer {@link #hoursByPeriod}.
      */
+    @Deprecated
     public List<WeeklyHours> weeklyHours(int weeksBack, int weeksAhead) {
-        LocalDate firstWeek = weekStart(today()).minusWeeks(weeksBack);
-        LocalDate endExclusive = weekStart(today()).plusWeeks(weeksAhead + 1L);
+        return hoursByPeriod(PeriodUnit.WEEK, weeksBack, weeksAhead).stream()
+                .map(p -> new WeeklyHours(p.periodStart(), p.hours(), p.sessions()))
+                .toList();
+    }
 
-        // Seed every week with zeroes so gaps render as 0 rather than disappearing.
-        Map<LocalDate, double[]> byWeek = new LinkedHashMap<>(); // [hours, sessions]
-        for (LocalDate w = firstWeek; w.isBefore(endExclusive); w = w.plusWeeks(1)) {
-            byWeek.put(w, new double[]{0.0, 0.0});
+    /**
+     * Hours and session counts bucketed by {@code unit} (week/month/year), from {@code periodsBack}
+     * before the current bucket through {@code periodsAhead} after it. Empty buckets are included
+     * (zeroes) so a chart/table shows a continuous timeline — this backs the client's week/month/year
+     * filter (the "BOOKED &lt;date&gt;" columns she used to fill in by hand, now computed at any granularity).
+     */
+    public List<PeriodHours> hoursByPeriod(PeriodUnit unit, int periodsBack, int periodsAhead) {
+        LocalDate currentBucket = bucketStart(unit, today());
+        LocalDate firstBucket = stepBucket(unit, currentBucket, -periodsBack);
+        LocalDate endExclusive = stepBucket(unit, currentBucket, periodsAhead + 1L);
+
+        // Seed every bucket with zeroes so gaps render as 0 rather than disappearing.
+        Map<LocalDate, double[]> byBucket = new LinkedHashMap<>(); // [hours, sessions]
+        for (LocalDate b = firstBucket; b.isBefore(endExclusive); b = stepBucket(unit, b, 1)) {
+            byBucket.put(b, new double[]{0.0, 0.0});
         }
 
-        for (Booking b : activeBetween(firstWeek, endExclusive)) {
-            if (!isCounted(b)) continue;
-            LocalDate w = weekStart(b.getStartTime().toLocalDate());
-            double[] cell = byWeek.get(w);
+        for (Booking bk : activeBetween(firstBucket, endExclusive)) {
+            if (!isCounted(bk)) continue;
+            LocalDate bucket = bucketStart(unit, bk.getStartTime().toLocalDate());
+            double[] cell = byBucket.get(bucket);
             if (cell != null) {
-                cell[0] += hoursOf(b);
+                cell[0] += hoursOf(bk);
                 cell[1] += 1;
             }
         }
 
-        List<WeeklyHours> out = new ArrayList<>();
-        byWeek.forEach((week, cell) -> out.add(new WeeklyHours(week, round1(cell[0]), (int) cell[1])));
+        List<PeriodHours> out = new ArrayList<>();
+        byBucket.forEach((b, cell) -> out.add(new PeriodHours(b, round1(cell[0]), (int) cell[1])));
         return out;
+    }
+
+    /**
+     * Total hours/sessions over an arbitrary, unbucketed date range — backs the client's
+     * "date range" filter option (a single totals summary, not a chart bucket).
+     */
+    public RangeHours hoursInRange(LocalDate fromInclusive, LocalDate toExclusive) {
+        List<Booking> bookings = activeBetween(fromInclusive, toExclusive).stream()
+                .filter(this::isCounted)
+                .toList();
+        double hours = bookings.stream().mapToDouble(this::hoursOf).sum();
+        return new RangeHours(round1(hours), bookings.size());
     }
 
     /** Next {@code limit} upcoming (non-cancelled) sessions, soonest first. */
@@ -115,11 +143,32 @@ public class DashboardMetricsService {
                 .toList();
     }
 
-    /** Hours booked this week grouped by tutor (the "tutor drill-down" Sara called her killer feature). */
+    /**
+     * Hours booked this week grouped by tutor (the "tutor drill-down" Sara called her killer
+     * feature), sorted by total hours descending.
+     *
+     * @deprecated thin wrapper kept for existing callers/tests — prefer {@link #tutorHoursForPeriod}.
+     */
+    @Deprecated
     public List<TutorHours> tutorHoursThisWeek() {
         LocalDate weekStart = weekStart(today());
+        return tutorHoursForRange(weekStart, weekStart.plusWeeks(1), false);
+    }
+
+    /** Per-tutor hours/sessions for the current bucket of {@code unit} (this week/month/year). */
+    public List<TutorHours> tutorHoursForPeriod(PeriodUnit unit, boolean sortByName) {
+        LocalDate start = bucketStart(unit, today());
+        return tutorHoursForRange(start, stepBucket(unit, start, 1), sortByName);
+    }
+
+    /**
+     * Per-tutor hours/sessions over an arbitrary date range. Sorted by total hours descending
+     * by default (her "sort by total"), or alphabetically when {@code sortByName} is set
+     * (her "sort by tutor").
+     */
+    public List<TutorHours> tutorHoursForRange(LocalDate fromInclusive, LocalDate toExclusive, boolean sortByName) {
         Map<String, double[]> byTutor = new LinkedHashMap<>();
-        for (Booking b : activeBetween(weekStart, weekStart.plusWeeks(1))) {
+        for (Booking b : activeBetween(fromInclusive, toExclusive)) {
             if (!isCounted(b)) continue;
             String tutor = b.getTutor() != null ? b.getTutor().getName() : "Unassigned";
             double[] cell = byTutor.computeIfAbsent(tutor, k -> new double[]{0.0, 0.0});
@@ -128,7 +177,11 @@ public class DashboardMetricsService {
         }
         List<TutorHours> out = new ArrayList<>();
         byTutor.forEach((tutor, cell) -> out.add(new TutorHours(tutor, round1(cell[0]), (int) cell[1])));
-        out.sort(Comparator.comparingDouble(TutorHours::hours).reversed());
+        if (sortByName) {
+            out.sort(Comparator.comparing(TutorHours::tutorName, String.CASE_INSENSITIVE_ORDER));
+        } else {
+            out.sort(Comparator.comparingDouble(TutorHours::hours).reversed());
+        }
         return out;
     }
 
@@ -278,6 +331,24 @@ public class DashboardMetricsService {
         return d.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     }
 
+    /** Start of the bucket containing {@code d}, for the given granularity. */
+    private LocalDate bucketStart(PeriodUnit unit, LocalDate d) {
+        return switch (unit) {
+            case WEEK -> weekStart(d);
+            case MONTH -> d.withDayOfMonth(1);
+            case YEAR -> d.withDayOfYear(1);
+        };
+    }
+
+    /** {@code bucketStart} shifted by {@code amount} buckets (negative steps backward). */
+    private LocalDate stepBucket(PeriodUnit unit, LocalDate bucketStart, long amount) {
+        return switch (unit) {
+            case WEEK -> bucketStart.plusWeeks(amount);
+            case MONTH -> bucketStart.plusMonths(amount);
+            case YEAR -> bucketStart.plusYears(amount);
+        };
+    }
+
     private double round1(double v) {
         return Math.round(v * 10.0) / 10.0;
     }
@@ -288,6 +359,13 @@ public class DashboardMetricsService {
                            double hoursThisWeek, int cancellationsThisMonth) {}
 
     public record WeeklyHours(LocalDate weekStart, double hours, int sessions) {}
+
+    /** Chart/table bucket granularity for the client's week/month/year filter. */
+    public enum PeriodUnit { WEEK, MONTH, YEAR }
+
+    public record PeriodHours(LocalDate periodStart, double hours, int sessions) {}
+
+    public record RangeHours(double hours, int sessions) {}
 
     public record UpcomingSession(String studentName, String tutorName, String serviceName,
                                   LocalDateTime startTime, String status) {}
