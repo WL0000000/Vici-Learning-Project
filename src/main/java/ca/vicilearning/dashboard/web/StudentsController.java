@@ -1,16 +1,21 @@
 package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
+import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * Read-only page that renders live (synced or seeded) data: overview metrics, computed weekly
- * hours, the per-student Brevo+SimplyBook view, upcoming sessions, and per-tutor totals.
+ * Read-only page that renders live (synced or seeded) data: overview metrics, computed
+ * week/month/year (or custom date range) hours, the per-student Brevo+SimplyBook view, upcoming
+ * sessions, and per-tutor totals — this is where Sara's "filter by week/month/year/date range,
+ * sort by tutor and total" ask lives.
  *
  * <p>Deliberately a separate route from {@code /} (the Overview page owned by the frontend
  * branch) so this data-backed view can ship without colliding with that in-progress template.
@@ -24,31 +29,110 @@ public class StudentsController {
         this.metrics = metrics;
     }
 
-    private static final int WEEKS_BACK = 3;
-    private static final int WEEKS_AHEAD = 2;
-    private static final DateTimeFormatter WEEK_LABEL = DateTimeFormatter.ofPattern("MMM d");
+    // Default look-back/look-ahead per bucket granularity, chosen so each chart shows a
+    // reasonable timeline without the client having to configure anything.
+    private static final int WEEKS_BACK = 3, WEEKS_AHEAD = 2;
+    private static final int MONTHS_BACK = 3, MONTHS_AHEAD = 1;
+    private static final int YEARS_BACK = 2, YEARS_AHEAD = 0;
 
     @GetMapping("/students")
-    public String students(Model model) {
+    public String students(
+            @RequestParam(defaultValue = "week") String unit,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "hours") String sort,
+            Model model) {
+
         model.addAttribute("overview", metrics.overview());
 
-        // 3 weeks of history + this week + 2 ahead — covers the "2 weeks ahead" client ask.
-        List<DashboardMetricsService.WeeklyHours> weeklyHours = metrics.weeklyHours(WEEKS_BACK, WEEKS_AHEAD);
-        model.addAttribute("weeklyHours", weeklyHours);
+        boolean sortByName = "name".equalsIgnoreCase(sort);
+        model.addAttribute("selectedSort", sortByName ? "name" : "hours");
 
-        // Chart-ready arrays. Thymeleaf serializes these lists to JSON for Chart.js.
-        model.addAttribute("weekLabels",
-                weeklyHours.stream().map(w -> w.weekStart().format(WEEK_LABEL)).toList());
-        model.addAttribute("weekHours",
-                weeklyHours.stream().map(DashboardMetricsService.WeeklyHours::hours).toList());
-        model.addAttribute("weekSessions",
-                weeklyHours.stream().map(DashboardMetricsService.WeeklyHours::sessions).toList());
-        // Index of the current week in the arrays (weeks before it are history, after it are upcoming).
-        model.addAttribute("currentWeekIndex", WEEKS_BACK);
+        boolean customRange = from != null && !from.isBlank() && to != null && !to.isBlank();
+        model.addAttribute("customRange", customRange);
+
+        if (customRange) {
+            LocalDate fromDate = LocalDate.parse(from);
+            LocalDate toDate = LocalDate.parse(to);
+            model.addAttribute("selectedUnit", "range");
+            model.addAttribute("panelTitle", "Hours Booked (Date Range)");
+            model.addAttribute("rangeFrom", fromDate);
+            model.addAttribute("rangeTo", toDate);
+            model.addAttribute("rangeHours", metrics.hoursInRange(fromDate, toDate.plusDays(1)));
+            model.addAttribute("periodSubtitle",
+                    fromDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")) + " – "
+                            + toDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")));
+            model.addAttribute("tutorHours",
+                    metrics.tutorHoursForRange(fromDate, toDate.plusDays(1), sortByName));
+            model.addAttribute("tutorPeriodLabel", "selected range");
+
+            // No bucket chart in custom-range mode — keep these present (empty) so the
+            // inline Chart.js script below has well-defined arrays to read.
+            model.addAttribute("periodLabels", List.of());
+            model.addAttribute("periodHoursData", List.of());
+            model.addAttribute("periodSessions", List.of());
+            model.addAttribute("currentPeriodIndex", 0);
+        } else {
+            PeriodUnit periodUnit = parseUnit(unit);
+            String unitLabel = periodUnit.name().toLowerCase();
+            model.addAttribute("selectedUnit", unitLabel);
+            model.addAttribute("panelTitle",
+                    "Hours Booked by " + Character.toUpperCase(unitLabel.charAt(0)) + unitLabel.substring(1));
+
+            int back = switch (periodUnit) {
+                case WEEK -> WEEKS_BACK;
+                case MONTH -> MONTHS_BACK;
+                case YEAR -> YEARS_BACK;
+            };
+            int ahead = switch (periodUnit) {
+                case WEEK -> WEEKS_AHEAD;
+                case MONTH -> MONTHS_AHEAD;
+                case YEAR -> YEARS_AHEAD;
+            };
+
+            List<DashboardMetricsService.PeriodHours> buckets = metrics.hoursByPeriod(periodUnit, back, ahead);
+            DateTimeFormatter labelFmt = labelFormat(periodUnit);
+
+            model.addAttribute("periodLabels",
+                    buckets.stream().map(p -> p.periodStart().format(labelFmt)).toList());
+            model.addAttribute("periodHoursData",
+                    buckets.stream().map(DashboardMetricsService.PeriodHours::hours).toList());
+            model.addAttribute("periodSessions",
+                    buckets.stream().map(DashboardMetricsService.PeriodHours::sessions).toList());
+            // Index of the current bucket in the arrays (buckets before it are history, after are upcoming).
+            model.addAttribute("currentPeriodIndex", back);
+            model.addAttribute("periodSubtitle", switch (periodUnit) {
+                case WEEK -> WEEKS_BACK + " weeks back · this week · " + WEEKS_AHEAD + " ahead";
+                case MONTH -> MONTHS_BACK + " months back · this month · " + MONTHS_AHEAD + " ahead";
+                case YEAR -> YEARS_BACK + " years back · this year";
+            });
+
+            model.addAttribute("tutorHours", metrics.tutorHoursForPeriod(periodUnit, sortByName));
+            model.addAttribute("tutorPeriodLabel", switch (periodUnit) {
+                case WEEK -> "this week";
+                case MONTH -> "this month";
+                case YEAR -> "this year";
+            });
+        }
 
         model.addAttribute("students", metrics.studentRows());
         model.addAttribute("upcoming", metrics.upcoming(10));
-        model.addAttribute("tutorHours", metrics.tutorHoursThisWeek());
         return "students";
+    }
+
+    private PeriodUnit parseUnit(String unit) {
+        try {
+            return PeriodUnit.valueOf(unit.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return PeriodUnit.WEEK;
+        }
+    }
+
+    private DateTimeFormatter labelFormat(PeriodUnit unit) {
+        return switch (unit) {
+            case WEEK -> DateTimeFormatter.ofPattern("MMM d");
+            case MONTH -> DateTimeFormatter.ofPattern("MMM yyyy");
+            case YEAR -> DateTimeFormatter.ofPattern("yyyy");
+        };
     }
 }

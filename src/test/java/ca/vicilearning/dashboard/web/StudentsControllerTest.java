@@ -1,6 +1,7 @@
 package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
+import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -34,10 +35,10 @@ class StudentsControllerTest {
     @WithMockUser
     void studentsPageLoadsForLoggedInUser() throws Exception {
         when(metrics.overview()).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
-        when(metrics.weeklyHours(3, 2)).thenReturn(Collections.emptyList());
+        when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2)).thenReturn(Collections.emptyList());
         when(metrics.studentRows()).thenReturn(Collections.emptyList());
         when(metrics.upcoming(10)).thenReturn(Collections.emptyList());
-        when(metrics.tutorHoursThisWeek()).thenReturn(Collections.emptyList());
+        when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false)).thenReturn(Collections.emptyList());
 
         mockMvc.perform(get("/students"))
                 .andExpect(status().isOk())
@@ -49,10 +50,10 @@ class StudentsControllerTest {
     void studentsPageLoadsForTutor() throws Exception {
         // Tutors are allowed to see the students page (sensitive columns are hidden in the view).
         when(metrics.overview()).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
-        when(metrics.weeklyHours(3, 2)).thenReturn(Collections.emptyList());
+        when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2)).thenReturn(Collections.emptyList());
         when(metrics.studentRows()).thenReturn(Collections.emptyList());
         when(metrics.upcoming(10)).thenReturn(Collections.emptyList());
-        when(metrics.tutorHoursThisWeek()).thenReturn(Collections.emptyList());
+        when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false)).thenReturn(Collections.emptyList());
 
         mockMvc.perform(get("/students"))
                 .andExpect(status().isOk())
@@ -88,9 +89,9 @@ class StudentsControllerTest {
 
     private void stubEmptyMetrics() {
         when(metrics.overview()).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
-        when(metrics.weeklyHours(3, 2)).thenReturn(Collections.emptyList());
+        when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2)).thenReturn(Collections.emptyList());
         when(metrics.studentRows()).thenReturn(Collections.emptyList());
         when(metrics.upcoming(10)).thenReturn(Collections.emptyList());
-        when(metrics.tutorHoursThisWeek()).thenReturn(Collections.emptyList());
+        when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false)).thenReturn(Collections.emptyList());
     }
 }

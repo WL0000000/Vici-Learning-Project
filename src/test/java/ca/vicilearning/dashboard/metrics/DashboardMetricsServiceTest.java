@@ -6,6 +6,7 @@ import ca.vicilearning.dashboard.domain.Invoice;
 import ca.vicilearning.dashboard.domain.InvoiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
+import ca.vicilearning.dashboard.domain.Tutor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -62,6 +63,79 @@ class DashboardMetricsServiceTest {
         assertThat(weeks).hasSize(1);
         assertThat(weeks.get(0).hours()).isEqualTo(3.0);
         assertThat(weeks.get(0).sessions()).isEqualTo(2);
+    }
+
+    @Test
+    void hoursByPeriod_month_bucketsCurrentMonth_andExcludesCancelled() {
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of(
+                booking(1, null, "confirmed", now, 60),
+                booking(2, null, "confirmed", now, 120),
+                booking(3, null, "cancelled", now, 60)));
+
+        List<DashboardMetricsService.PeriodHours> months =
+                service.hoursByPeriod(DashboardMetricsService.PeriodUnit.MONTH, 0, 0);
+
+        assertThat(months).hasSize(1);
+        assertThat(months.get(0).hours()).isEqualTo(3.0);
+        assertThat(months.get(0).sessions()).isEqualTo(2);
+    }
+
+    @Test
+    void hoursByPeriod_year_bucketsCurrentYear() {
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of(
+                booking(1, null, "confirmed", now, 60)));
+
+        List<DashboardMetricsService.PeriodHours> years =
+                service.hoursByPeriod(DashboardMetricsService.PeriodUnit.YEAR, 1, 0);
+
+        // 1 year back + current year = 2 buckets.
+        assertThat(years).hasSize(2);
+        assertThat(years.get(1).hours()).isEqualTo(1.0);
+        assertThat(years.get(0).hours()).isEqualTo(0.0);
+    }
+
+    @Test
+    void hoursInRange_sumsHoursAndSessions_excludingCancelled() {
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of(
+                booking(1, null, "confirmed", now, 60),
+                booking(2, null, "confirmed", now, 120),
+                booking(3, null, "cancelled", now, 90)));
+
+        DashboardMetricsService.RangeHours range = service.hoursInRange(now.toLocalDate(), now.toLocalDate().plusDays(1));
+
+        assertThat(range.hours()).isEqualTo(3.0);
+        assertThat(range.sessions()).isEqualTo(2);
+    }
+
+    @Test
+    void tutorHoursForRange_sortsByHoursDescByDefault_orByNameWhenRequested() {
+        Tutor amy = tutor("Amy");
+        Tutor zack = tutor("Zack");
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of(
+                bookingWithTutor(1, amy, "confirmed", now, 60),
+                bookingWithTutor(2, zack, "confirmed", now, 180)));
+
+        List<DashboardMetricsService.TutorHours> byHours =
+                service.tutorHoursForRange(now.toLocalDate(), now.toLocalDate().plusDays(1), false);
+        assertThat(byHours).extracting(DashboardMetricsService.TutorHours::tutorName)
+                .containsExactly("Zack", "Amy");
+
+        List<DashboardMetricsService.TutorHours> byName =
+                service.tutorHoursForRange(now.toLocalDate(), now.toLocalDate().plusDays(1), true);
+        assertThat(byName).extracting(DashboardMetricsService.TutorHours::tutorName)
+                .containsExactly("Amy", "Zack");
+    }
+
+    private Tutor tutor(String name) {
+        Tutor t = new Tutor();
+        t.setName(name);
+        return t;
+    }
+
+    private Booking bookingWithTutor(long id, Tutor tutor, String status, LocalDateTime start, int minutes) {
+        Booking b = booking(id, null, status, start, minutes);
+        b.setTutor(tutor);
+        return b;
     }
 
     @Test
