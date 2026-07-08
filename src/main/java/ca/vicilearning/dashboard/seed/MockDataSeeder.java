@@ -10,19 +10,23 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 /**
  * Generates realistic mock data so the dashboard can be demoed and load-tested without any
  * live SimplyBook.me / Brevo credentials. It writes the exact same local entities a real
  * SimplyBook sync produces — tutors, services, students (with the Brevo-link {@code accountId}),
- * and bookings — so every downstream feature (weekly hours, filters, tutor drill-down) works
- * against it identically to live data.
+ * bookings, invoices, and memberships — so every downstream feature (weekly hours, filters,
+ * tutor drill-down, the Families rollup, and the overview cash-flow / pending-invoices section)
+ * works against it identically to live data.
  *
  * <p><b>Activation:</b> only runs under the {@code seed} Spring profile, so it can never touch a
  * real deployment. Run with {@code SPRING_PROFILES_ACTIVE=seed} (or
@@ -48,7 +52,12 @@ public class MockDataSeeder implements ApplicationRunner {
     private static final int LOOKAHEAD_DAYS = 30;
 
     // Manually assigned id ranges (these entities use upstream ids, not @GeneratedValue).
-    private static final long STUDENT_ID_BASE = 1000L;
+    private static final long STUDENT_ID_BASE    = 1000L;
+    private static final long INVOICE_ID_BASE    = 5000L;
+    private static final long MEMBERSHIP_ID_BASE = 8000L;
+
+    // Session price used to size invoice amounts. Mock only — real amounts come from SimplyBook.
+    private static final BigDecimal SESSION_PRICE = new BigDecimal("55.00");
 
     private static final String[] FIRST_NAMES = {
             "Olivia", "Liam", "Emma", "Noah", "Ava", "Ethan", "Sophia", "Mason", "Isabella",
@@ -74,22 +83,28 @@ public class MockDataSeeder implements ApplicationRunner {
             {"2hr Intensive Session", 120}
     };
 
-    private final TutorRepository   tutorRepo;
-    private final ServiceRepository serviceRepo;
-    private final StudentRepository studentRepo;
-    private final BookingRepository bookingRepo;
+    private final TutorRepository      tutorRepo;
+    private final ServiceRepository    serviceRepo;
+    private final StudentRepository    studentRepo;
+    private final BookingRepository    bookingRepo;
+    private final InvoiceRepository    invoiceRepo;
+    private final MembershipRepository membershipRepo;
     private final int studentCount;
 
     public MockDataSeeder(TutorRepository tutorRepo,
                           ServiceRepository serviceRepo,
                           StudentRepository studentRepo,
                           BookingRepository bookingRepo,
+                          InvoiceRepository invoiceRepo,
+                          MembershipRepository membershipRepo,
                           @Value("${seed.student-count:70}") int studentCount) {
-        this.tutorRepo    = tutorRepo;
-        this.serviceRepo  = serviceRepo;
-        this.studentRepo  = studentRepo;
-        this.bookingRepo  = bookingRepo;
-        this.studentCount = studentCount;
+        this.tutorRepo      = tutorRepo;
+        this.serviceRepo    = serviceRepo;
+        this.studentRepo    = studentRepo;
+        this.bookingRepo    = bookingRepo;
+        this.invoiceRepo    = invoiceRepo;
+        this.membershipRepo = membershipRepo;
+        this.studentCount   = studentCount;
     }
 
     @Override
@@ -124,8 +139,16 @@ public class MockDataSeeder implements ApplicationRunner {
         List<Booking> bookings = buildBookings(students, tutors, services, now, rng);
         bookingRepo.saveAll(bookings);
 
-        log.info("Seeded mock data: {} tutors, {} services, {} students, {} bookings",
-                tutors.size(), services.size(), students.size(), bookings.size());
+        List<Invoice> invoices = buildInvoices(students, now, rng);
+        invoiceRepo.saveAll(invoices);
+
+        List<Membership> memberships = buildMemberships(students, now, rng);
+        membershipRepo.saveAll(memberships);
+
+        log.info("Seeded mock data: {} tutors, {} services, {} students, {} bookings, "
+                        + "{} invoices, {} memberships",
+                tutors.size(), services.size(), students.size(), bookings.size(),
+                invoices.size(), memberships.size());
     }
 
     private List<Tutor> buildTutors(LocalDateTime now) {
@@ -239,6 +262,75 @@ public class MockDataSeeder implements ApplicationRunner {
             }
         }
         return bookings;
+    }
+
+    /**
+     * One or two invoices per student, so the overview cash-flow section and pending-invoices
+     * table have data. ~40% are left unpaid (status "pending") — the actionable rows Sara wants
+     * visible — the rest are "paid". Amounts are a mock function of a small session block; real
+     * amounts come from SimplyBook REST v2.
+     */
+    private List<Invoice> buildInvoices(List<Student> students, LocalDateTime now, Random rng) {
+        List<Invoice> invoices = new ArrayList<>();
+        long invoiceId = INVOICE_ID_BASE;
+        int number = 1;
+
+        for (Student student : students) {
+            int count = 1 + (rng.nextDouble() < 0.35 ? 1 : 0);   // most families have one open cycle, some two
+            for (int n = 0; n < count; n++) {
+                int sessions = 4 + rng.nextInt(9);               // a 4–12 session block
+                boolean paid = rng.nextDouble() >= 0.40;         // ~40% still outstanding
+
+                Invoice inv = new Invoice();
+                inv.setId(invoiceId++);
+                inv.setStudent(student);
+                inv.setNumber(String.format("INV-2026-%04d", number++));
+                inv.setStatus(paid ? "paid" : "pending");
+                inv.setAmount(SESSION_PRICE.multiply(BigDecimal.valueOf(sessions)));
+                inv.setCurrency("CAD");
+                // Issued over the last ~10 weeks so "oldest first" ordering on the overview varies.
+                inv.setIssuedAt(now.minusDays(3 + rng.nextInt(70)));
+                inv.setSyncedAt(now);
+                invoices.add(inv);
+            }
+        }
+        return invoices;
+    }
+
+    /**
+     * One membership per family account (students sharing an {@code accountId} get one shared
+     * membership, attached to the first student in the account). Mostly active; a few paused, and
+     * a couple near/at zero remaining sessions — the "can't book at 0" families a future rule
+     * could surface. Not yet shown in the UI, but seeded so sync-status counts and any future
+     * membership view have realistic data.
+     */
+    private List<Membership> buildMemberships(List<Student> students, LocalDateTime now, Random rng) {
+        List<Membership> memberships = new ArrayList<>();
+        long membershipId = MEMBERSHIP_ID_BASE;
+
+        // First student encountered per account owns the family membership.
+        Map<String, Student> ownerByAccount = new LinkedHashMap<>();
+        for (Student s : students) {
+            if (s.getAccountId() != null) {
+                ownerByAccount.putIfAbsent(s.getAccountId(), s);
+            }
+        }
+
+        for (Student owner : ownerByAccount.values()) {
+            boolean active = rng.nextDouble() >= 0.15;           // ~15% paused
+            Membership m = new Membership();
+            m.setId(membershipId++);
+            m.setStudent(owner);
+            m.setName("Prepaid Session Package");
+            m.setActive(active);
+            // 0–20 remaining; a handful land at 0 (the blocked-from-booking case).
+            m.setRemainingCount(rng.nextInt(21));
+            m.setStartDate(now.minusDays(30 + rng.nextInt(300)));
+            m.setEndDate(now.plusDays(30 + rng.nextInt(120)));
+            m.setSyncedAt(now);
+            memberships.add(m);
+        }
+        return memberships;
     }
 
     // Heavier weighting toward the 1hr services, like a real tutoring schedule.

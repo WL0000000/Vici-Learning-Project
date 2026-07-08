@@ -334,7 +334,9 @@ public class DashboardMetricsService {
     }
 
     private List<Invoice> unpaidInvoices() {
-        return invoiceRepo.findByDeletedAtIsNull().stream().filter(i -> !i.isPaid()).toList();
+        // findActiveWithStudent join-fetches the (optional) student so pendingInvoices() can read
+        // its name outside an open session (open-in-view is off).
+        return invoiceRepo.findActiveWithStudent().stream().filter(i -> !i.isPaid()).toList();
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
