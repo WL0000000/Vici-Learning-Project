@@ -20,7 +20,16 @@ public class Student {
     // The SimplyBook.me "Account_ID" custom client field — the key that links this
     // student/family to its canonical record in Brevo. Pulled via REST API v2 (JSON-RPC
     // cannot read custom fields). Nullable: not every client has it set upstream.
+    //
+    // Per Meeting #3, Account_ID is the FAMILY / association id (a Surname_Account string),
+    // shared by siblings. It doubles as the assignable "family" key in the Association Account
+    // feature: a student with accountId == null is unassigned and awaits staff assignment.
     private String accountId;
+
+    // The Brevo "EXT_ID" — the unique identifier for THIS individual student (one student =
+    // one Brevo contact). This is the only per-student unique id Vici actually uses. Distinct
+    // from accountId, which is the family. Nullable until synced from Brevo. (Meeting #3.)
+    private String extId;
 
     private LocalDateTime createdAt;
 
@@ -45,6 +54,9 @@ public class Student {
 
     public String getAccountId() { return accountId; }
     public void setAccountId(String accountId) { this.accountId = accountId; }
+
+    public String getExtId() { return extId; }
+    public void setExtId(String extId) { this.extId = extId; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

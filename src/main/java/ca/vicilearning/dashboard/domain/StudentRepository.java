@@ -11,5 +11,10 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
 
     // Active students that still need their Account_ID resolved from REST v2. Lets the sync
     // fetch only the unlinked backlog instead of every student on every run (avoids an N+1).
+    // Doubles as the Association Account "unassigned" queue: no family assigned yet.
     java.util.List<Student> findByDeletedAtIsNullAndAccountIdIsNull();
+
+    // Active students already assigned to a family (Account_ID set) — the source for the
+    // Association Account family rollup.
+    java.util.List<Student> findByDeletedAtIsNullAndAccountIdIsNotNull();
 }

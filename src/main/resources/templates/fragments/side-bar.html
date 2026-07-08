@@ -50,6 +50,17 @@
             Bookings
         </a>
 
+        <a th:href="@{/associations}" th:classappend="${activePage == 'associations'} ? ' active'" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="7" cy="8" r="2.6"/>
+                <circle cx="17" cy="8" r="2.6"/>
+                <path d="M2.5 19a4.5 4.5 0 0 1 9 0"/>
+                <path d="M12.5 19a4.5 4.5 0 0 1 9 0"/>
+                <path d="M9.6 8h4.8"/>
+            </svg>
+            Associations
+        </a>
+
 
         <!-- Admin-only tools: hidden from tutors (they also can't reach the routes). -->
         <a sec:authorize="hasRole('ADMIN')" th:href="@{/comms/review}" th:classappend="${activePage == 'comms-review'} ? ' active'" class="sidebar-link">
