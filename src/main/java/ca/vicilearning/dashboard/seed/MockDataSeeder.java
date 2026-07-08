@@ -202,14 +202,40 @@ public class MockDataSeeder implements ApplicationRunner {
             s.setName(name);
             s.setEmail(emailFrom(name + i, "example.com"));
             s.setPhone(randomPhone(rng));
-            // The Brevo join key. Sequential here (siblings share one); in production it comes
-            // from SimplyBook's Account_ID custom field via the REST v2 client.
+            // The family key (Account_ID). Sequential here (siblings share one); in production it
+            // comes from SimplyBook's Account_ID custom field via the REST v2 client. A slice of
+            // only-children get this cleared below to seed the Association Account "unassigned" queue.
             s.setAccountId(String.format("VICI-%04d", accountNumber));
+            // EXT_ID — the Brevo per-student unique id (one per student, never shared with siblings).
+            s.setExtId(String.format("EXT-%05d", 10000 + i));
             s.setCreatedAt(now.minusDays(30 + rng.nextInt(700)));
             s.setSyncedAt(now);
             students.add(s);
         }
+
+        unassignSomeOnlyChildren(students, rng);
         return students;
+    }
+
+    /**
+     * Clears the family (Account_ID) on ~15% of only-children so the Association Account page has
+     * an "unassigned students" queue to demo. Only students whose Account_ID is theirs alone are
+     * eligible — siblings (a shared Account_ID) are never touched, so no seeded family loses a
+     * member. EXT_ID is kept, mirroring a real new Brevo contact that has no family assigned yet.
+     */
+    private void unassignSomeOnlyChildren(List<Student> students, Random rng) {
+        Map<String, Long> perAccount = new LinkedHashMap<>();
+        for (Student s : students) {
+            if (s.getAccountId() != null) {
+                perAccount.merge(s.getAccountId(), 1L, Long::sum);
+            }
+        }
+        for (Student s : students) {
+            boolean onlyChild = s.getAccountId() != null && perAccount.get(s.getAccountId()) == 1L;
+            if (onlyChild && rng.nextDouble() < 0.15) {
+                s.setAccountId(null);
+            }
+        }
     }
 
     private List<Booking> buildBookings(List<Student> students, List<Tutor> tutors,
