@@ -84,13 +84,13 @@ public class BrevoCommunicationService {
     }
 
     /**
-     * Collects and safely normalizes localized student names against their corresponding 
-     * comma-separated parallel status streams retrieved dynamically from Brevo.
-     *
-     * @return Lookup map linking individual lowercase Student Names to their system status.
+     * Pulls cumulative contact nodes and organizes them into a multi-tiered dictionary
+     * structured as: Map<ViciAccountId, Map<LowercaseStudentName, ActivityStatus>>
      */
-    public Map<String, String> fetchStudentStatusMap() {
-        Map<String, String> statusMap = new HashMap<>();
+    public Map<String, Map<String, String>> fetchStudentStatusMap() {
+        // Nested structure: Map<AccountId, Map<StudentName, Status>>
+        Map<String, Map<String, String>> masterAccountMap = new HashMap<>();
+        
         try {
             BrevoListContactsResponse response = brevoRestClient.get()
                     .uri(ENDPOINT_CONTACTS)
@@ -99,26 +99,35 @@ public class BrevoCommunicationService {
 
             if (response != null && response.contacts() != null) {
                 for (BrevoContactNode contact : response.contacts()) {
-                    if (contact.attributes() != null) {
-                        unpackContactStatuses(contact.attributes(), statusMap);
+                    BrevoAttributesNode attributes = contact.attributes();
+                    
+                    // Enforce that we only process records with a valid family account identifier
+                    if (attributes != null && attributes.viciAccountId() != null && !attributes.viciAccountId().isBlank()) {
+                        String cleanAccountId = attributes.viciAccountId().trim().toUpperCase();
+                        
+                        // Isolate or initialize the nested collection bucket unique to this family row
+                        Map<String, String> familyBucket = masterAccountMap.computeIfAbsent(cleanAccountId, k -> new HashMap<>());
+                        
+                        // Unpack the parallel strings directly into this family's protected bucket
+                        unpackContactStatuses(attributes, familyBucket);
                     }
                 }
             }
         } catch (Exception e) {
-            log.error("Failed executing dynamic student status normalization mappings.", e);
+            log.error("Failed executing nested account-scoped status mappings.", e);
         }
-        return statusMap;
+        return masterAccountMap;
     }
 
     /**
-     * Unpacks CSV tokens for names and statuses out of a target metadata attribute node.
+     * Extracted helper that populates a designated family mapping bucket with sibling statuses.
      */
-    private void unpackContactStatuses(BrevoAttributesNode attributes, Map<String, String> statusMap) {
+    private void unpackContactStatuses(BrevoAttributesNode attributes, Map<String, String> familyBucket) {
         String namesRaw = attributes.studentNames();
         String statusesRaw = attributes.activityStatus();
 
         if (namesRaw == null || namesRaw.isBlank()) {
-            return;
+            return; 
         }
 
         String[] names = namesRaw.split(",");
@@ -131,7 +140,7 @@ public class BrevoCommunicationService {
             String cleanStatus = (i < statuses.length) ? statuses[i].trim() : DEFAULT_STATUS;
             
             if (!cleanName.isEmpty()) {
-                statusMap.put(cleanName, cleanStatus);
+                familyBucket.put(cleanName, cleanStatus); 
             }
         }
     }
