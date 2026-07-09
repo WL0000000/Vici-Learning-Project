@@ -183,17 +183,19 @@ public class MockDataSeeder implements ApplicationRunner {
 
     private List<Student> buildStudents(LocalDateTime now, Random rng) {
         List<Student> students = new ArrayList<>();
-        int accountNumber = 0;              // last-assigned Account_ID sequence number
+        // Tracks how many families share each surname, so account keys stay unique (see accountKey).
+        Map<String, Integer> surnameUses = new LinkedHashMap<>();
         String siblingLastName = null;      // shared surname of the current family, when applicable
+        String siblingAccountKey = null;    // shared Account_ID of the current family
         for (int i = 0; i < studentCount; i++) {
             // ~18% of students (never the first) are siblings: they reuse the previous student's
-            // Account_ID and surname, so one Brevo account maps to multiple students — the exact
-            // shape the Families rollup groups by. The rest each open a new account.
+            // Account_ID and surname, so one family maps to multiple students — the exact shape the
+            // Families rollup groups by. The rest each open a new family account.
             boolean sibling = i > 0 && rng.nextDouble() < 0.18;
             String lastName = sibling ? siblingLastName : LAST_NAMES[rng.nextInt(LAST_NAMES.length)];
             if (!sibling) {
-                accountNumber++;
                 siblingLastName = lastName;
+                siblingAccountKey = accountKey(lastName, surnameUses);
             }
 
             String name = FIRST_NAMES[rng.nextInt(FIRST_NAMES.length)] + " " + lastName;
@@ -202,10 +204,11 @@ public class MockDataSeeder implements ApplicationRunner {
             s.setName(name);
             s.setEmail(emailFrom(name + i, "example.com"));
             s.setPhone(randomPhone(rng));
-            // The family key (Account_ID). Sequential here (siblings share one); in production it
-            // comes from SimplyBook's Account_ID custom field via the REST v2 client. A slice of
-            // only-children get this cleared below to seed the Association Account "unassigned" queue.
-            s.setAccountId(String.format("VICI-%04d", accountNumber));
+            // The family key (Account_ID). Mirrors SimplyBook's real `Surname_Account` format
+            // (siblings share one); in production it comes from the Account_ID custom field via the
+            // REST v2 client. A slice of only-children get this cleared below to seed the Association
+            // Account "unassigned" queue.
+            s.setAccountId(siblingAccountKey);
             // EXT_ID — the Brevo per-student unique id (one per student, never shared with siblings).
             s.setExtId(String.format("EXT-%05d", 10000 + i));
             s.setCreatedAt(now.minusDays(30 + rng.nextInt(700)));
@@ -215,6 +218,16 @@ public class MockDataSeeder implements ApplicationRunner {
 
         unassignSomeOnlyChildren(students, rng);
         return students;
+    }
+
+    /**
+     * A unique {@code Surname_Account} family key. First family with a surname gets
+     * {@code Tran_Account}; a second, unrelated family with the same surname gets
+     * {@code Tran_Account2}, and so on — so two distinct families never collapse into one.
+     */
+    private String accountKey(String lastName, Map<String, Integer> surnameUses) {
+        int n = surnameUses.merge(lastName, 1, Integer::sum);
+        return n == 1 ? lastName + "_Account" : lastName + "_Account" + n;
     }
 
     /**
