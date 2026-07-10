@@ -263,7 +263,7 @@ class DashboardMetricsServiceTest {
     @Test
     void pendingInvoices_excludesPaid_andSortsOldestIssuedFirst() {
         Student jane = student(1L, "Jane Doe");
-        when(invoiceRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+        when(invoiceRepo.findActiveWithStudent()).thenReturn(List.of(
                 invoice(1L, jane, "paid", "50.00", now.minusDays(10)),
                 invoice(2L, jane, "pending", "75.00", now.minusDays(2)),
                 invoice(3L, null, "pending", "25.00", now.minusDays(20))));
@@ -278,7 +278,7 @@ class DashboardMetricsServiceTest {
     @Test
     void pendingInvoicesSummary_sumsUnpaidAmounts_ignoringPaidAndNullAmounts() {
         Student jane = student(1L, "Jane Doe");
-        when(invoiceRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+        when(invoiceRepo.findActiveWithStudent()).thenReturn(List.of(
                 invoice(1L, jane, "paid", "50.00", now),
                 invoice(2L, jane, "pending", "75.00", now),
                 invoice(3L, jane, "pending", null, now)));

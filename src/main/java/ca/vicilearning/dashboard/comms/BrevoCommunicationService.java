@@ -38,6 +38,8 @@ public class BrevoCommunicationService {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record BrevoContactNode(
         @JsonProperty("email") String email,
+        // Brevo's top-level external id = the per-student EXT_ID (not an attribute).
+        @JsonProperty("ext_id") String extId,
         @JsonProperty("attributes") BrevoAttributesNode attributes
     ) {}
 
@@ -79,6 +81,34 @@ public class BrevoCommunicationService {
             }
         } catch (Exception e) {
             log.error("Failed compiling VICI ID to Email mapping matrix.", e);
+        }
+        return lookupMap;
+    }
+
+    /**
+     * Pulls contacts once and maps each contact's email (lower-cased) to its Brevo EXT_ID — the
+     * per-student external id the sync stamps onto local students (matched by email). Returns an
+     * empty map on any failure (e.g. no API key), so callers can treat that as "skip".
+     *
+     * @return Lookup map linking lower-cased contact email to EXT_ID.
+     */
+    public Map<String, String> fetchEmailToExtIdMap() {
+        Map<String, String> lookupMap = new HashMap<>();
+        try {
+            BrevoListContactsResponse response = brevoRestClient.get()
+                    .uri(ENDPOINT_CONTACTS)
+                    .retrieve()
+                    .body(BrevoListContactsResponse.class);
+
+            if (response != null && response.contacts() != null) {
+                for (BrevoContactNode contact : response.contacts()) {
+                    if (contact.email() != null && contact.extId() != null && !contact.extId().isBlank()) {
+                        lookupMap.put(contact.email().trim().toLowerCase(), contact.extId().trim());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed compiling email to EXT_ID mapping.", e);
         }
         return lookupMap;
     }

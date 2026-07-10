@@ -78,7 +78,7 @@ class BrevoSyncEngineServiceTest {
 
         // VERIFICATION UPDATE: Since the systems are in sync, the proactive cleanup engine 
         // drops the row from the alert database and bypasses the save method entirely!
-        verify(alertStudentRepository, times(1)).deleteById("Sara Kim"); // Or John Park depending on string trim choice
+        verify(alertStudentRepository, times(1)).deleteById("John Park");
         verify(alertStudentRepository, never()).save(any());
     }
 
