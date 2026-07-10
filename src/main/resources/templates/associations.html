@@ -94,9 +94,12 @@
 
                 <div th:each="fam : ${families}" class="mb-3">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                        <strong th:text="${fam.accountId}">Surname_Account</strong>
+                        <strong th:text="${fam.displayName()}">Family</strong>
+                        <!-- When a friendly name is set, still show the raw Account_ID key beside it. -->
+                        <span class="text-muted small" th:if="${fam.name}" th:text="${fam.accountId}">Surname_Account</span>
                         <span class="badge bg-secondary" th:text="${fam.size()} + ' student(s)'">0</span>
                     </div>
+                    <div class="text-muted small mb-1" th:if="${fam.notes}" th:text="${fam.notes}"></div>
                     <ul class="mb-0">
                         <li th:each="m : ${fam.members}">
                             <span th:text="${m.name}">Student</span>
