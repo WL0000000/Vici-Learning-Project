@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.sync;
 
+import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
 import ca.vicilearning.dashboard.domain.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +46,7 @@ public class SyncService {
     private final InvoiceRepository       invoiceRepo;
     private final MembershipRepository    membershipRepo;
     private final SyncLogRepository       syncLogRepo;
+    private final BrevoCommunicationService brevoService;
 
     // Ensures only one sync runs at a time: the hourly scheduler and a manual
     // "Sync Now" click can otherwise race on the same tables.
@@ -71,6 +73,7 @@ public class SyncService {
                        InvoiceRepository invoiceRepo,
                        MembershipRepository membershipRepo,
                        SyncLogRepository syncLogRepo,
+                       BrevoCommunicationService brevoService,
                        PlatformTransactionManager transactionManager) {
         this.client          = client;
         this.restClient      = restClient;
@@ -88,6 +91,7 @@ public class SyncService {
         this.invoiceRepo     = invoiceRepo;
         this.membershipRepo  = membershipRepo;
         this.syncLogRepo     = syncLogRepo;
+        this.brevoService    = brevoService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
@@ -126,6 +130,9 @@ public class SyncService {
         // Runs after students so their rows exist; uses REST v2 (not JSON-RPC) for the
         // Account_ID custom field. Its own step so a REST outage can't fail booking sync.
         runStep("accountIds", () -> syncAccountIds(entry), failures);
+        // Matches local students to Brevo contacts (by email) to stamp the EXT_ID per-student id.
+        // Own step so a Brevo outage/missing key can't fail the SimplyBook data above.
+        runStep("extIds", () -> syncExtIds(entry), failures);
         // Invoices and memberships also come from REST v2 and link back to students, so they
         // run after the student sync. Each is its own step: a REST outage or a bad record on
         // one must not fail the other or the JSON-RPC data synced above.
@@ -141,7 +148,7 @@ public class SyncService {
 
         log.info("Sync finished (success={}): tutors={}(-{}) services={}(-{}) "
                         + "students={}(-{}) bookings={}(-{}) invoices={}(-{}) "
-                        + "memberships={}(-{}) accountIdsLinked={}",
+                        + "memberships={}(-{}) accountIdsLinked={} extIdsLinked={}",
                 entry.isSuccess(),
                 entry.getTutorsUpserted(),   entry.getTutorsRemoved(),
                 entry.getServicesUpserted(), entry.getServicesRemoved(),
@@ -149,7 +156,7 @@ public class SyncService {
                 entry.getBookingsUpserted(), entry.getBookingsRemoved(),
                 entry.getInvoicesUpserted(), entry.getInvoicesRemoved(),
                 entry.getMembershipsUpserted(), entry.getMembershipsRemoved(),
-                entry.getAccountIdsLinked());
+                entry.getAccountIdsLinked(), entry.getExtIdsLinked());
         return entry;
     }
 
@@ -194,18 +201,26 @@ public class SyncService {
     private void syncStudents(SyncLog entry) {
         List<Student> students = clientAdapter.toStudents(client.getClientList());
 
-        // The JSON-RPC client list cannot read the Account_ID custom field, so every freshly
-        // adapted student has accountId == null. Carry over any Account_ID we previously
-        // resolved via REST v2 before the upsert; otherwise saveAll's merge would blank the
-        // column each sync and force syncAccountIds to re-fetch every student (an N+1 against
-        // REST v2). Preserving it lets that step fetch only the still-unlinked backlog.
-        Map<Long, String> knownAccountIds = studentRepo.findAll().stream()
+        // The JSON-RPC client list cannot read the Account_ID custom field (nor EXT_ID, which
+        // lives in Brevo), so every freshly adapted student has accountId == null and extId ==
+        // null. Carry over any values we previously resolved before the upsert; otherwise
+        // saveAll's merge would blank those columns each sync and force the linking steps to
+        // re-resolve every student. Preserving them lets those steps work only the unlinked backlog.
+        List<Student> existing = studentRepo.findAll();
+        Map<Long, String> knownAccountIds = existing.stream()
                 .filter(s -> s.getAccountId() != null)
                 .collect(Collectors.toMap(Student::getId, Student::getAccountId));
+        Map<Long, String> knownExtIds = existing.stream()
+                .filter(s -> s.getExtId() != null)
+                .collect(Collectors.toMap(Student::getId, Student::getExtId));
         for (Student s : students) {
-            String known = knownAccountIds.get(s.getId());
-            if (known != null) {
-                s.setAccountId(known);
+            String knownAccount = knownAccountIds.get(s.getId());
+            if (knownAccount != null) {
+                s.setAccountId(knownAccount);
+            }
+            String knownExt = knownExtIds.get(s.getId());
+            if (knownExt != null) {
+                s.setExtId(knownExt);
             }
         }
 
@@ -285,6 +300,36 @@ public class SyncService {
             }
         }
         entry.setAccountIdsLinked(linked);
+    }
+
+    /**
+     * Stamps each student's EXT_ID (the Brevo per-student unique id) by matching the student's
+     * email to a Brevo contact. Backlog-only: {@link #syncStudents} carries EXT_IDs across upserts,
+     * so at steady state this only fills newly-added students. Skipped cleanly (not failed) when
+     * Brevo returns nothing — no API key, an outage, or simply no contacts — so teammates without a
+     * Brevo key still get green syncs for the SimplyBook data.
+     */
+    private void syncExtIds(SyncLog entry) {
+        Map<String, String> emailToExtId = brevoService.fetchEmailToExtIdMap();
+        if (emailToExtId == null || emailToExtId.isEmpty()) {
+            log.info("Brevo returned no contacts (no key configured?); skipping EXT_ID sync");
+            entry.setExtIdsLinked(0);
+            return;
+        }
+
+        int linked = 0;
+        for (Student student : studentRepo.findByDeletedAtIsNullAndExtIdIsNull()) {
+            if (student.getEmail() == null || student.getEmail().isBlank()) {
+                continue;
+            }
+            String extId = emailToExtId.get(student.getEmail().trim().toLowerCase());
+            if (extId != null && !extId.isBlank()) {
+                student.setExtId(extId);
+                studentRepo.save(student);
+                linked++;
+            }
+        }
+        entry.setExtIdsLinked(linked);
     }
 
     /**

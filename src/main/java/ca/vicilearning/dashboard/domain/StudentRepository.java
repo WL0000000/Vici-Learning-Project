@@ -17,4 +17,8 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     // Active students already assigned to a family (Account_ID set) — the source for the
     // Association Account family rollup.
     java.util.List<Student> findByDeletedAtIsNullAndAccountIdIsNotNull();
+
+    // Active students whose EXT_ID (Brevo per-student id) isn't set yet — the backlog the sync
+    // matches against Brevo contacts, so a steady-state run only touches newly-added students.
+    java.util.List<Student> findByDeletedAtIsNullAndExtIdIsNull();
 }

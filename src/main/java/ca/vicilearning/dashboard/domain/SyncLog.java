@@ -38,6 +38,9 @@ public class SyncLog {
     // Count of students whose Account_ID (Brevo link) was set/updated from REST v2 this run.
     private int accountIdsLinked;
 
+    // Count of students whose EXT_ID (Brevo per-student id) was matched/set from Brevo this run.
+    private int extIdsLinked;
+
     @Column(columnDefinition = "text")
     private String errorMessage;
 
@@ -90,6 +93,9 @@ public class SyncLog {
 
     public int getAccountIdsLinked() { return accountIdsLinked; }
     public void setAccountIdsLinked(int accountIdsLinked) { this.accountIdsLinked = accountIdsLinked; }
+
+    public int getExtIdsLinked() { return extIdsLinked; }
+    public void setExtIdsLinked(int extIdsLinked) { this.extIdsLinked = extIdsLinked; }
 
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }

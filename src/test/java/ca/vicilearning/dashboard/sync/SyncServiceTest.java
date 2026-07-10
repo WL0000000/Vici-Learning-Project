@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.sync;
 
+import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
 import ca.vicilearning.dashboard.domain.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ class SyncServiceTest {
     @Mock InvoiceRepository  invoiceRepo;
     @Mock MembershipRepository membershipRepo;
     @Mock SyncLogRepository  syncLogRepo;
+    @Mock BrevoCommunicationService brevoService;
     @Mock PlatformTransactionManager txManager;
 
     @InjectMocks SyncService syncService;
