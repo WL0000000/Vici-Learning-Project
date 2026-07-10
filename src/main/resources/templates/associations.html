@@ -107,6 +107,17 @@
                                   th:text="'· EXT_ID ' + ${m.extId}"></span>
                         </li>
                     </ul>
+
+                    <!-- Staff-editable family name + notes (Meeting #3). -->
+                    <form th:action="@{/associations/family}" method="post"
+                          class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                        <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
+                        <input type="text" name="name" class="form-control form-control-sm"
+                               style="max-width:220px;" th:value="${fam.name}" placeholder="Family name"/>
+                        <input type="text" name="notes" class="form-control form-control-sm"
+                               style="max-width:320px;" th:value="${fam.notes}" placeholder="Notes"/>
+                        <button type="submit" class="btn-vici-outline btn-sm">Save</button>
+                    </form>
                 </div>
             </div>
         </div>

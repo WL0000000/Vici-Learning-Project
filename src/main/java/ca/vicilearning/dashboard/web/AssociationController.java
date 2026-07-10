@@ -34,4 +34,12 @@ public class AssociationController {
         associations.assignToFamily(studentId, accountId);
         return "redirect:/associations";
     }
+
+    @PostMapping("/associations/family")
+    public String updateFamily(@RequestParam String accountId,
+                               @RequestParam(required = false) String name,
+                               @RequestParam(required = false) String notes) {
+        associations.updateFamily(accountId, name, notes);
+        return "redirect:/associations";
+    }
 }

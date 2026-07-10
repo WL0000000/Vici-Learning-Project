@@ -100,6 +100,27 @@ public class AssociationService {
         getOrCreateFamily(key);
     }
 
+    /**
+     * Set a family's staff-editable name and notes (creating the family row if needed), stamping
+     * {@code updatedAt}. Blank name/notes are stored as null so the view falls back to the raw
+     * Account_ID / hides the notes line. No-op when the account key is blank.
+     */
+    @Transactional
+    public void updateFamily(String accountId, String name, String notes) {
+        if (accountId == null || accountId.isBlank()) {
+            return;
+        }
+        FamilyAssociation fam = getOrCreateFamily(accountId.trim());
+        fam.setName(blankToNull(name));
+        fam.setNotes(blankToNull(notes));
+        fam.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        familyRepo.save(fam);
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
+    }
+
     private FamilyAssociation getOrCreateFamily(String accountId) {
         return familyRepo.findById(accountId).orElseGet(() -> createFamily(accountId));
     }
