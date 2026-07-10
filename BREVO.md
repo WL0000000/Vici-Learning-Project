@@ -1,5 +1,25 @@
 # Brevo Integration Subsystem Documentation | Group 15
 
+## How to setup Brevo for local instance:
+
+To integrate your Brevo account with this dashboard program, you need to generate a v3 API key from your Brevo workspace and add it to your local environment configurations.
+
+Step 1: Generate the API Key in Brevo
+1. Log into your Brevo sandbox account.
+2. Click on the settings gear in the top right corner of the dashboard panel dashboard interface.
+3. Select SMTP and API from the dropdown options layout menu.
+4. Click on the Generate a new API key button.
+5. Provide a recognizable name for the key, such as Vici Dev Sandbox, and click Generate.
+6. Copy the full API key string immediately. Note that Brevo will obscure this value permanently once you close the pop up window, so ensure you capture it safely.
+
+Step 2: Configure the Program Properties
+1. Open the project source code explorer inside your local development environment.
+2. Navigate to .env
+3. Add the following configuration line to the text block, replacing the placeholder with your live copied credentials:
+`BREVO_API_KEY=your_copied_api_key_here`
+
+---
+
 ## 1. System Integration Overview
 
 The VICI Learning dashboard integrates directly with the Brevo CRM v3 API Engine to achieve automatic, two-way reconciliation between local academic booking timelines and client communication states.
@@ -97,11 +117,10 @@ $$\text{Lapsed State} = \left( \text{No Converted Bookings in past 14 days} \rig
 
 To maintain quick processing execution and stay well within Brevo rate limits, the system avoids issuing individual validation lookups inside loops:
 
-1. The cron routine fires a single initial call to `/contacts?limit=100&offset=0`.
-
-2. The dataset is ingested into an optimized in-memory lookup map (`Map<String, String>`).
-
-3. Evaluation loops execute operations against this internal memory grid, reducing network load down to an $O(1)$ operation.
+* **Dynamic Page-Streaming Streams:** Rather than firing a single hardcoded request restricted to the first 100 entries (`limit=100&offset=0`), the cron routine dynamically page-streams the Brevo `/contacts` endpoint. It leverages an iterative loop block that reads the cumulative metadata `count` attribute returned in the API envelope, shifting the query `offset` sequentially until the entire remote payload has been safely consumed.
+* **Hierarchical Namespace Ingestion:** To prevent global string key collisions when entirely separate families register students with identical names, the ingested contact properties are mapped into a multi-tiered structural directory layout in memory: `Map<String, Map<String, String>>`.
+* **Account-Scoped Mapping Isolation:** The master structure indexes each unique family grouping by its normalized parent identifier (`VICI_ACCOUNT_ID`), which maps directly to an isolated nested sibling dictionary containing keys for `Map<LowercaseStudentName, ActivityStatus>`.
+* **$O(1)$ Local Computations:** Local evaluation loops execute state validation checks directly against this scoped inner memory grid. This architecture limits cross-network load to a single, optimized data ingestion phase during startup and isolates multi-child parallel tokens.
 ---
 
 

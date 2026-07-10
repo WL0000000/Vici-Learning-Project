@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,7 +28,7 @@ class BrevoSyncEngineServiceTest {
     @Mock BrevoCommunicationService communicationService;
     @InjectMocks BrevoSyncEngineService syncEngine;
 
-    // helper so I'm not copying this everywhere
+    // Helper to generate consistent mock students
     private Student makeStudent(long id, String name, String accountId) {
         Student s = new Student();
         s.setId(id);
@@ -36,6 +37,7 @@ class BrevoSyncEngineServiceTest {
         return s;
     }
 
+    // Helper to generate consistent mock bookings
     private Booking makeBooking(String status, LocalDateTime startTime) {
         Booking b = new Booking();
         b.setStatus(status);
@@ -48,6 +50,7 @@ class BrevoSyncEngineServiceTest {
         Student sara = makeStudent(1L, "Sara Kim", "VICI-0001");
 
         when(studentRepository.findByDeletedAtIsNull()).thenReturn(List.of(sara));
+        // System returns an empty nested map structure
         when(communicationService.fetchStudentStatusMap()).thenReturn(Map.of());
         when(bookingRepository.findByStudentId(1L)).thenReturn(List.of());
         when(alertStudentRepository.findById("Sara Kim")).thenReturn(Optional.empty());
@@ -58,31 +61,30 @@ class BrevoSyncEngineServiceTest {
         ArgumentCaptor<AlertStudent> saved = ArgumentCaptor.forClass(AlertStudent.class);
         verify(alertStudentRepository).save(saved.capture());
         assertThat(saved.getValue().isLapsedNow()).isTrue();
+        assertThat(saved.getValue().isLapsedStatus()).isFalse(); // Defaults to Active
     }
 
     @Test
-    void student_with_recent_confirmed_booking_is_not_lapsed() {
+    void student_with_recent_confirmed_booking_is_cleared_from_alerts() {
         Student active = makeStudent(2L, "John Park", "VICI-0002");
-        // booking from 5 days ago, well within the 14 day window
         Booking recent = makeBooking("confirmed", LocalDateTime.now().minusDays(5));
 
         when(studentRepository.findByDeletedAtIsNull()).thenReturn(List.of(active));
+        // Brevo defaults to Active, Local rules calculate Active (Not Lapsed) -> Systems In Sync!
         when(communicationService.fetchStudentStatusMap()).thenReturn(Map.of());
         when(bookingRepository.findByStudentId(2L)).thenReturn(List.of(recent));
-        when(alertStudentRepository.findById("John Park")).thenReturn(Optional.empty());
-        when(alertStudentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         syncEngine.runTwoWayReconciliationSync();
 
-        ArgumentCaptor<AlertStudent> saved = ArgumentCaptor.forClass(AlertStudent.class);
-        verify(alertStudentRepository).save(saved.capture());
-        assertThat(saved.getValue().isLapsedNow()).isFalse();
+        // VERIFICATION UPDATE: Since the systems are in sync, the proactive cleanup engine 
+        // drops the row from the alert database and bypasses the save method entirely!
+        verify(alertStudentRepository, times(1)).deleteById("John Park");
+        verify(alertStudentRepository, never()).save(any());
     }
 
     @Test
     void cancelled_bookings_dont_count_toward_activity() {
         Student s = makeStudent(3L, "Amy Chen", "VICI-0003");
-        // only has cancelled bookings, should still be flagged lapsed
         Booking cancelled = makeBooking("cancelled", LocalDateTime.now().minusDays(3));
 
         when(studentRepository.findByDeletedAtIsNull()).thenReturn(List.of(s));
@@ -95,7 +97,6 @@ class BrevoSyncEngineServiceTest {
 
         ArgumentCaptor<AlertStudent> saved = ArgumentCaptor.forClass(AlertStudent.class);
         verify(alertStudentRepository).save(saved.capture());
-        // cancelled bookings shouldn't save her from being flagged
         assertThat(saved.getValue().isLapsedNow()).isTrue();
     }
 
@@ -104,10 +105,13 @@ class BrevoSyncEngineServiceTest {
         Student s = makeStudent(4L, "Mike Davis", "VICI-0004");
         Booking upcoming = makeBooking("confirmed", LocalDateTime.now().plusDays(3));
 
-        // Brevo says this student is lapsed even though they have an upcoming booking locally
+        // UPGRADED LINE 110: Stub uses account identifier to secure the sibling nested map
+        Map<String, Map<String, String>> mockNestedMap = Map.of(
+            "VICI-0004", Map.of("mike davis", "Lapsed")
+        );
+
         when(studentRepository.findByDeletedAtIsNull()).thenReturn(List.of(s));
-        when(communicationService.fetchStudentStatusMap())
-                .thenReturn(Map.of("mike davis", "Lapsed"));
+        when(communicationService.fetchStudentStatusMap()).thenReturn(mockNestedMap);
         when(bookingRepository.findByStudentId(4L)).thenReturn(List.of(upcoming));
         when(alertStudentRepository.findById("Mike Davis")).thenReturn(Optional.empty());
         when(alertStudentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -116,8 +120,8 @@ class BrevoSyncEngineServiceTest {
 
         ArgumentCaptor<AlertStudent> saved = ArgumentCaptor.forClass(AlertStudent.class);
         verify(alertStudentRepository).save(saved.capture());
-        assertThat(saved.getValue().isLapsedNow()).isFalse();
-        assertThat(saved.getValue().isLapsedStatus()).isTrue();
+        assertThat(saved.getValue().isLapsedNow()).isFalse(); // Local bookings say Active
+        assertThat(saved.getValue().isLapsedStatus()).isTrue();  // Brevo say Lapsed -> Mismatch detected!
     }
 
     @Test
@@ -127,7 +131,6 @@ class BrevoSyncEngineServiceTest {
         when(studentRepository.findByDeletedAtIsNull()).thenReturn(List.of(broken));
         when(communicationService.fetchStudentStatusMap()).thenReturn(Map.of());
 
-        // should silently skip without blowing up
         syncEngine.runTwoWayReconciliationSync();
 
         verify(alertStudentRepository, never()).save(any());
@@ -155,13 +158,11 @@ class BrevoSyncEngineServiceTest {
         when(studentRepository.findByDeletedAtIsNull()).thenReturn(List.of(s));
         when(communicationService.fetchStudentStatusMap()).thenReturn(Map.of());
         when(bookingRepository.findByStudentId(6L)).thenReturn(List.of());
-        // returns the existing record this time, not empty
         when(alertStudentRepository.findById("Lisa Wong")).thenReturn(Optional.of(existing));
         when(alertStudentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         syncEngine.runTwoWayReconciliationSync();
 
-        // should save once (update), not create a new one
         verify(alertStudentRepository, times(1)).save(any());
     }
 }
