@@ -4,6 +4,7 @@ import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
 import ca.vicilearning.dashboard.domain.Invoice;
 import ca.vicilearning.dashboard.domain.InvoiceRepository;
+import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
 import org.springframework.stereotype.Service;
@@ -38,12 +39,29 @@ public class DashboardMetricsService {
     private final BookingRepository bookingRepo;
     private final StudentRepository studentRepo;
     private final InvoiceRepository invoiceRepo;
+    private final ServiceRepository serviceRepo;
 
     public DashboardMetricsService(BookingRepository bookingRepo, StudentRepository studentRepo,
-                                    InvoiceRepository invoiceRepo) {
+                                    InvoiceRepository invoiceRepo, ServiceRepository serviceRepo) {
         this.bookingRepo = bookingRepo;
         this.studentRepo = studentRepo;
         this.invoiceRepo = invoiceRepo;
+        this.serviceRepo = serviceRepo;
+    }
+
+    /**
+     * Distinct non-blank service locations (the export's "Service category" column — At Home /
+     * Virtual Tutoring / VICI Learning Centre), sorted, for the filter dropdown. Reads active
+     * services only.
+     */
+    public List<String> serviceLocations() {
+        return serviceRepo.findByDeletedAtIsNull().stream()
+                .map(ca.vicilearning.dashboard.domain.Service::getLocation)
+                .filter(Objects::nonNull)
+                .filter(l -> !l.isBlank())
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
     }
 
     // ── Public metrics ─────────────────────────────────────────────────────────
@@ -90,6 +108,15 @@ public class DashboardMetricsService {
      * filter (the "BOOKED &lt;date&gt;" columns she used to fill in by hand, now computed at any granularity).
      */
     public List<PeriodHours> hoursByPeriod(PeriodUnit unit, int periodsBack, int periodsAhead) {
+        return hoursByPeriod(unit, periodsBack, periodsAhead, null);
+    }
+
+    /**
+     * As {@link #hoursByPeriod(PeriodUnit, int, int)} but restricted to bookings whose service is in
+     * the given location (the export's "Service category" — At Home / Virtual / Centre). A null or
+     * blank {@code location} means no filter. Backs Sara's "filter hours booked by category" ask.
+     */
+    public List<PeriodHours> hoursByPeriod(PeriodUnit unit, int periodsBack, int periodsAhead, String location) {
         LocalDate currentBucket = bucketStart(unit, today());
         LocalDate firstBucket = stepBucket(unit, currentBucket, -periodsBack);
         LocalDate endExclusive = stepBucket(unit, currentBucket, periodsAhead + 1L);
@@ -101,7 +128,7 @@ public class DashboardMetricsService {
         }
 
         for (Booking bk : activeBetween(firstBucket, endExclusive)) {
-            if (!isCounted(bk)) continue;
+            if (!isCounted(bk) || !matchesLocation(bk, location)) continue;
             LocalDate bucket = bucketStart(unit, bk.getStartTime().toLocalDate());
             double[] cell = byBucket.get(bucket);
             if (cell != null) {
@@ -120,8 +147,14 @@ public class DashboardMetricsService {
      * "date range" filter option (a single totals summary, not a chart bucket).
      */
     public RangeHours hoursInRange(LocalDate fromInclusive, LocalDate toExclusive) {
+        return hoursInRange(fromInclusive, toExclusive, null);
+    }
+
+    /** As {@link #hoursInRange(LocalDate, LocalDate)} but restricted to a service location filter. */
+    public RangeHours hoursInRange(LocalDate fromInclusive, LocalDate toExclusive, String location) {
         List<Booking> bookings = activeBetween(fromInclusive, toExclusive).stream()
                 .filter(this::isCounted)
+                .filter(b -> matchesLocation(b, location))
                 .toList();
         double hours = bookings.stream().mapToDouble(this::hoursOf).sum();
         return new RangeHours(round1(hours), bookings.size());
@@ -157,8 +190,13 @@ public class DashboardMetricsService {
 
     /** Per-tutor hours/sessions for the current bucket of {@code unit} (this week/month/year). */
     public List<TutorHours> tutorHoursForPeriod(PeriodUnit unit, boolean sortByName) {
+        return tutorHoursForPeriod(unit, sortByName, null);
+    }
+
+    /** As {@link #tutorHoursForPeriod(PeriodUnit, boolean)} but restricted to a service location. */
+    public List<TutorHours> tutorHoursForPeriod(PeriodUnit unit, boolean sortByName, String location) {
         LocalDate start = bucketStart(unit, today());
-        return tutorHoursForRange(start, stepBucket(unit, start, 1), sortByName);
+        return tutorHoursForRange(start, stepBucket(unit, start, 1), sortByName, location);
     }
 
     /**
@@ -167,9 +205,15 @@ public class DashboardMetricsService {
      * (her "sort by tutor").
      */
     public List<TutorHours> tutorHoursForRange(LocalDate fromInclusive, LocalDate toExclusive, boolean sortByName) {
+        return tutorHoursForRange(fromInclusive, toExclusive, sortByName, null);
+    }
+
+    /** As {@link #tutorHoursForRange(LocalDate, LocalDate, boolean)} but with a service-location filter. */
+    public List<TutorHours> tutorHoursForRange(LocalDate fromInclusive, LocalDate toExclusive,
+                                               boolean sortByName, String location) {
         Map<String, double[]> byTutor = new LinkedHashMap<>();
         for (Booking b : activeBetween(fromInclusive, toExclusive)) {
-            if (!isCounted(b)) continue;
+            if (!isCounted(b) || !matchesLocation(b, location)) continue;
             String tutor = b.getTutor() != null ? b.getTutor().getName() : "Unassigned";
             double[] cell = byTutor.computeIfAbsent(tutor, k -> new double[]{0.0, 0.0});
             cell[0] += hoursOf(b);
@@ -352,6 +396,16 @@ public class DashboardMetricsService {
 
     private boolean isCancelled(Booking b) {
         return "cancelled".equalsIgnoreCase(b.getStatus());
+    }
+
+    /**
+     * True when the booking's service is in {@code location} (case-insensitive). A null/blank
+     * location means "no filter" (matches everything). The service is join-fetched by
+     * {@code activeBetween}, so reading its location is safe with open-in-view off.
+     */
+    private boolean matchesLocation(Booking b, String location) {
+        if (location == null || location.isBlank()) return true;
+        return b.getService() != null && location.equalsIgnoreCase(b.getService().getLocation());
     }
 
     /** Hours from the booking's actual duration, falling back to the service's configured length. */

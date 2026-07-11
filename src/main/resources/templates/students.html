@@ -53,23 +53,40 @@
         <!-- ── Period filter: week / month / year / custom date range ──────────── -->
         <div class="vici-panel mb-3">
             <div class="d-flex flex-wrap align-items-center gap-2" style="padding:14px 18px;">
-                <a th:href="@{/students(unit='week', sort=${selectedSort})}"
+                <a th:href="@{/students(unit='week', sort=${selectedSort}, location=${selectedLocation})}"
                    th:class="${!customRange and selectedUnit == 'week'} ? 'btn-vici' : 'btn-vici-outline'">Week</a>
-                <a th:href="@{/students(unit='month', sort=${selectedSort})}"
+                <a th:href="@{/students(unit='month', sort=${selectedSort}, location=${selectedLocation})}"
                    th:class="${!customRange and selectedUnit == 'month'} ? 'btn-vici' : 'btn-vici-outline'">Month</a>
-                <a th:href="@{/students(unit='year', sort=${selectedSort})}"
+                <a th:href="@{/students(unit='year', sort=${selectedSort}, location=${selectedLocation})}"
                    th:class="${!customRange and selectedUnit == 'year'} ? 'btn-vici' : 'btn-vici-outline'">Year</a>
 
                 <form th:action="@{/students}" method="get" class="d-flex align-items-center gap-2 ms-md-3">
                     <input type="hidden" name="sort" th:value="${selectedSort}">
+                    <input type="hidden" name="location" th:value="${selectedLocation}">
                     <input type="date" name="from" th:value="${rangeFrom}" class="form-control form-control-sm" style="width:150px;">
                     <span class="text-muted" style="font-size:12px;">to</span>
                     <input type="date" name="to" th:value="${rangeTo}" class="form-control form-control-sm" style="width:150px;">
                     <button type="submit"
                             th:class="${customRange} ? 'btn-vici' : 'btn-vici-outline'">Date range</button>
                 </form>
-                <a th:if="${customRange}" th:href="@{/students(sort=${selectedSort})}"
+                <a th:if="${customRange}" th:href="@{/students(sort=${selectedSort}, location=${selectedLocation})}"
                    class="text-muted" style="font-size:12px;">Clear range</a>
+
+                <!-- Service-category (location) dropdown — a picker so staff don't scroll (Meeting #3).
+                     Submits on change, preserving the current period/range + sort. -->
+                <form th:action="@{/students}" method="get" class="d-flex align-items-center gap-2 ms-md-auto">
+                    <input type="hidden" name="sort" th:value="${selectedSort}">
+                    <input type="hidden" th:if="${!customRange}" name="unit" th:value="${selectedUnit}">
+                    <input type="hidden" th:if="${customRange}" name="from" th:value="${rangeFrom}">
+                    <input type="hidden" th:if="${customRange}" name="to" th:value="${rangeTo}">
+                    <label class="text-muted" style="font-size:12px;">Service category</label>
+                    <select name="location" class="form-select form-select-sm" style="width:auto;"
+                            onchange="this.form.submit()">
+                        <option value="" th:selected="${selectedLocation == null}">All categories</option>
+                        <option th:each="loc : ${serviceLocations}" th:value="${loc}" th:text="${loc}"
+                                th:selected="${loc == selectedLocation}"></option>
+                    </select>
+                </form>
             </div>
         </div>
 
@@ -120,10 +137,10 @@
                             <p th:text="${#strings.capitalize(tutorPeriodLabel)}">—</p>
                         </div>
                         <div class="d-flex align-items-center gap-2">
-                            <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='hours')}"
+                            <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='hours', location=${selectedLocation})}"
                                th:class="${selectedSort == 'hours'} ? 'btn-vici' : 'btn-vici-outline'"
                                style="padding:3px 10px; font-size:11px; text-decoration:none;">Total</a>
-                            <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='name')}"
+                            <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='name', location=${selectedLocation})}"
                                th:class="${selectedSort == 'name'} ? 'btn-vici' : 'btn-vici-outline'"
                                style="padding:3px 10px; font-size:11px; text-decoration:none;">Tutor</a>
                         </div>

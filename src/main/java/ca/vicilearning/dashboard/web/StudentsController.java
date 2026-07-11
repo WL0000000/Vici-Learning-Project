@@ -41,12 +41,19 @@ public class StudentsController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "hours") String sort,
+            @RequestParam(required = false) String location,
             Model model) {
 
         model.addAttribute("overview", metrics.overview());
 
         boolean sortByName = "name".equalsIgnoreCase(sort);
         model.addAttribute("selectedSort", sortByName ? "name" : "hours");
+
+        // Service-category (location) filter: null/blank means "all". Options for the dropdown
+        // plus the current selection so the view can preserve it across the other filter links.
+        String locationFilter = (location == null || location.isBlank()) ? null : location;
+        model.addAttribute("serviceLocations", metrics.serviceLocations());
+        model.addAttribute("selectedLocation", locationFilter);
 
         boolean customRange = from != null && !from.isBlank() && to != null && !to.isBlank();
         model.addAttribute("customRange", customRange);
@@ -58,12 +65,12 @@ public class StudentsController {
             model.addAttribute("panelTitle", "Hours Booked (Date Range)");
             model.addAttribute("rangeFrom", fromDate);
             model.addAttribute("rangeTo", toDate);
-            model.addAttribute("rangeHours", metrics.hoursInRange(fromDate, toDate.plusDays(1)));
+            model.addAttribute("rangeHours", metrics.hoursInRange(fromDate, toDate.plusDays(1), locationFilter));
             model.addAttribute("periodSubtitle",
                     fromDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")) + " – "
                             + toDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")));
             model.addAttribute("tutorHours",
-                    metrics.tutorHoursForRange(fromDate, toDate.plusDays(1), sortByName));
+                    metrics.tutorHoursForRange(fromDate, toDate.plusDays(1), sortByName, locationFilter));
             model.addAttribute("tutorPeriodLabel", "selected range");
 
             // No bucket chart in custom-range mode — keep these present (empty) so the
@@ -90,7 +97,7 @@ public class StudentsController {
                 case YEAR -> YEARS_AHEAD;
             };
 
-            List<DashboardMetricsService.PeriodHours> buckets = metrics.hoursByPeriod(periodUnit, back, ahead);
+            List<DashboardMetricsService.PeriodHours> buckets = metrics.hoursByPeriod(periodUnit, back, ahead, locationFilter);
             DateTimeFormatter labelFmt = labelFormat(periodUnit);
 
             model.addAttribute("periodLabels",
@@ -107,7 +114,7 @@ public class StudentsController {
                 case YEAR -> YEARS_BACK + " years back · this year";
             });
 
-            model.addAttribute("tutorHours", metrics.tutorHoursForPeriod(periodUnit, sortByName));
+            model.addAttribute("tutorHours", metrics.tutorHoursForPeriod(periodUnit, sortByName, locationFilter));
             model.addAttribute("tutorPeriodLabel", switch (periodUnit) {
                 case WEEK -> "this week";
                 case MONTH -> "this month";
