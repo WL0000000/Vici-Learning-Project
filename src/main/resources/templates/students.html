@@ -229,7 +229,10 @@
                         <tr>
                             <th>Account ID</th>
                             <th>Students</th>
-                            <th class="text-end">Siblings</th>
+                            <th class="text-end">#</th>
+                            <th>Category</th>
+                            <th>Location</th>
+                            <th>Balance</th>
                             <th class="text-end">Sessions (wk)</th>
                             <th class="text-end">Hours (wk)</th>
                         </tr>
@@ -246,11 +249,24 @@
                                 </span>
                             </td>
                             <td class="text-end" th:text="${f.size()}">0</td>
+                            <!-- Compact distinct lists across the family's bookings (Meeting #3). -->
+                            <td class="text-muted"
+                                th:text="${#lists.isEmpty(f.categories)} ? '—' : ${#strings.listJoin(f.categories, ', ')}">—</td>
+                            <td class="text-muted"
+                                th:text="${#lists.isEmpty(f.locations)} ? '—' : ${#strings.listJoin(f.locations, ', ')}">—</td>
+                            <td>
+                                <span th:if="${#lists.isEmpty(f.membershipBalances)}" class="text-muted">—</span>
+                                <span th:each="bal,it : ${f.membershipBalances}">
+                                    <span class="status-pill"
+                                          th:classappend="${bal == 0} ? 'pill-cancelled' : 'pill-confirmed'"
+                                          th:text="${bal}">0</span>
+                                </span>
+                            </td>
                             <td class="text-end" th:text="${f.sessionsThisWeek}">0</td>
                             <td class="text-end" style="font-weight:700;" th:text="${f.hoursThisWeek}">0</td>
                         </tr>
                         <tr th:if="${#lists.isEmpty(families)}">
-                            <td colspan="5" class="text-center text-muted p-4">
+                            <td colspan="8" class="text-center text-muted p-4">
                                 No families — no Account_ID is shared by two or more students.
                             </td>
                         </tr>
