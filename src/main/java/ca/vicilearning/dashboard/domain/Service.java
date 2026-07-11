@@ -15,6 +15,15 @@ public class Service {
 
     private Integer durationMinutes;
 
+    // The session type from SimplyBook's "Category" column — e.g. "One-on-One" or "Study Club".
+    // Nullable: not every upstream service exposes it. (Meeting #3 export shape.)
+    private String category;
+
+    // The delivery mode / location from SimplyBook's "Service category" column — e.g. "At Home",
+    // "Virtual Tutoring", "VICI Learning Centre". Nullable for the same reason. Backs the
+    // service-category / location filter Sara asked for (Meeting #3).
+    private String location;
+
     @Column(nullable = false)
     private boolean active;
 
@@ -34,6 +43,12 @@ public class Service {
 
     public Integer getDurationMinutes() { return durationMinutes; }
     public void setDurationMinutes(Integer durationMinutes) { this.durationMinutes = durationMinutes; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getLocation() { return location; }
+    public void setLocation(String location) { this.location = location; }
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }

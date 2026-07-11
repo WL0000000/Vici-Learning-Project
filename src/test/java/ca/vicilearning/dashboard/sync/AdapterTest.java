@@ -195,6 +195,31 @@ class AdapterTest {
 
             assertThat(services.get(0).getDurationMinutes()).isNull();
         }
+
+        @Test
+        void parsesCategoryAndLocation_whenPresent() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    {"1":{"id":"1","name":"1hr Session","duration":"60","is_visible":"1",
+                          "category":"One-on-One","service_category":"At Home"}}
+                    """);
+
+            List<Service> services = adapter.toServices(json);
+
+            assertThat(services.get(0).getCategory()).isEqualTo("One-on-One");
+            assertThat(services.get(0).getLocation()).isEqualTo("At Home");
+        }
+
+        @Test
+        void categoryAndLocationAreNull_whenAbsent() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    {"1":{"id":"1","name":"Session","duration":"60","is_visible":"1"}}
+                    """);
+
+            List<Service> services = adapter.toServices(json);
+
+            assertThat(services.get(0).getCategory()).isNull();
+            assertThat(services.get(0).getLocation()).isNull();
+        }
     }
 
     // ── BookingAdapter ────────────────────────────────────────────────────────
