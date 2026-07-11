@@ -4,6 +4,8 @@ import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
 import ca.vicilearning.dashboard.domain.Invoice;
 import ca.vicilearning.dashboard.domain.InvoiceRepository;
+import ca.vicilearning.dashboard.domain.Membership;
+import ca.vicilearning.dashboard.domain.MembershipRepository;
 import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
@@ -23,6 +25,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Computes dashboard metrics from the local database — the layer that turns synced/seeded
@@ -40,13 +44,16 @@ public class DashboardMetricsService {
     private final StudentRepository studentRepo;
     private final InvoiceRepository invoiceRepo;
     private final ServiceRepository serviceRepo;
+    private final MembershipRepository membershipRepo;
 
     public DashboardMetricsService(BookingRepository bookingRepo, StudentRepository studentRepo,
-                                    InvoiceRepository invoiceRepo, ServiceRepository serviceRepo) {
+                                    InvoiceRepository invoiceRepo, ServiceRepository serviceRepo,
+                                    MembershipRepository membershipRepo) {
         this.bookingRepo = bookingRepo;
         this.studentRepo = studentRepo;
         this.invoiceRepo = invoiceRepo;
         this.serviceRepo = serviceRepo;
+        this.membershipRepo = membershipRepo;
     }
 
     /**
@@ -260,6 +267,13 @@ public class DashboardMetricsService {
     public List<FamilyGroup> familyGroups() {
         Map<Long, double[]> byStudent = hoursThisWeekByStudent();
 
+        // Per-student service categories/locations (from all bookings) and membership balances,
+        // built once so the rollup below is O(students) rather than querying per family.
+        Map<Long, Set<String>> categoriesByStudent = new LinkedHashMap<>();
+        Map<Long, Set<String>> locationsByStudent = new LinkedHashMap<>();
+        collectServiceAttrs(categoriesByStudent, locationsByStudent);
+        Map<Long, List<Integer>> balancesByStudent = membershipBalancesByStudent();
+
         // Preserve insertion order per key so members stay sorted by the pre-sorted stream below.
         Map<String, List<FamilyMember>> byAccount = new LinkedHashMap<>();
         studentRepo.findByDeletedAtIsNull().stream()
@@ -279,9 +293,46 @@ public class DashboardMetricsService {
                     List<FamilyMember> members = e.getValue();
                     int sessions = members.stream().mapToInt(FamilyMember::sessionsThisWeek).sum();
                     double hours = members.stream().mapToDouble(FamilyMember::hoursThisWeek).sum();
-                    return new FamilyGroup(e.getKey(), members, sessions, round1(hours));
+
+                    // Union the compact distinct lists across the family's members (Meeting #3 rows).
+                    Set<String> categories = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+                    Set<String> locations = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+                    List<Integer> balances = new ArrayList<>();
+                    for (FamilyMember m : members) {
+                        categories.addAll(categoriesByStudent.getOrDefault(m.id(), Set.of()));
+                        locations.addAll(locationsByStudent.getOrDefault(m.id(), Set.of()));
+                        balances.addAll(balancesByStudent.getOrDefault(m.id(), List.of()));
+                    }
+                    return new FamilyGroup(e.getKey(), members, sessions, round1(hours),
+                            List.copyOf(categories), List.copyOf(locations), balances);
                 })
                 .toList();
+    }
+
+    /** Fills {@code categories}/{@code locations} maps: studentId → distinct service attrs from bookings. */
+    private void collectServiceAttrs(Map<Long, Set<String>> categories, Map<Long, Set<String>> locations) {
+        for (Booking b : bookingRepo.findActiveWithStudentAndService()) {
+            if (!isCounted(b) || b.getStudent() == null || b.getService() == null) continue;
+            Long sid = b.getStudent().getId();
+            addAttr(categories, sid, b.getService().getCategory());
+            addAttr(locations, sid, b.getService().getLocation());
+        }
+    }
+
+    private void addAttr(Map<Long, Set<String>> map, Long studentId, String value) {
+        if (value == null || value.isBlank()) return;
+        map.computeIfAbsent(studentId, k -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)).add(value.trim());
+    }
+
+    /** studentId → each active membership's remaining prepaid sessions (the export's {@code rest}). */
+    private Map<Long, List<Integer>> membershipBalancesByStudent() {
+        Map<Long, List<Integer>> map = new LinkedHashMap<>();
+        for (Membership m : membershipRepo.findByDeletedAtIsNull()) {
+            // getStudent() returns the lazy proxy (or null); getId() on it needs no DB hit.
+            if (m.getStudent() == null || m.getRemainingCount() == null) continue;
+            map.computeIfAbsent(m.getStudent().getId(), k -> new ArrayList<>()).add(m.getRemainingCount());
+        }
+        return map;
     }
 
     /** This week's booked [hours, sessions] per active student id, cancellations excluded. */
@@ -473,9 +524,16 @@ public class DashboardMetricsService {
     public record StudentRow(Long id, String name, String accountId, String email, String phone,
                              int sessionsThisWeek, double hoursThisWeek) {}
 
-    /** A family: the students (siblings) sharing one Account_ID, with this week's combined totals. */
+    /**
+     * A family: the students (siblings) sharing one Account_ID, with this week's combined totals
+     * plus the compact distinct lists that mirror Sara's join sheet (Meeting #3): the service
+     * {@code categories} and {@code locations} seen across the family's bookings, and each
+     * membership's remaining prepaid-session {@code balances}.
+     */
     public record FamilyGroup(String accountId, List<FamilyMember> members,
-                              int sessionsThisWeek, double hoursThisWeek) {
+                              int sessionsThisWeek, double hoursThisWeek,
+                              List<String> categories, List<String> locations,
+                              List<Integer> membershipBalances) {
         public int size() { return members.size(); }
     }
 
