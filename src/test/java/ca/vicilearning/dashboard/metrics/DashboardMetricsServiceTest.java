@@ -4,6 +4,8 @@ import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
 import ca.vicilearning.dashboard.domain.Invoice;
 import ca.vicilearning.dashboard.domain.InvoiceRepository;
+import ca.vicilearning.dashboard.domain.Membership;
+import ca.vicilearning.dashboard.domain.MembershipRepository;
 import ca.vicilearning.dashboard.domain.Service;
 import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
@@ -31,6 +33,7 @@ class DashboardMetricsServiceTest {
     @Mock StudentRepository studentRepo;
     @Mock InvoiceRepository invoiceRepo;
     @Mock ServiceRepository serviceRepo;
+    @Mock MembershipRepository membershipRepo;
     @InjectMocks DashboardMetricsService service;
 
     private final LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
@@ -186,6 +189,45 @@ class DashboardMetricsServiceTest {
                 .containsExactly("Sam Tran", "Sara Tran");
         assertThat(tran.sessionsThisWeek()).isEqualTo(2);
         assertThat(tran.hoursThisWeek()).isEqualTo(3.0);
+    }
+
+    @Test
+    void familyGroups_aggregatesDistinctCategoriesLocationsAndBalances() {
+        Student sam = studentWithAccount(1L, "Sam Tran", "VICI-0001");
+        Student sara = studentWithAccount(2L, "Sara Tran", "VICI-0001");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(sam, sara));
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of());
+        // Category/location come from all the family's bookings; the duplicate collapses.
+        when(bookingRepo.findActiveWithStudentAndService()).thenReturn(List.of(
+                svcBooking(1, sam, "One-on-One", "Virtual Tutoring"),
+                svcBooking(2, sara, "Study Club", "At Home"),
+                svcBooking(3, sam, "One-on-One", "Virtual Tutoring")));
+        when(membershipRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                membership(sam, 8), membership(sara, 3)));
+
+        DashboardMetricsService.FamilyGroup fam = service.familyGroups().get(0);
+
+        // Distinct + sorted case-insensitively; balances collected per membership.
+        assertThat(fam.categories()).containsExactly("One-on-One", "Study Club");
+        assertThat(fam.locations()).containsExactly("At Home", "Virtual Tutoring");
+        assertThat(fam.membershipBalances()).containsExactlyInAnyOrder(8, 3);
+    }
+
+    private Booking svcBooking(long id, Student student, String category, String location) {
+        Booking b = booking(id, student, "confirmed", now, 60);
+        Service svc = new Service();
+        svc.setId(id);
+        svc.setCategory(category);
+        svc.setLocation(location);
+        b.setService(svc);
+        return b;
+    }
+
+    private Membership membership(Student student, int remaining) {
+        Membership m = new Membership();
+        m.setStudent(student);
+        m.setRemainingCount(remaining);
+        return m;
     }
 
     private Student studentWithAccount(long id, String name, String accountId) {

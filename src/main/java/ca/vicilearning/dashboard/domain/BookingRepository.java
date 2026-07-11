@@ -34,4 +34,17 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             """)
     List<Booking> findActiveWithRefsBetween(@Param("from") LocalDateTime from,
                                             @Param("to") LocalDateTime to);
+
+    /**
+     * All active (non-deleted) bookings with student + service eagerly fetched — lets the metrics
+     * layer read each booking's service category/location per student without an open transaction
+     * (open-in-view is off). No date window: the family rollup summarises a family's whole history.
+     */
+    @Query("""
+            select b from Booking b
+            join fetch b.student
+            join fetch b.service
+            where b.deletedAt is null
+            """)
+    List<Booking> findActiveWithStudentAndService();
 }
