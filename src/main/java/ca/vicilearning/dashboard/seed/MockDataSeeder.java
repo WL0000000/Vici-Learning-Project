@@ -74,13 +74,16 @@ public class MockDataSeeder implements ApplicationRunner {
             "Hannah Park", "Tariq Aziz", "Elena Petrova", "Sam Whitfield"
     };
 
-    // Service catalogue: {name, durationMinutes}. The 120-min entry is why hours must be
+    // Service catalogue: {name, durationMinutes, category, location} — modelled on the real
+    // Meeting #3 export so the category/location filter has realistic data. Two categories
+    // (One-on-One / Study Club) across four locations. The 120-min entry is why hours must be
     // derived from duration, not session count (a client requirement).
     private static final Object[][] SERVICE_DEFS = {
-            {"30min Tutoring Session", 30},
-            {"Virtual 1hr Tutoring Session", 60},
-            {"In-Person 1hr Tutoring Session", 60},
-            {"2hr Intensive Session", 120}
+            {"In-Person 1hr Tutoring Session (Single) for Members", 60, "One-on-One", "VICI Learning Centre"},
+            {"Virtual 1hr Tutoring Session (Single) for Members",   60, "One-on-One", "Virtual Tutoring"},
+            {"At-Home 1hr Tutoring Session (Single) for Members",   60, "One-on-One", "At Home"},
+            {"Study Club (1.5hrs)",                                 90, "Study Club", "VICI Learning Centre (Study Clubs)"},
+            {"2hr Intensive Session (Single) for Members",         120, "One-on-One", "VICI Learning Centre"}
     };
 
     private final TutorRepository      tutorRepo;
@@ -174,6 +177,8 @@ public class MockDataSeeder implements ApplicationRunner {
             s.setId((long) (i + 1));
             s.setName((String) SERVICE_DEFS[i][0]);
             s.setDurationMinutes((Integer) SERVICE_DEFS[i][1]);
+            s.setCategory((String) SERVICE_DEFS[i][2]);
+            s.setLocation((String) SERVICE_DEFS[i][3]);
             s.setActive(true);
             s.setSyncedAt(now);
             services.add(s);
@@ -372,13 +377,15 @@ public class MockDataSeeder implements ApplicationRunner {
         return memberships;
     }
 
-    // Heavier weighting toward the 1hr services, like a real tutoring schedule.
+    // Heavier weighting toward the 1hr services, like a real tutoring schedule. Indices match
+    // SERVICE_DEFS order, so every category/location appears in the booking data (for the filter).
     private Service weightedService(List<Service> services, Random rng) {
         double r = rng.nextDouble();
-        if (r < 0.15) return services.get(0);   // 30min
-        if (r < 0.55) return services.get(1);   // virtual 1hr
-        if (r < 0.85) return services.get(2);   // in-person 1hr
-        return services.get(3);                 // 2hr
+        if (r < 0.40) return services.get(0);   // in-person 1hr (VICI Learning Centre)
+        if (r < 0.65) return services.get(1);   // virtual 1hr
+        if (r < 0.80) return services.get(2);   // at-home 1hr
+        if (r < 0.92) return services.get(3);   // study club 1.5hr
+        return services.get(4);                 // 2hr intensive
     }
 
     private String emailFrom(String name, String domain) {
