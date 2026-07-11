@@ -4,6 +4,8 @@ import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
 import ca.vicilearning.dashboard.domain.Invoice;
 import ca.vicilearning.dashboard.domain.InvoiceRepository;
+import ca.vicilearning.dashboard.domain.Service;
+import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
 import ca.vicilearning.dashboard.domain.Tutor;
@@ -28,6 +30,7 @@ class DashboardMetricsServiceTest {
     @Mock BookingRepository bookingRepo;
     @Mock StudentRepository studentRepo;
     @Mock InvoiceRepository invoiceRepo;
+    @Mock ServiceRepository serviceRepo;
     @InjectMocks DashboardMetricsService service;
 
     private final LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
@@ -193,6 +196,23 @@ class DashboardMetricsServiceTest {
         return s;
     }
 
+    @Test
+    void hoursByPeriod_withLocation_countsOnlyThatLocation() {
+        // This week: 1h At Home + 2h Virtual. Filtering to "At Home" counts only the 1h one.
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of(
+                bookingAt(1, "confirmed", now, 60, "At Home"),
+                bookingAt(2, "confirmed", now, 120, "Virtual Tutoring")));
+
+        double allHours = service.hoursByPeriod(DashboardMetricsService.PeriodUnit.WEEK, 0, 0, null)
+                .get(0).hours();
+        DashboardMetricsService.PeriodHours atHome =
+                service.hoursByPeriod(DashboardMetricsService.PeriodUnit.WEEK, 0, 0, "At Home").get(0);
+
+        assertThat(allHours).isEqualTo(3.0);
+        assertThat(atHome.hours()).isEqualTo(1.0);
+        assertThat(atHome.sessions()).isEqualTo(1);
+    }
+
     private Booking booking(long id, Student student, String status, LocalDateTime start, int minutes) {
         Booking b = new Booking();
         b.setId(id);
@@ -200,6 +220,16 @@ class DashboardMetricsServiceTest {
         b.setStatus(status);
         b.setStartTime(start);
         b.setEndTime(start.plusMinutes(minutes));
+        return b;
+    }
+
+    /** A confirmed booking whose service is in the given location — for the location-filter test. */
+    private Booking bookingAt(long id, String status, LocalDateTime start, int minutes, String location) {
+        Booking b = booking(id, null, status, start, minutes);
+        Service svc = new Service();
+        svc.setId(id);
+        svc.setLocation(location);
+        b.setService(svc);
         return b;
     }
 
