@@ -426,6 +426,86 @@ body {
   height: 58px;
 }
 
+.notion-tutor-list {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.notion-tutor-card {
+  border: 1px solid var(--vici-border);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.notion-tutor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--vici-border);
+  background: #faf8f4;
+}
+
+.notion-tutor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.notion-tutor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+}
+
+.notion-tutor-grid section {
+  padding: 12px 14px;
+  border-right: 1px solid var(--vici-border);
+}
+
+.notion-tutor-grid section:last-child {
+  border-right: none;
+}
+
+.notion-tutor-grid h3 {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--vici-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 8px;
+}
+
+.notion-tutor-grid dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.notion-tutor-grid dl > div {
+  display: grid;
+  grid-template-columns: minmax(88px, 35%) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.notion-tutor-grid dt {
+  color: var(--vici-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.notion-tutor-grid dd {
+  color: var(--vici-text);
+  font-size: 12.5px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .table-link {
   color: var(--vici-navy);
   font-size: 12px;
@@ -472,6 +552,37 @@ body {
 
 .btn-vici-outline:hover {
   background: var(--vici-bg);
+}
+
+@media (max-width: 1100px) {
+  .notion-tutor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .notion-tutor-grid section {
+    border-right: none;
+    border-bottom: 1px solid var(--vici-border);
+  }
+
+  .notion-tutor-grid section:last-child {
+    border-bottom: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .notion-tutor-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .notion-tutor-actions {
+    justify-content: flex-start;
+  }
+
+  .notion-tutor-grid dl > div {
+    grid-template-columns: 1fr;
+    gap: 1px;
+  }
 }
 
 /* logout button in topbar */
