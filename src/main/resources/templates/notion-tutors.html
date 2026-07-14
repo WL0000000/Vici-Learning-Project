@@ -57,7 +57,7 @@
             <div class="vici-panel-header">
                 <div>
                     <h2>Tutors</h2>
-                    <p>Name, subject, email, and current Notion status</p>
+                    <p>Contact info, tutoring profile, and role details from Notion</p>
                 </div>
             </div>
 
@@ -65,42 +65,74 @@
                 No tutors found in Notion.
             </div>
 
-            <div class="table-responsive" th:if="${!#lists.isEmpty(tutors)}">
-                <table class="table sessions-table tutors-table mb-0">
-                    <thead>
-                        <tr>
-                            <th>Tutor</th>
-                            <th>Email</th>
-                            <th>Subject</th>
-                            <th>Status</th>
-                            <th>Notion</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr th:each="tutor : ${tutors}">
-                            <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="student-avatar"
-                                         th:text="${#strings.substring((#strings.isEmpty(tutor.name) ? '?' : tutor.name), 0, 1)}">T</div>
-                                    <div>
-                                        <div class="student-name" th:text="${#strings.isEmpty(tutor.name) ? 'Untitled tutor' : tutor.name}">Tutor</div>
-                                        <div class="student-sub" th:text="${tutor.id}">page-id</div>
-                                    </div>
+            <div class="notion-tutor-list" th:if="${!#lists.isEmpty(tutors)}">
+                <article class="notion-tutor-card" th:each="tutor : ${tutors}">
+                    <div class="notion-tutor-head">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="student-avatar"
+                                 th:text="${#strings.substring((#strings.isEmpty(tutor.name) ? '?' : tutor.name), 0, 1)}">T</div>
+                            <div>
+                                <div class="student-name" th:text="${#strings.isEmpty(tutor.name) ? 'Untitled tutor' : tutor.name}">Tutor</div>
+                                <div class="student-sub" th:text="${#strings.isEmpty(tutor.tutorId) ? tutor.id : 'Tutor ID ' + tutor.tutorId}">Tutor ID</div>
+                            </div>
+                        </div>
+                        <div class="notion-tutor-actions">
+                            <span class="status-pill"
+                                  th:classappend="${tutor.status == 'Active' ? ' pill-confirmed' : (tutor.status == 'Inactive' ? ' pill-cancelled' : ' pill-pending')}"
+                                  th:text="${#strings.isEmpty(tutor.status) ? 'Unknown' : tutor.status}">Status</span>
+                            <a class="table-link" th:href="${tutor.url}" target="_blank" rel="noopener noreferrer">Notion</a>
+                        </div>
+                    </div>
+
+                    <div class="notion-tutor-grid">
+                        <section>
+                            <h3>Contact</h3>
+                            <dl>
+                                <div><dt>Email</dt><dd th:text="${#strings.isEmpty(tutor.email) ? '-' : tutor.email}">email</dd></div>
+                                <div><dt>Phone</dt><dd th:text="${#strings.isEmpty(tutor.phone) ? '-' : tutor.phone}">phone</dd></div>
+                                <div><dt>City</dt><dd th:text="${#strings.isEmpty(tutor.city) ? '-' : tutor.city}">city</dd></div>
+                                <div><dt>Postal Code</dt><dd th:text="${#strings.isEmpty(tutor.postalCode) ? '-' : tutor.postalCode}">postal</dd></div>
+                                <div><dt>Street Address</dt><dd th:text="${#strings.isEmpty(tutor.streetAddress) ? '-' : tutor.streetAddress}">address</dd></div>
+                            </dl>
+                        </section>
+
+                        <section>
+                            <h3>Tutoring Profile</h3>
+                            <dl>
+                                <div><dt>Bio</dt><dd th:text="${#strings.isEmpty(tutor.oneSentenceBio) ? '-' : tutor.oneSentenceBio}">bio</dd></div>
+                                <div><dt>Languages</dt><dd th:text="${#strings.isEmpty(tutor.languages) ? '-' : tutor.languages}">languages</dd></div>
+                                <div><dt>Subjects</dt><dd th:text="${#strings.isEmpty(tutor.subjects) ? '-' : tutor.subjects}">subjects</dd></div>
+                                <div><dt>At-Home</dt><dd th:text="${#strings.isEmpty(tutor.atHomeTutoring) ? '-' : tutor.atHomeTutoring}">at-home</dd></div>
+                                <div><dt>Centre</dt><dd th:text="${#strings.isEmpty(tutor.centreTutoring) ? '-' : tutor.centreTutoring}">centre</dd></div>
+                                <div><dt>Virtual</dt><dd th:text="${#strings.isEmpty(tutor.virtualTutoring) ? '-' : tutor.virtualTutoring}">virtual</dd></div>
+                                <div>
+                                    <dt>Booking</dt>
+                                    <dd>
+                                        <span th:if="${#strings.isEmpty(tutor.bookingLink)}">-</span>
+                                        <a th:if="${!#strings.isEmpty(tutor.bookingLink)}" class="table-link" th:href="${tutor.bookingLink}" target="_blank" rel="noopener noreferrer">Open</a>
+                                    </dd>
                                 </div>
-                            </td>
-                            <td class="text-muted" th:text="${#strings.isEmpty(tutor.email) ? '-' : tutor.email}">email</td>
-                            <td class="text-muted" th:text="${#strings.isEmpty(tutor.subject) ? '-' : tutor.subject}">subject</td>
-                            <td>
-                                <span class="status-pill"
-                                      th:classappend="${tutor.status == 'Active' ? ' pill-confirmed' : (tutor.status == 'Inactive' ? ' pill-cancelled' : ' pill-pending')}"
-                                      th:text="${#strings.isEmpty(tutor.status) ? 'Unknown' : tutor.status}">Status</span>
-                            </td>
-                            <td>
-                                <a class="table-link" th:href="${tutor.url}" target="_blank" rel="noopener noreferrer">Open</a>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                            </dl>
+                        </section>
+
+                        <section>
+                            <h3>Role Details</h3>
+                            <dl>
+                                <div><dt>Start Date</dt><dd th:text="${#strings.isEmpty(tutor.startDate) ? '-' : tutor.startDate}">start</dd></div>
+                                <div><dt>End Date</dt><dd th:text="${#strings.isEmpty(tutor.endDate) ? '-' : tutor.endDate}">end</dd></div>
+                                <div><dt>At-Home Rate</dt><dd th:text="${#strings.isEmpty(tutor.atHomeRate) ? '-' : tutor.atHomeRate}">rate</dd></div>
+                                <div><dt>Virtual/Centre Rate</dt><dd th:text="${#strings.isEmpty(tutor.virtualCentreRate) ? '-' : tutor.virtualCentreRate}">rate</dd></div>
+                                <div><dt>Support Rate</dt><dd th:text="${#strings.isEmpty(tutor.supportPayRate) ? '-' : tutor.supportPayRate}">rate</dd></div>
+                                <div><dt>Person</dt><dd th:text="${#strings.isEmpty(tutor.person) ? '-' : tutor.person}">person</dd></div>
+                                <div><dt>Vici Role</dt><dd th:text="${#strings.isEmpty(tutor.viciRole) ? '-' : tutor.viciRole}">role</dd></div>
+                                <div><dt>Tutor Profile</dt><dd th:text="${#strings.isEmpty(tutor.tutorProfile) ? '-' : tutor.tutorProfile}">profile</dd></div>
+                                <div><dt>Tutor Role</dt><dd th:text="${#strings.isEmpty(tutor.tutorRole) ? '-' : tutor.tutorRole}">role</dd></div>
+                                <div><dt>Assigned Admin</dt><dd th:text="${#strings.isEmpty(tutor.assignedAdmin) ? '-' : tutor.assignedAdmin}">admin</dd></div>
+                                <div><dt>Admin Notes</dt><dd th:text="${#strings.isEmpty(tutor.adminNotes) ? '-' : tutor.adminNotes}">notes</dd></div>
+                            </dl>
+                        </section>
+                    </div>
+                </article>
             </div>
         </div>
     </main>
