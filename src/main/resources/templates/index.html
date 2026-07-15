@@ -90,19 +90,25 @@
                         <a href="/comms/review" class="text-decoration-none" style="font-size:12.5px; font-weight:700; color: var(--vici-navy);">View all</a>
                     </div>
 
-                    <!-- now wired up, no booking 21+ days and 3+ cancellations are real, calculated from booking history -->
+                    <!-- wired up: NO_BOOKING (21+ days) and CANCELLATIONS from booking history,
+                         MEMBERSHIP_EMPTY/LOW from prepaid-session balances (Meeting #3 credit model). -->
                     <div th:each="item : ${actionItems}" class="flagged-row">
                         <div class="flex-grow-1">
                             <div class="d-flex align-items-center gap-2">
                                 <span class="flag-name" th:text="${item.studentName}">—</span>
-                                <span th:if="${item.type == 'NO_BOOKING'}" class="badge-urgent ms-auto">Urgent</span>
+                                <!-- Urgent = a hard blocker: no bookings, or 0 prepaid sessions (can't book). -->
+                                <span th:if="${item.type == 'NO_BOOKING' or item.type == 'MEMBERSHIP_EMPTY'}"
+                                      class="badge-urgent ms-auto">Urgent</span>
                             </div>
                             <div class="flag-reason" th:text="${item.reason}">—</div>
                             <div class="flag-meta" th:if="${item.lastSession != null}"
                                  th:text="'Last session: ' + ${#temporals.format(item.lastSession, 'MMM d')}">—</div>
                             <div class="flag-meta" th:if="${item.type == 'CANCELLATIONS'}">Pattern flag</div>
+                            <div class="flag-meta" th:if="${item.type == 'MEMBERSHIP_EMPTY' or item.type == 'MEMBERSHIP_LOW'}">Prepaid balance</div>
                         </div>
-                        <button class="btn-vici-outline" th:text="${item.type == 'NO_BOOKING'} ? 'Reach out' : 'Review'">—</button>
+                        <button class="btn-vici-outline"
+                                th:text="${item.type == 'NO_BOOKING'} ? 'Reach out'
+                                       : (${item.type == 'MEMBERSHIP_EMPTY' or item.type == 'MEMBERSHIP_LOW'} ? 'Request payment' : 'Review')">—</button>
                     </div>
                     <div th:if="${#lists.isEmpty(actionItems)}" class="text-center text-muted" style="padding:24px;">
                         Nothing needs attention right now.

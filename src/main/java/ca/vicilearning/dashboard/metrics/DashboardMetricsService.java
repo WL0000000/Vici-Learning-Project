@@ -9,6 +9,7 @@ import ca.vicilearning.dashboard.domain.MembershipRepository;
 import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -46,14 +47,26 @@ public class DashboardMetricsService {
     private final ServiceRepository serviceRepo;
     private final MembershipRepository membershipRepo;
 
+    // A family with this many (or fewer) prepaid sessions left is "running low" and gets flagged;
+    // 0 is a separate, higher-priority "can't book" alert. Configurable so staff can tune it once a
+    // rules engine exists. (Meeting #3 confirmed the credit model, so this alerting is valid.)
+    private final int membershipLowThreshold;
+
+    // Action-item severities (sort key, higher = shown first). Membership problems rank high
+    // because a family at/near 0 literally can't book more sessions.
+    private static final int SEVERITY_MEMBERSHIP_EMPTY = 1000;
+    private static final int SEVERITY_MEMBERSHIP_LOW = 500;
+
     public DashboardMetricsService(BookingRepository bookingRepo, StudentRepository studentRepo,
                                     InvoiceRepository invoiceRepo, ServiceRepository serviceRepo,
-                                    MembershipRepository membershipRepo) {
+                                    MembershipRepository membershipRepo,
+                                    @Value("${metrics.membership-low-threshold:2}") int membershipLowThreshold) {
         this.bookingRepo = bookingRepo;
         this.studentRepo = studentRepo;
         this.invoiceRepo = invoiceRepo;
         this.serviceRepo = serviceRepo;
         this.membershipRepo = membershipRepo;
+        this.membershipLowThreshold = membershipLowThreshold;
     }
 
     /**
@@ -324,12 +337,22 @@ public class DashboardMetricsService {
         map.computeIfAbsent(studentId, k -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)).add(value.trim());
     }
 
-    /** studentId → each active membership's remaining prepaid sessions (the export's {@code rest}). */
+    /** studentId → each membership's remaining prepaid sessions (the export's {@code rest}). */
     private Map<Long, List<Integer>> membershipBalancesByStudent() {
+        return membershipBalancesByStudent(false);
+    }
+
+    /**
+     * studentId → remaining prepaid sessions per membership. When {@code activeOnly}, cancelled
+     * memberships are skipped — used by the low/zero-balance alerting, which shouldn't flag a
+     * family whose membership is already cancelled.
+     */
+    private Map<Long, List<Integer>> membershipBalancesByStudent(boolean activeOnly) {
         Map<Long, List<Integer>> map = new LinkedHashMap<>();
         for (Membership m : membershipRepo.findByDeletedAtIsNull()) {
             // getStudent() returns the lazy proxy (or null); getId() on it needs no DB hit.
             if (m.getStudent() == null || m.getRemainingCount() == null) continue;
+            if (activeOnly && !m.isActive()) continue;
             map.computeIfAbsent(m.getStudent().getId(), k -> new ArrayList<>()).add(m.getRemainingCount());
         }
         return map;
@@ -349,10 +372,11 @@ public class DashboardMetricsService {
     }
 
     /**
-     * Students needing attention, getting this from real booking history:
+     * Students/families needing attention:
      *  - no booking in 21+ days (using their most recent active booking)
      *  - 3+ cancellations this calendar month
-     * Sorted worst-first (longest gap / most cancellations first).
+     *  - membership balance at 0 ("can't book") or at/below the configurable low threshold
+     * Sorted worst-first by severity (membership problems rank highest).
      */
     public List<ActionItem> actionRequired() {
         LocalDate monthStart = today().withDayOfMonth(1);
@@ -360,6 +384,7 @@ public class DashboardMetricsService {
 
         Map<Long, LocalDateTime> lastBookingByStudent = new LinkedHashMap<>();
         Map<Long, Integer> cancellationsThisMonth = new LinkedHashMap<>();
+        Map<Long, List<Integer>> balancesByStudent = membershipBalancesByStudent(true);
 
         for (Booking b : bookingRepo.findByDeletedAtIsNull()) {
             Long sid = b.getStudent().getId();
@@ -391,6 +416,19 @@ public class DashboardMetricsService {
             if (cancels >= 3) {
                 items.add(new ActionItem(s.getId(), s.getName(), "CANCELLATIONS",
                         cancels + " cancellations this month", null, cancels));
+            }
+
+            // One alert per low/empty active membership the student owns ("can't book at 0").
+            for (int balance : balancesByStudent.getOrDefault(s.getId(), List.of())) {
+                if (balance <= 0) {
+                    items.add(new ActionItem(s.getId(), s.getName(), "MEMBERSHIP_EMPTY",
+                            "Membership empty — 0 sessions left (can't book)", null,
+                            SEVERITY_MEMBERSHIP_EMPTY));
+                } else if (balance <= membershipLowThreshold) {
+                    items.add(new ActionItem(s.getId(), s.getName(), "MEMBERSHIP_LOW",
+                            "Membership low — " + balance + (balance == 1 ? " session" : " sessions") + " left",
+                            null, SEVERITY_MEMBERSHIP_LOW));
+                }
             }
         }
 
