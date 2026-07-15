@@ -13,8 +13,8 @@ public interface MembershipRepository extends JpaRepository<Membership, Long> {
     List<Membership> findByStudentIdAndDeletedAtIsNull(Long studentId);
 
     // Active memberships at/below a balance threshold — the "running low / can't book at 0"
-    // families a rules engine could surface. PROVISIONAL and currently unused: it assumes the
-    // credit model, which the client says may no longer apply. Do not wire into alerting until
-    // the membership model is confirmed (see Membership javadoc).
+    // families. The credit model is CONFIRMED (Meeting #3), so this alerting is valid;
+    // DashboardMetricsService.actionRequired() surfaces it (via its own per-student map so it can
+    // read the student name without the lazy Membership.student proxy).
     List<Membership> findByActiveTrueAndDeletedAtIsNullAndRemainingCountLessThanEqual(int threshold);
 }
