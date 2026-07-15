@@ -11,9 +11,9 @@ import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
 import ca.vicilearning.dashboard.domain.Tutor;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -34,9 +34,18 @@ class DashboardMetricsServiceTest {
     @Mock InvoiceRepository invoiceRepo;
     @Mock ServiceRepository serviceRepo;
     @Mock MembershipRepository membershipRepo;
-    @InjectMocks DashboardMetricsService service;
+    DashboardMetricsService service;
+
+    // Membership low-balance threshold of 2 for tests (a family with ≤2 sessions left is "low").
+    private static final int LOW_THRESHOLD = 2;
 
     private final LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+
+    @BeforeEach
+    void setUp() {
+        service = new DashboardMetricsService(
+                bookingRepo, studentRepo, invoiceRepo, serviceRepo, membershipRepo, LOW_THRESHOLD);
+    }
 
     @Test
     void overview_countsSessionsAndHours_excludingCancelled() {
@@ -224,9 +233,14 @@ class DashboardMetricsServiceTest {
     }
 
     private Membership membership(Student student, int remaining) {
+        return membership(student, remaining, true);
+    }
+
+    private Membership membership(Student student, int remaining, boolean active) {
         Membership m = new Membership();
         m.setStudent(student);
         m.setRemainingCount(remaining);
+        m.setActive(active);
         return m;
     }
 
@@ -330,6 +344,33 @@ class DashboardMetricsServiceTest {
         List<DashboardMetricsService.ActionItem> items = service.actionRequired();
 
         assertThat(items).isEmpty();
+    }
+
+    @Test
+    void actionRequired_flagsEmptyAndLowMemberships_skippingHealthyAndCancelled() {
+        Student empty = student(1L, "Empty Fam");
+        Student low = student(2L, "Low Fam");
+        Student healthy = student(3L, "Healthy Fam");
+        Student cancelled = student(4L, "Cancelled Fam");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(empty, low, healthy, cancelled));
+        // Recent bookings for everyone so nobody trips the 21-day NO_BOOKING rule.
+        when(bookingRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                booking(1, empty, "confirmed", now.minusDays(1), 60),
+                booking(2, low, "confirmed", now.minusDays(1), 60),
+                booking(3, healthy, "confirmed", now.minusDays(1), 60),
+                booking(4, cancelled, "confirmed", now.minusDays(1), 60)));
+        when(membershipRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                membership(empty, 0),            // 0 → MEMBERSHIP_EMPTY
+                membership(low, 2),              // 2 <= threshold → MEMBERSHIP_LOW
+                membership(healthy, 8),          // healthy → no item
+                membership(cancelled, 0, false)));  // 0 but cancelled → not flagged
+
+        List<DashboardMetricsService.ActionItem> items = service.actionRequired();
+
+        assertThat(items).extracting(DashboardMetricsService.ActionItem::type)
+                .containsExactlyInAnyOrder("MEMBERSHIP_EMPTY", "MEMBERSHIP_LOW");
+        // Empty ("can't book") sorts above low.
+        assertThat(items.get(0).type()).isEqualTo("MEMBERSHIP_EMPTY");
     }
 
     @Test
