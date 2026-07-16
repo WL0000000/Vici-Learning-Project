@@ -311,6 +311,63 @@ body {
   margin: 0;
 }
 
+/* ── Collapsible panels (native <details> accordion, no JS) ───────────── */
+details.vici-panel > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+details.vici-panel > summary::-webkit-details-marker { display: none; }
+details.vici-panel > summary:hover { background: #faf8f4; }
+details.vici-panel[open] > summary { border-bottom: 1px solid var(--vici-border); }
+
+.vici-summary-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--vici-text);
+  margin: 0;
+}
+.vici-summary-sub {
+  font-size: 11.5px;
+  color: var(--vici-muted);
+  margin: 0;
+}
+.vici-count-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--vici-navy);
+  background: var(--vici-bg);
+  border: 1px solid var(--vici-border);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.vici-chevron {
+  color: var(--vici-muted);
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+details.vici-panel[open] > summary .vici-chevron { transform: rotate(90deg); }
+
+/* Nested per-family accordion inside the Families panel */
+details.vici-family { border-bottom: 1px solid var(--vici-border); }
+details.vici-family:last-child { border-bottom: none; }
+details.vici-family > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 11px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+details.vici-family > summary::-webkit-details-marker { display: none; }
+details.vici-family > summary:hover,
+details.vici-family[open] > summary { background: #faf8f4; }
+details.vici-family[open] > summary .vici-chevron { transform: rotate(90deg); }
+
 /* flagged students list */
 .flagged-row {
   display: flex;

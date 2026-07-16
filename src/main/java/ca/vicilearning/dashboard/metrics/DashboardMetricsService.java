@@ -261,7 +261,7 @@ public class DashboardMetricsService {
                 .map(s -> {
                     double[] cell = byStudent.getOrDefault(s.getId(), new double[]{0.0, 0.0});
                     return new StudentRow(
-                            s.getId(), s.getName(), s.getAccountId(), s.getEmail(), s.getPhone(),
+                            s.getId(), s.getName(), s.getAccountId(), s.getExtId(), s.getEmail(), s.getPhone(),
                             (int) cell[1], round1(cell[0]));
                 })
                 .toList();
@@ -295,7 +295,7 @@ public class DashboardMetricsService {
                 .forEach(s -> {
                     double[] cell = byStudent.getOrDefault(s.getId(), new double[]{0.0, 0.0});
                     byAccount.computeIfAbsent(s.getAccountId(), k -> new ArrayList<>())
-                            .add(new FamilyMember(s.getId(), s.getName(), s.getEmail(), s.getPhone(),
+                            .add(new FamilyMember(s.getId(), s.getName(), s.getExtId(), s.getEmail(), s.getPhone(),
                                     (int) cell[1], round1(cell[0])));
                 });
 
@@ -559,7 +559,7 @@ public class DashboardMetricsService {
 
     public record TutorHours(String tutorName, double hours, int sessions) {}
 
-    public record StudentRow(Long id, String name, String accountId, String email, String phone,
+    public record StudentRow(Long id, String name, String accountId, String extId, String email, String phone,
                              int sessionsThisWeek, double hoursThisWeek) {}
 
     /**
@@ -575,7 +575,7 @@ public class DashboardMetricsService {
         public int size() { return members.size(); }
     }
 
-    public record FamilyMember(Long id, String name, String email, String phone,
+    public record FamilyMember(Long id, String name, String extId, String email, String phone,
                                int sessionsThisWeek, double hoursThisWeek) {}
 
     public record ActionItem(Long studentId, String studentName, String type, String reason,
