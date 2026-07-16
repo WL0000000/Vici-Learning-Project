@@ -270,6 +270,13 @@ public class MockDataSeeder implements ApplicationRunner {
             boolean lapsed = rng.nextDouble() < 0.15;
             int sessionsPerWeek = rng.nextDouble() < 0.3 ? 2 : 1;
 
+            // Each student has a "home" service — a family typically sticks to one mode/location
+            // (e.g. Virtual One-on-One). Most students are "pure" (home service only); a minority
+            // mix in the occasional other. This keeps each family's Category/Location realistically
+            // narrow instead of spanning every service, and makes the category filter discriminate.
+            Service primaryService = weightedService(services, rng);
+            double varietyRate = rng.nextDouble() < 0.70 ? 0.0 : 0.20;
+
             for (LocalDate week = windowStart; !week.isAfter(windowEnd); week = week.plusWeeks(1)) {
                 if (lapsed && !week.isBefore(lapsedCutoff)) break;      // lapsed: stop before recent weeks
                 if (rng.nextDouble() < 0.25) continue;                  // not every week has a booking
@@ -281,7 +288,8 @@ public class MockDataSeeder implements ApplicationRunner {
                     if (start.toLocalDate().isBefore(windowStart) || start.toLocalDate().isAfter(windowEnd)) {
                         continue;
                     }
-                    Service service = weightedService(services, rng);
+                    // Home service unless this student mixes and variety triggers for this session.
+                    Service service = rng.nextDouble() < varietyRate ? weightedService(services, rng) : primaryService;
                     LocalDateTime end = start.plusMinutes(service.getDurationMinutes());
 
                     Booking b = new Booking();
