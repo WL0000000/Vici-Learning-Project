@@ -64,7 +64,7 @@ class DashboardMetricsServiceTest {
                 booking(3, null, "cancelled", now, 60)));
 
         // Just the current week.
-        List<DashboardMetricsService.WeeklyHours> weeks = service.weeklyHours(0, 0);
+        List<DashboardMetricsService.WeeklyHours> weeks = service.weeklyHours(0, 0); // TODO: Replace method weeklyHours with hoursByPeriod
 
         assertThat(weeks).hasSize(1);
         assertThat(weeks.get(0).hours()).isEqualTo(3.0);
