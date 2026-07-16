@@ -24,7 +24,7 @@
                 <div class="stat-card" style="border-left-color: #15315c;">
                     <div class="stat-label">Active Students</div>
                     <div class="stat-val" th:text="${overview.activeStudents}">0</div>
-                    <div class="stat-sub">in local database</div>
+                    <div class="stat-sub" th:text="${selectedLocation != null} ? ('booked in ' + ${selectedLocation}) : 'in local database'">in local database</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
@@ -179,7 +179,8 @@
                 <svg class="vici-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
                 <div class="flex-grow-1">
                     <h2 class="vici-summary-title">Students</h2>
-                    <p class="vici-summary-sub">Brevo identity (EXT_ID) + Account_ID link + this week's booked hours</p>
+                    <p class="vici-summary-sub">Brevo identity (EXT_ID) + Account_ID link + this week's booked hours<span
+                        th:if="${selectedLocation != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${selectedLocation}"></span></span></p>
                 </div>
                 <span class="vici-count-badge" th:text="${#lists.size(students)}">0</span>
             </summary>
@@ -232,7 +233,8 @@
                 <svg class="vici-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
                 <div class="flex-grow-1">
                     <h2 class="vici-summary-title">Families</h2>
-                    <p class="vici-summary-sub">Students sharing one Account_ID — click a family to see its siblings</p>
+                    <p class="vici-summary-sub">Students sharing one Account_ID — click a family to see its siblings<span
+                        th:if="${selectedLocation != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${selectedLocation}"></span></span></p>
                 </div>
                 <span class="vici-count-badge" th:text="${#lists.size(families)}">0</span>
             </summary>
@@ -299,7 +301,8 @@
                 <svg class="vici-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
                 <div class="flex-grow-1">
                     <h2 class="vici-summary-title">Upcoming Sessions</h2>
-                    <p class="vici-summary-sub">Next 10 scheduled</p>
+                    <p class="vici-summary-sub">Next 10 scheduled<span
+                        th:if="${selectedLocation != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${selectedLocation}"></span></span></p>
                 </div>
                 <span class="vici-count-badge" th:text="${#lists.size(upcoming)}">0</span>
             </summary>

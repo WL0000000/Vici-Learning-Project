@@ -44,8 +44,6 @@ public class StudentsController {
             @RequestParam(required = false) String location,
             Model model) {
 
-        model.addAttribute("overview", metrics.overview());
-
         boolean sortByName = "name".equalsIgnoreCase(sort);
         model.addAttribute("selectedSort", sortByName ? "name" : "hours");
 
@@ -54,6 +52,9 @@ public class StudentsController {
         String locationFilter = (location == null || location.isBlank()) ? null : location;
         model.addAttribute("serviceLocations", metrics.serviceLocations());
         model.addAttribute("selectedLocation", locationFilter);
+
+        // Overview cards honour the same filter, so the whole page reflects the chosen category.
+        model.addAttribute("overview", metrics.overview(locationFilter));
 
         boolean customRange = from != null && !from.isBlank() && to != null && !to.isBlank();
         model.addAttribute("customRange", customRange);
@@ -122,9 +123,9 @@ public class StudentsController {
             });
         }
 
-        model.addAttribute("students", metrics.studentRows());
-        model.addAttribute("families", metrics.familyGroups());
-        model.addAttribute("upcoming", metrics.upcoming(10));
+        model.addAttribute("students", metrics.studentRows(locationFilter));
+        model.addAttribute("families", metrics.familyGroups(locationFilter));
+        model.addAttribute("upcoming", metrics.upcoming(10, locationFilter));
         return "students";
     }
 
