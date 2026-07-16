@@ -137,12 +137,13 @@
                             <p th:text="${#strings.capitalize(tutorPeriodLabel)}">—</p>
                         </div>
                         <div class="d-flex align-items-center gap-2">
+                            <span style="font-size:11px; color:var(--vici-muted); font-weight:600;">Sort</span>
                             <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='hours', location=${selectedLocation})}"
                                th:class="${selectedSort == 'hours'} ? 'btn-vici' : 'btn-vici-outline'"
-                               style="padding:3px 10px; font-size:11px; text-decoration:none;">Total</a>
+                               style="padding:3px 10px; font-size:11px; text-decoration:none;">Most hours</a>
                             <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='name', location=${selectedLocation})}"
                                th:class="${selectedSort == 'name'} ? 'btn-vici' : 'btn-vici-outline'"
-                               style="padding:3px 10px; font-size:11px; text-decoration:none;">Tutor</a>
+                               style="padding:3px 10px; font-size:11px; text-decoration:none;">Name A–Z</a>
                         </div>
                     </div>
                     <div class="table-responsive">
@@ -170,20 +171,25 @@
             </div>
         </div>
 
-        <!-- ── Student table: Brevo + SimplyBook joined on Account_ID ──────────── -->
-        <div class="vici-panel mb-3">
-            <div class="vici-panel-header">
-                <div>
-                    <h2>Students</h2>
-                    <p>Contact identity + Account_ID link + this week's booked hours</p>
+        <!-- ── Student roster: Brevo identity (EXT_ID) + SimplyBook (Account_ID) joined ─
+             Collapsible; the table scrolls inside a fixed height so the roster never
+             pushes the rest of the page down. -->
+        <details class="vici-panel mb-3" open>
+            <summary>
+                <svg class="vici-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                <div class="flex-grow-1">
+                    <h2 class="vici-summary-title">Students</h2>
+                    <p class="vici-summary-sub">Brevo identity (EXT_ID) + Account_ID link + this week's booked hours</p>
                 </div>
-            </div>
-            <div class="table-responsive">
+                <span class="vici-count-badge" th:text="${#lists.size(students)}">0</span>
+            </summary>
+            <div class="table-responsive" style="max-height:440px; overflow:auto;">
                 <table class="table sessions-table mb-0">
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <!-- Sensitive columns: billing link + contact info are ADMIN-only. -->
+                            <!-- Sensitive columns: identity keys + contact info are ADMIN-only. -->
+                            <th sec:authorize="hasRole('ADMIN')">EXT_ID</th>
                             <th sec:authorize="hasRole('ADMIN')">Account ID</th>
                             <th sec:authorize="hasRole('ADMIN')">Email</th>
                             <th sec:authorize="hasRole('ADMIN')">Phone</th>
@@ -195,6 +201,10 @@
                         <tr th:each="s : ${students}">
                             <td style="font-weight:600;" th:text="${s.name}">—</td>
                             <td sec:authorize="hasRole('ADMIN')">
+                                <span th:if="${s.extId != null}" class="text-muted" th:text="${s.extId}">EXT-0000</span>
+                                <span class="text-muted" th:if="${s.extId == null}">—</span>
+                            </td>
+                            <td sec:authorize="hasRole('ADMIN')">
                                 <span class="status-pill pill-confirmed"
                                       th:if="${s.accountId != null}" th:text="${s.accountId}">VICI-0000</span>
                                 <span class="text-muted" th:if="${s.accountId == null}">— not linked —</span>
@@ -205,84 +215,94 @@
                             <td class="text-end" style="font-weight:700;" th:text="${s.hoursThisWeek}">0</td>
                         </tr>
                         <tr th:if="${#lists.isEmpty(students)}">
-                            <td colspan="6" class="text-center text-muted p-4">
+                            <td colspan="7" class="text-center text-muted p-4">
                                 No students. Run the seeder or a sync.
                             </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
-        </div>
+        </details>
 
         <!-- ── Families / siblings: active students rolled up by shared Account_ID ─
-             Keyed on Account_ID (an ADMIN-only field), so the whole panel is ADMIN-only. -->
-        <div class="vici-panel mb-3" sec:authorize="hasRole('ADMIN')">
-            <div class="vici-panel-header">
-                <div>
-                    <h2>Families</h2>
-                    <p>Students sharing one Account_ID — siblings grouped together</p>
+             Keyed on Account_ID (an ADMIN-only field), so the whole panel is ADMIN-only.
+             Each family is its own click-to-expand row (siblings hidden until opened). -->
+        <details class="vici-panel mb-3" sec:authorize="hasRole('ADMIN')">
+            <summary>
+                <svg class="vici-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                <div class="flex-grow-1">
+                    <h2 class="vici-summary-title">Families</h2>
+                    <p class="vici-summary-sub">Students sharing one Account_ID — click a family to see its siblings</p>
                 </div>
+                <span class="vici-count-badge" th:text="${#lists.size(families)}">0</span>
+            </summary>
+
+            <div th:if="${#lists.isEmpty(families)}" class="text-center text-muted p-4">
+                No families — no Account_ID is shared by two or more students.
             </div>
-            <div class="table-responsive">
-                <table class="table sessions-table mb-0">
-                    <thead>
-                        <tr>
-                            <th>Account ID</th>
-                            <th>Students</th>
-                            <th class="text-end">#</th>
-                            <th>Category</th>
-                            <th>Location</th>
-                            <th>Balance</th>
-                            <th class="text-end">Sessions (wk)</th>
-                            <th class="text-end">Hours (wk)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr th:each="f : ${families}">
-                            <td>
-                                <span class="status-pill pill-confirmed" th:text="${f.accountId}">VICI-0000</span>
-                            </td>
-                            <td>
-                                <span th:each="m,it : ${f.members}">
-                                    <span style="font-weight:600;" th:text="${m.name}">—</span
-                                    ><span th:unless="${it.last}" class="text-muted">, </span>
-                                </span>
-                            </td>
-                            <td class="text-end" th:text="${f.size()}">0</td>
-                            <!-- Compact distinct lists across the family's bookings (Meeting #3). -->
-                            <td class="text-muted"
-                                th:text="${#lists.isEmpty(f.categories)} ? '—' : ${#strings.listJoin(f.categories, ', ')}">—</td>
-                            <td class="text-muted"
-                                th:text="${#lists.isEmpty(f.locations)} ? '—' : ${#strings.listJoin(f.locations, ', ')}">—</td>
-                            <td>
-                                <span th:if="${#lists.isEmpty(f.membershipBalances)}" class="text-muted">—</span>
-                                <span th:each="bal,it : ${f.membershipBalances}">
-                                    <span class="status-pill"
-                                          th:classappend="${bal == 0} ? 'pill-cancelled' : 'pill-confirmed'"
-                                          th:text="${bal}">0</span>
-                                </span>
-                            </td>
-                            <td class="text-end" th:text="${f.sessionsThisWeek}">0</td>
-                            <td class="text-end" style="font-weight:700;" th:text="${f.hoursThisWeek}">0</td>
-                        </tr>
-                        <tr th:if="${#lists.isEmpty(families)}">
-                            <td colspan="8" class="text-center text-muted p-4">
-                                No families — no Account_ID is shared by two or more students.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+
+            <!-- One collapsible block per family. -->
+            <details class="vici-family" th:each="f : ${families}">
+                <summary>
+                    <svg class="vici-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                    <span class="status-pill pill-confirmed" th:text="${f.accountId}">VICI-0000</span>
+                    <span class="text-muted" th:text="${f.size()} + (${f.size()} == 1 ? ' student' : ' students')">0 students</span>
+                    <!-- Distinct membership balances at a glance (red when any are empty). -->
+                    <span class="d-inline-flex align-items-center gap-1 ms-1">
+                        <span th:if="${#lists.isEmpty(f.membershipBalances)}" class="text-muted">no balance</span>
+                        <span th:each="bal : ${f.membershipBalances}" class="status-pill"
+                              th:classappend="${bal == 0} ? 'pill-cancelled' : 'pill-confirmed'"
+                              th:text="${bal}">0</span>
+                    </span>
+                    <span class="ms-auto text-muted" style="font-size:12px;"
+                          th:text="${f.hoursThisWeek} + ' h · ' + ${f.sessionsThisWeek} + ' sess (wk)'">0 h</span>
+                </summary>
+
+                <!-- Family summary line: distinct categories + locations across its bookings. -->
+                <div class="d-flex flex-wrap gap-4 px-3 pt-2" style="font-size:12px;">
+                    <span><span class="text-muted">Category:</span>
+                        <span th:text="${#lists.isEmpty(f.categories)} ? '—' : ${#strings.listJoin(f.categories, ', ')}">—</span></span>
+                    <span><span class="text-muted">Location:</span>
+                        <span th:text="${#lists.isEmpty(f.locations)} ? '—' : ${#strings.listJoin(f.locations, ', ')}">—</span></span>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table sessions-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>EXT_ID</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th class="text-end">Sessions (wk)</th>
+                                <th class="text-end">Hours (wk)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="m : ${f.members}">
+                                <td style="font-weight:600;" th:text="${m.name}">—</td>
+                                <td class="text-muted" th:text="${m.extId != null ? m.extId : '—'}">—</td>
+                                <td class="text-muted" th:text="${m.email != null ? m.email : '—'}">—</td>
+                                <td class="text-muted" th:text="${m.phone != null ? m.phone : '—'}">—</td>
+                                <td class="text-end" th:text="${m.sessionsThisWeek}">0</td>
+                                <td class="text-end" style="font-weight:700;" th:text="${m.hoursThisWeek}">0</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        </details>
 
         <!-- ── Upcoming sessions ───────────────────────────────────────────────── -->
-        <div class="vici-panel">
-            <div class="vici-panel-header">
-                <div>
-                    <h2>Upcoming Sessions</h2>
-                    <p>Next 10 scheduled</p>
+        <details class="vici-panel" open>
+            <summary>
+                <svg class="vici-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                <div class="flex-grow-1">
+                    <h2 class="vici-summary-title">Upcoming Sessions</h2>
+                    <p class="vici-summary-sub">Next 10 scheduled</p>
                 </div>
-            </div>
+                <span class="vici-count-badge" th:text="${#lists.size(upcoming)}">0</span>
+            </summary>
             <div class="table-responsive">
                 <table class="table sessions-table mb-0">
                     <thead>
@@ -313,7 +333,7 @@
                     </tbody>
                 </table>
             </div>
-        </div>
+        </details>
 
     </main>
 </div>
