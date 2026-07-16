@@ -34,11 +34,11 @@ class StudentsControllerTest {
     @Test
     @WithMockUser
     void studentsPageLoadsForLoggedInUser() throws Exception {
-        when(metrics.overview()).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
+        when(metrics.overview(null)).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
         when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2, null)).thenReturn(Collections.emptyList());
-        when(metrics.studentRows()).thenReturn(Collections.emptyList());
-        when(metrics.upcoming(10)).thenReturn(Collections.emptyList());
-        when(metrics.familyGroups()).thenReturn(Collections.emptyList());
+        when(metrics.studentRows(null)).thenReturn(Collections.emptyList());
+        when(metrics.upcoming(10, null)).thenReturn(Collections.emptyList());
+        when(metrics.familyGroups(null)).thenReturn(Collections.emptyList());
         when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false, null)).thenReturn(Collections.emptyList());
 
         mockMvc.perform(get("/students"))
@@ -50,10 +50,10 @@ class StudentsControllerTest {
     @WithMockUser(roles = "TUTOR")
     void studentsPageLoadsForTutor() throws Exception {
         // Tutors are allowed to see the students page (sensitive columns are hidden in the view).
-        when(metrics.overview()).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
+        when(metrics.overview(null)).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
         when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2, null)).thenReturn(Collections.emptyList());
-        when(metrics.studentRows()).thenReturn(Collections.emptyList());
-        when(metrics.upcoming(10)).thenReturn(Collections.emptyList());
+        when(metrics.studentRows(null)).thenReturn(Collections.emptyList());
+        when(metrics.upcoming(10, null)).thenReturn(Collections.emptyList());
         when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false, null)).thenReturn(Collections.emptyList());
 
         mockMvc.perform(get("/students"))
@@ -89,11 +89,11 @@ class StudentsControllerTest {
     }
 
     private void stubEmptyMetrics() {
-        when(metrics.overview()).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
+        when(metrics.overview(null)).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
         when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2, null)).thenReturn(Collections.emptyList());
-        when(metrics.studentRows()).thenReturn(Collections.emptyList());
-        when(metrics.upcoming(10)).thenReturn(Collections.emptyList());
-        when(metrics.familyGroups()).thenReturn(Collections.emptyList());
+        when(metrics.studentRows(null)).thenReturn(Collections.emptyList());
+        when(metrics.upcoming(10, null)).thenReturn(Collections.emptyList());
+        when(metrics.familyGroups(null)).thenReturn(Collections.emptyList());
         when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false, null)).thenReturn(Collections.emptyList());
     }
 }
