@@ -75,15 +75,17 @@ public class MockDataSeeder implements ApplicationRunner {
     };
 
     // Service catalogue: {name, durationMinutes, category, location} — modelled on the real
-    // Meeting #3 export so the category/location filter has realistic data. Two categories
-    // (One-on-One / Study Club) across four locations. The 120-min entry is why hours must be
-    // derived from duration, not session count (a client requirement).
+    // export so the category/location filters have realistic data. Category and location are two
+    // distinct axes (Meeting #4): three categories (Private 1:1 / Study Club / Assessment) across
+    // four locations. The 120-min entry is why hours must be derived from duration, not session
+    // count (a client requirement).
     private static final Object[][] SERVICE_DEFS = {
-            {"In-Person 1hr Tutoring Session (Single) for Members", 60, "One-on-One", "VICI Learning Centre"},
-            {"Virtual 1hr Tutoring Session (Single) for Members",   60, "One-on-One", "Virtual Tutoring"},
-            {"At-Home 1hr Tutoring Session (Single) for Members",   60, "One-on-One", "At Home"},
-            {"Study Club (1.5hrs)",                                 90, "Study Club", "VICI Learning Centre (Study Clubs)"},
-            {"2hr Intensive Session (Single) for Members",         120, "One-on-One", "VICI Learning Centre"}
+            {"In-Person 1hr Tutoring Session (Single) for Members", 60, "Private 1:1", "VICI Learning Centre"},
+            {"Virtual 1hr Tutoring Session (Single) for Members",   60, "Private 1:1", "Virtual Tutoring"},
+            {"At-Home 1hr Tutoring Session (Single) for Members",   60, "Private 1:1", "At Home"},
+            {"Study Club (1.5hrs)",                                 90, "Study Club",  "VICI Learning Centre (Study Clubs)"},
+            {"2hr Intensive Session (Single) for Members",         120, "Private 1:1", "VICI Learning Centre"},
+            {"Assessment (1hr)",                                    60, "Assessment",  "VICI Learning Centre"}
     };
 
     private final TutorRepository      tutorRepo;
@@ -385,15 +387,17 @@ public class MockDataSeeder implements ApplicationRunner {
         return memberships;
     }
 
-    // Heavier weighting toward the 1hr services, like a real tutoring schedule. Indices match
-    // SERVICE_DEFS order, so every category/location appears in the booking data (for the filter).
+    // Heavier weighting toward the 1hr Private 1:1 services, like a real tutoring schedule. Indices
+    // match SERVICE_DEFS order, so every category/location appears in the booking data (for the
+    // filters). Assessments are rarer (a periodic checkpoint, not a weekly session).
     private Service weightedService(List<Service> services, Random rng) {
         double r = rng.nextDouble();
-        if (r < 0.40) return services.get(0);   // in-person 1hr (VICI Learning Centre)
-        if (r < 0.65) return services.get(1);   // virtual 1hr
-        if (r < 0.80) return services.get(2);   // at-home 1hr
-        if (r < 0.92) return services.get(3);   // study club 1.5hr
-        return services.get(4);                 // 2hr intensive
+        if (r < 0.38) return services.get(0);   // Private 1:1, in-person 1hr (Centre)
+        if (r < 0.60) return services.get(1);   // Private 1:1, virtual 1hr
+        if (r < 0.73) return services.get(2);   // Private 1:1, at-home 1hr
+        if (r < 0.85) return services.get(3);   // Study Club 1.5hr
+        if (r < 0.93) return services.get(4);   // Private 1:1, 2hr intensive (Centre)
+        return services.get(5);                 // Assessment 1hr (Centre)
     }
 
     private String emailFrom(String name, String domain) {

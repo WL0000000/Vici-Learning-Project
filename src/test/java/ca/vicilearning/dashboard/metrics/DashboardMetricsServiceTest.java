@@ -216,7 +216,7 @@ class DashboardMetricsServiceTest {
 
         DashboardMetricsService.FamilyGroup fam = service.familyGroups().get(0);
 
-        // Distinct + sorted case-insensitively; balances collected per membership.
+        // Distinct + sorted case-insensitively; each member's latest membership balance collected.
         assertThat(fam.categories()).containsExactly("One-on-One", "Study Club");
         assertThat(fam.locations()).containsExactly("At Home", "Virtual Tutoring");
         assertThat(fam.membershipBalances()).containsExactlyInAnyOrder(8, 3);
@@ -262,7 +262,8 @@ class DashboardMetricsServiceTest {
         double allHours = service.hoursByPeriod(DashboardMetricsService.PeriodUnit.WEEK, 0, 0, null)
                 .get(0).hours();
         DashboardMetricsService.PeriodHours atHome =
-                service.hoursByPeriod(DashboardMetricsService.PeriodUnit.WEEK, 0, 0, "At Home").get(0);
+                service.hoursByPeriod(DashboardMetricsService.PeriodUnit.WEEK, 0, 0,
+                        new DashboardMetricsService.ServiceScope("At Home", null)).get(0);
 
         assertThat(allHours).isEqualTo(3.0);
         assertThat(atHome.hours()).isEqualTo(1.0);

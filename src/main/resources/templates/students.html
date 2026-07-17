@@ -24,7 +24,7 @@
                 <div class="stat-card" style="border-left-color: #15315c;">
                     <div class="stat-label">Active Students</div>
                     <div class="stat-val" th:text="${overview.activeStudents}">0</div>
-                    <div class="stat-sub" th:text="${selectedLocation != null} ? ('booked in ' + ${selectedLocation}) : 'in local database'">in local database</div>
+                    <div class="stat-sub" th:text="${filterLabel != null} ? ('booked in ' + ${filterLabel}) : 'in local database'">in local database</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
@@ -53,38 +53,55 @@
         <!-- ── Period filter: week / month / year / custom date range ──────────── -->
         <div class="vici-panel mb-3">
             <div class="d-flex flex-wrap align-items-center gap-2" style="padding:14px 18px;">
-                <a th:href="@{/students(unit='week', sort=${selectedSort}, location=${selectedLocation})}"
+                <a th:href="@{/students(unit='week', sort=${selectedSort}, location=${selectedLocation}, category=${selectedCategory})}"
                    th:class="${!customRange and selectedUnit == 'week'} ? 'btn-vici' : 'btn-vici-outline'">Week</a>
-                <a th:href="@{/students(unit='month', sort=${selectedSort}, location=${selectedLocation})}"
+                <a th:href="@{/students(unit='month', sort=${selectedSort}, location=${selectedLocation}, category=${selectedCategory})}"
                    th:class="${!customRange and selectedUnit == 'month'} ? 'btn-vici' : 'btn-vici-outline'">Month</a>
-                <a th:href="@{/students(unit='year', sort=${selectedSort}, location=${selectedLocation})}"
+                <a th:href="@{/students(unit='year', sort=${selectedSort}, location=${selectedLocation}, category=${selectedCategory})}"
                    th:class="${!customRange and selectedUnit == 'year'} ? 'btn-vici' : 'btn-vici-outline'">Year</a>
 
                 <form th:action="@{/students}" method="get" class="d-flex align-items-center gap-2 ms-md-3">
                     <input type="hidden" name="sort" th:value="${selectedSort}">
                     <input type="hidden" name="location" th:value="${selectedLocation}">
+                    <input type="hidden" name="category" th:value="${selectedCategory}">
                     <input type="date" name="from" th:value="${rangeFrom}" class="form-control form-control-sm" style="width:150px;">
                     <span class="text-muted" style="font-size:12px;">to</span>
                     <input type="date" name="to" th:value="${rangeTo}" class="form-control form-control-sm" style="width:150px;">
                     <button type="submit"
                             th:class="${customRange} ? 'btn-vici' : 'btn-vici-outline'">Date range</button>
                 </form>
-                <a th:if="${customRange}" th:href="@{/students(sort=${selectedSort}, location=${selectedLocation})}"
+                <a th:if="${customRange}" th:href="@{/students(sort=${selectedSort}, location=${selectedLocation}, category=${selectedCategory})}"
                    class="text-muted" style="font-size:12px;">Clear range</a>
 
-                <!-- Service-category (location) dropdown — a picker so staff don't scroll (Meeting #3).
-                     Submits on change, preserving the current period/range + sort. -->
+                <!-- Two independent service filters (Meeting #4): Location (delivery mode) and
+                     Category (session type). Each submits on change, preserving the period/range,
+                     sort, and the OTHER filter's selection. Pickers so staff don't scroll. -->
                 <form th:action="@{/students}" method="get" class="d-flex align-items-center gap-2 ms-md-auto">
                     <input type="hidden" name="sort" th:value="${selectedSort}">
+                    <input type="hidden" name="category" th:value="${selectedCategory}">
                     <input type="hidden" th:if="${!customRange}" name="unit" th:value="${selectedUnit}">
                     <input type="hidden" th:if="${customRange}" name="from" th:value="${rangeFrom}">
                     <input type="hidden" th:if="${customRange}" name="to" th:value="${rangeTo}">
-                    <label class="text-muted" style="font-size:12px;">Service category</label>
+                    <label class="text-muted" style="font-size:12px;">Location</label>
                     <select name="location" class="form-select form-select-sm" style="width:auto;"
                             onchange="this.form.submit()">
-                        <option value="" th:selected="${selectedLocation == null}">All categories</option>
+                        <option value="" th:selected="${selectedLocation == null}">All locations</option>
                         <option th:each="loc : ${serviceLocations}" th:value="${loc}" th:text="${loc}"
                                 th:selected="${loc == selectedLocation}"></option>
+                    </select>
+                </form>
+                <form th:action="@{/students}" method="get" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="sort" th:value="${selectedSort}">
+                    <input type="hidden" name="location" th:value="${selectedLocation}">
+                    <input type="hidden" th:if="${!customRange}" name="unit" th:value="${selectedUnit}">
+                    <input type="hidden" th:if="${customRange}" name="from" th:value="${rangeFrom}">
+                    <input type="hidden" th:if="${customRange}" name="to" th:value="${rangeTo}">
+                    <label class="text-muted" style="font-size:12px;">Category</label>
+                    <select name="category" class="form-select form-select-sm" style="width:auto;"
+                            onchange="this.form.submit()">
+                        <option value="" th:selected="${selectedCategory == null}">All categories</option>
+                        <option th:each="cat : ${serviceCategories}" th:value="${cat}" th:text="${cat}"
+                                th:selected="${cat == selectedCategory}"></option>
                     </select>
                 </form>
             </div>
@@ -138,10 +155,10 @@
                         </div>
                         <div class="d-flex align-items-center gap-2">
                             <span style="font-size:11px; color:var(--vici-muted); font-weight:600;">Sort</span>
-                            <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='hours', location=${selectedLocation})}"
+                            <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='hours', location=${selectedLocation}, category=${selectedCategory})}"
                                th:class="${selectedSort == 'hours'} ? 'btn-vici' : 'btn-vici-outline'"
                                style="padding:3px 10px; font-size:11px; text-decoration:none;">Most hours</a>
-                            <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='name', location=${selectedLocation})}"
+                            <a th:href="@{/students(unit=${selectedUnit != 'range'} ? ${selectedUnit} : null, from=${customRange} ? ${rangeFrom} : null, to=${customRange} ? ${rangeTo} : null, sort='name', location=${selectedLocation}, category=${selectedCategory})}"
                                th:class="${selectedSort == 'name'} ? 'btn-vici' : 'btn-vici-outline'"
                                style="padding:3px 10px; font-size:11px; text-decoration:none;">Name A–Z</a>
                         </div>
@@ -180,7 +197,7 @@
                 <div class="flex-grow-1">
                     <h2 class="vici-summary-title">Students</h2>
                     <p class="vici-summary-sub">Brevo identity (EXT_ID) + Account_ID link + this week's booked hours<span
-                        th:if="${selectedLocation != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${selectedLocation}"></span></span></p>
+                        th:if="${filterLabel != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${filterLabel}"></span></span></p>
                 </div>
                 <span class="vici-count-badge" th:text="${#lists.size(students)}">0</span>
             </summary>
@@ -234,7 +251,7 @@
                 <div class="flex-grow-1">
                     <h2 class="vici-summary-title">Families</h2>
                     <p class="vici-summary-sub">Students sharing one Account_ID — click a family to see its siblings<span
-                        th:if="${selectedLocation != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${selectedLocation}"></span></span></p>
+                        th:if="${filterLabel != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${filterLabel}"></span></span></p>
                 </div>
                 <span class="vici-count-badge" th:text="${#lists.size(families)}">0</span>
             </summary>
@@ -302,7 +319,7 @@
                 <div class="flex-grow-1">
                     <h2 class="vici-summary-title">Upcoming Sessions</h2>
                     <p class="vici-summary-sub">Next 10 scheduled<span
-                        th:if="${selectedLocation != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${selectedLocation}"></span></span></p>
+                        th:if="${filterLabel != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${filterLabel}"></span></span></p>
                 </div>
                 <span class="vici-count-badge" th:text="${#lists.size(upcoming)}">0</span>
             </summary>

@@ -2,6 +2,7 @@ package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
+import ca.vicilearning.dashboard.metrics.DashboardMetricsService.ServiceScope;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,19 +43,29 @@ public class StudentsController {
             @RequestParam(required = false) String to,
             @RequestParam(defaultValue = "hours") String sort,
             @RequestParam(required = false) String location,
+            @RequestParam(required = false) String category,
             Model model) {
 
         boolean sortByName = "name".equalsIgnoreCase(sort);
         model.addAttribute("selectedSort", sortByName ? "name" : "hours");
 
-        // Service-category (location) filter: null/blank means "all". Options for the dropdown
-        // plus the current selection so the view can preserve it across the other filter links.
-        String locationFilter = (location == null || location.isBlank()) ? null : location;
+        // Two independent service filters (Meeting #4): location (delivery mode) and category
+        // (session type). Blank means "any". Both dropdowns' options + current selections are
+        // exposed so the view can preserve each across the other filter links.
+        String locationFilter = blankToNull(location);
+        String categoryFilter = blankToNull(category);
+        ServiceScope scope = (locationFilter == null && categoryFilter == null)
+                ? null : new ServiceScope(locationFilter, categoryFilter);
         model.addAttribute("serviceLocations", metrics.serviceLocations());
+        model.addAttribute("serviceCategories", metrics.serviceCategories());
         model.addAttribute("selectedLocation", locationFilter);
+        model.addAttribute("selectedCategory", categoryFilter);
+        // One human-readable label combining whichever filters are active (null when none), so the
+        // "filtered: …" indicators on each section can render without repeating the logic.
+        model.addAttribute("filterLabel", filterLabel(locationFilter, categoryFilter));
 
-        // Overview cards honour the same filter, so the whole page reflects the chosen category.
-        model.addAttribute("overview", metrics.overview(locationFilter));
+        // Overview cards honour the same filter, so the whole page reflects the chosen scope.
+        model.addAttribute("overview", metrics.overview(scope));
 
         boolean customRange = from != null && !from.isBlank() && to != null && !to.isBlank();
         model.addAttribute("customRange", customRange);
@@ -66,12 +77,12 @@ public class StudentsController {
             model.addAttribute("panelTitle", "Hours Booked (Date Range)");
             model.addAttribute("rangeFrom", fromDate);
             model.addAttribute("rangeTo", toDate);
-            model.addAttribute("rangeHours", metrics.hoursInRange(fromDate, toDate.plusDays(1), locationFilter));
+            model.addAttribute("rangeHours", metrics.hoursInRange(fromDate, toDate.plusDays(1), scope));
             model.addAttribute("periodSubtitle",
                     fromDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")) + " – "
                             + toDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy")));
             model.addAttribute("tutorHours",
-                    metrics.tutorHoursForRange(fromDate, toDate.plusDays(1), sortByName, locationFilter));
+                    metrics.tutorHoursForRange(fromDate, toDate.plusDays(1), sortByName, scope));
             model.addAttribute("tutorPeriodLabel", "selected range");
 
             // No bucket chart in custom-range mode — keep these present (empty) so the
@@ -98,7 +109,7 @@ public class StudentsController {
                 case YEAR -> YEARS_AHEAD;
             };
 
-            List<DashboardMetricsService.PeriodHours> buckets = metrics.hoursByPeriod(periodUnit, back, ahead, locationFilter);
+            List<DashboardMetricsService.PeriodHours> buckets = metrics.hoursByPeriod(periodUnit, back, ahead, scope);
             DateTimeFormatter labelFmt = labelFormat(periodUnit);
 
             model.addAttribute("periodLabels",
@@ -115,7 +126,7 @@ public class StudentsController {
                 case YEAR -> YEARS_BACK + " years back · this year";
             });
 
-            model.addAttribute("tutorHours", metrics.tutorHoursForPeriod(periodUnit, sortByName, locationFilter));
+            model.addAttribute("tutorHours", metrics.tutorHoursForPeriod(periodUnit, sortByName, scope));
             model.addAttribute("tutorPeriodLabel", switch (periodUnit) {
                 case WEEK -> "this week";
                 case MONTH -> "this month";
@@ -123,10 +134,20 @@ public class StudentsController {
             });
         }
 
-        model.addAttribute("students", metrics.studentRows(locationFilter));
-        model.addAttribute("families", metrics.familyGroups(locationFilter));
-        model.addAttribute("upcoming", metrics.upcoming(10, locationFilter));
+        model.addAttribute("students", metrics.studentRows(scope));
+        model.addAttribute("families", metrics.familyGroups(scope));
+        model.addAttribute("upcoming", metrics.upcoming(10, scope));
         return "students";
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s;
+    }
+
+    /** "Location · Category" when both set, one when only one is, null when neither. */
+    private static String filterLabel(String location, String category) {
+        if (location != null && category != null) return location + " · " + category;
+        return location != null ? location : category;
     }
 
     private PeriodUnit parseUnit(String unit) {
