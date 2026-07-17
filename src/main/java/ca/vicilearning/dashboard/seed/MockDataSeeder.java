@@ -218,6 +218,9 @@ public class MockDataSeeder implements ApplicationRunner {
             s.setAccountId(siblingAccountKey);
             // EXT_ID — the Brevo per-student unique id (one per student, never shared with siblings).
             s.setExtId(String.format("EXT-%05d", 10000 + i));
+            // ~20% PAUSED, the rest ACTIVE — so the ACTIVE/PAUSED filter (Meeting #4) has a realistic
+            // mix to demo offline. In production this comes from Brevo's STUDENT_STATUS.
+            s.setStatus(rng.nextDouble() < 0.20 ? StudentStatus.PAUSED : StudentStatus.ACTIVE);
             s.setCreatedAt(now.minusDays(30 + rng.nextInt(700)));
             s.setSyncedAt(now);
             students.add(s);
