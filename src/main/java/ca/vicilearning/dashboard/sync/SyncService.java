@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.sync;
 
+import ca.vicilearning.dashboard.association.AccountIdNormalizer;
 import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
 import ca.vicilearning.dashboard.domain.*;
 import org.slf4j.Logger;
@@ -133,6 +134,10 @@ public class SyncService {
         // Matches local students to Brevo contacts (by email) to stamp the EXT_ID per-student id.
         // Own step so a Brevo outage/missing key can't fail the SimplyBook data above.
         runStep("extIds", () -> syncExtIds(entry), failures);
+        // Assigns still-unassigned students to a family from the Brevo Company association (the link
+        // the CSV export omits). Runs after accountIds/extIds so SimplyBook-linked students are
+        // already out of the unassigned backlog; own step so a Brevo issue can't fail the rest.
+        runStep("familyLinks", () -> syncFamilyLinks(entry), failures);
         // Invoices and memberships also come from REST v2 and link back to students, so they
         // run after the student sync. Each is its own step: a REST outage or a bad record on
         // one must not fail the other or the JSON-RPC data synced above.
@@ -148,7 +153,7 @@ public class SyncService {
 
         log.info("Sync finished (success={}): tutors={}(-{}) services={}(-{}) "
                         + "students={}(-{}) bookings={}(-{}) invoices={}(-{}) "
-                        + "memberships={}(-{}) accountIdsLinked={} extIdsLinked={}",
+                        + "memberships={}(-{}) accountIdsLinked={} extIdsLinked={} familyLinksLinked={}",
                 entry.isSuccess(),
                 entry.getTutorsUpserted(),   entry.getTutorsRemoved(),
                 entry.getServicesUpserted(), entry.getServicesRemoved(),
@@ -156,7 +161,7 @@ public class SyncService {
                 entry.getBookingsUpserted(), entry.getBookingsRemoved(),
                 entry.getInvoicesUpserted(), entry.getInvoicesRemoved(),
                 entry.getMembershipsUpserted(), entry.getMembershipsRemoved(),
-                entry.getAccountIdsLinked(), entry.getExtIdsLinked());
+                entry.getAccountIdsLinked(), entry.getExtIdsLinked(), entry.getFamilyLinksLinked());
         return entry;
     }
 
@@ -330,6 +335,81 @@ public class SyncService {
             }
         }
         entry.setExtIdsLinked(linked);
+    }
+
+    /**
+     * Assigns still-unassigned students to a family by reading the Brevo <b>Company → contact</b>
+     * association — the family link that the Brevo CSV export drops but the API exposes. For each
+     * company we take its (free-text) name as the family key and its {@code linkedContactsIds},
+     * resolve those contact ids to emails, and match them to local students by email.
+     *
+     * <p><b>Backlog-only, never overwrites:</b> only students with no {@code accountId} are eligible,
+     * so a family a staff member set by hand (or the SimplyBook Account_ID step already resolved) is
+     * never clobbered. Mirrors the other Brevo step: skipped cleanly (not failed) when Brevo returns
+     * no companies — no key, CRM feature off, or simply none created yet.
+     *
+     * <p><b>Normalize-both-sides matching:</b> the Brevo company name and our stored Account_IDs may
+     * be spelled differently ({@code "Gray"} vs {@code "Gray_Account"}), so we reuse an existing
+     * family key whenever it matches the company name under {@link AccountIdNormalizer#compareKey},
+     * and only mint a fresh {@link AccountIdNormalizer#canonical} key when no family matches. This
+     * keeps siblings in one family instead of forking a divergent key. (The family's
+     * {@code FamilyAssociation} row is auto-created lazily when the Association page renders, exactly
+     * as for seeded/SimplyBook-linked families, so no row is created here.)
+     */
+    private void syncFamilyLinks(SyncLog entry) {
+        List<BrevoCommunicationService.CompanyLink> companies = brevoService.fetchCompanies();
+        if (companies == null || companies.isEmpty()) {
+            log.info("Brevo returned no companies (no key/feature/data); skipping family-link sync");
+            entry.setFamilyLinksLinked(0);
+            return;
+        }
+
+        // Eligible targets: unassigned students, keyed by lower-cased email. Removing on assign
+        // prevents two companies from fighting over the same contact.
+        Map<String, Student> unassignedByEmail = new java.util.HashMap<>();
+        for (Student s : studentRepo.findByDeletedAtIsNullAndAccountIdIsNull()) {
+            if (s.getEmail() != null && !s.getEmail().isBlank()) {
+                unassignedByEmail.put(s.getEmail().trim().toLowerCase(), s);
+            }
+        }
+        if (unassignedByEmail.isEmpty()) {
+            entry.setFamilyLinksLinked(0);
+            return;
+        }
+
+        // Existing family keys, indexed by comparison key, so a company name that matches an
+        // existing family reuses that exact key instead of minting a divergent one.
+        Map<String, String> existingByCompareKey = new java.util.HashMap<>();
+        for (Student s : studentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()) {
+            String key = s.getAccountId().trim();
+            existingByCompareKey.putIfAbsent(AccountIdNormalizer.compareKey(key), key);
+        }
+
+        Map<Long, String> contactIdToEmail = brevoService.fetchContactIdToEmailMap();
+        int linked = 0;
+        for (BrevoCommunicationService.CompanyLink company : companies) {
+            String compareKey = AccountIdNormalizer.compareKey(company.name());
+            if (compareKey.isEmpty() || company.contactIds() == null) {
+                continue;
+            }
+            String familyKey = existingByCompareKey.getOrDefault(
+                    compareKey, AccountIdNormalizer.canonical(company.name()));
+            for (Long contactId : company.contactIds()) {
+                String email = contactIdToEmail.get(contactId);
+                if (email == null) {
+                    continue;
+                }
+                Student student = unassignedByEmail.remove(email.trim().toLowerCase());
+                if (student != null) {
+                    student.setAccountId(familyKey);
+                    studentRepo.save(student);
+                    linked++;
+                }
+            }
+            // After assigning anyone, this key is now a real family others can match against.
+            existingByCompareKey.putIfAbsent(compareKey, familyKey);
+        }
+        entry.setFamilyLinksLinked(linked);
     }
 
     /**

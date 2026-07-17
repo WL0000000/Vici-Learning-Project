@@ -41,6 +41,10 @@ public class SyncLog {
     // Count of students whose EXT_ID (Brevo per-student id) was matched/set from Brevo this run.
     private int extIdsLinked;
 
+    // Count of previously-unassigned students assigned to a family (Account_ID) from a Brevo
+    // Company's linked contacts this run.
+    private int familyLinksLinked;
+
     @Column(columnDefinition = "text")
     private String errorMessage;
 
@@ -96,6 +100,9 @@ public class SyncLog {
 
     public int getExtIdsLinked() { return extIdsLinked; }
     public void setExtIdsLinked(int extIdsLinked) { this.extIdsLinked = extIdsLinked; }
+
+    public int getFamilyLinksLinked() { return familyLinksLinked; }
+    public void setFamilyLinksLinked(int familyLinksLinked) { this.familyLinksLinked = familyLinksLinked; }
 
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
