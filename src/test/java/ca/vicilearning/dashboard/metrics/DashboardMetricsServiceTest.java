@@ -10,6 +10,7 @@ import ca.vicilearning.dashboard.domain.Service;
 import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
+import ca.vicilearning.dashboard.domain.StudentStatus;
 import ca.vicilearning.dashboard.domain.Tutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -171,6 +172,23 @@ class DashboardMetricsServiceTest {
         assertThat(rows.get(0).sessionsThisWeek()).isEqualTo(1);
         assertThat(rows.get(1).hoursThisWeek()).isEqualTo(0.0);
         assertThat(rows.get(0).accountId()).isEqualTo("VICI-0001");
+        // Default status is ACTIVE and is carried on the row.
+        assertThat(rows.get(0).status()).isEqualTo(StudentStatus.ACTIVE);
+    }
+
+    @Test
+    void studentRows_statusFilter_returnsOnlyMatchingStatus() {
+        Student alice = student(1L, "Alice");          // ACTIVE by default
+        Student bob = student(2L, "Bob");
+        bob.setStatus(StudentStatus.PAUSED);
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(alice, bob));
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of());
+
+        // Filtering to PAUSED drops Alice; null would return both.
+        List<DashboardMetricsService.StudentRow> paused = service.studentRows(null, StudentStatus.PAUSED);
+
+        assertThat(paused).extracting(DashboardMetricsService.StudentRow::name).containsExactly("Bob");
+        assertThat(paused.get(0).status()).isEqualTo(StudentStatus.PAUSED);
     }
 
     @Test

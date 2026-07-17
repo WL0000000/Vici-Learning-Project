@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.web;
 
+import ca.vicilearning.dashboard.domain.StudentStatus;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.ServiceScope;
@@ -44,10 +45,17 @@ public class StudentsController {
             @RequestParam(defaultValue = "hours") String sort,
             @RequestParam(required = false) String location,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String status,
             Model model) {
 
         boolean sortByName = "name".equalsIgnoreCase(sort);
         model.addAttribute("selectedSort", sortByName ? "name" : "hours");
+
+        // Enrolment-status filter for the roster (Meeting #4): ACTIVE / PAUSED / all. Null = all.
+        // Exposed so the dropdown and the other filter links can preserve the selection.
+        StudentStatus statusFilter = parseStatus(status);
+        model.addAttribute("selectedStatus", statusFilter != null ? statusFilter.name() : null);
+        model.addAttribute("studentStatuses", StudentStatus.values());
 
         // Two independent service filters (Meeting #4): location (delivery mode) and category
         // (session type). Blank means "any". Both dropdowns' options + current selections are
@@ -134,7 +142,7 @@ public class StudentsController {
             });
         }
 
-        model.addAttribute("students", metrics.studentRows(scope));
+        model.addAttribute("students", metrics.studentRows(scope, statusFilter));
         model.addAttribute("families", metrics.familyGroups(scope));
         model.addAttribute("upcoming", metrics.upcoming(10, scope));
         return "students";
@@ -142,6 +150,18 @@ public class StudentsController {
 
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s;
+    }
+
+    /** Parse the status filter param to a {@link StudentStatus}, or null for "all"/unrecognized. */
+    private static StudentStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return StudentStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /** "Location · Category" when both set, one when only one is, null when neither. */
