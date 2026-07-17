@@ -9,6 +9,7 @@ import ca.vicilearning.dashboard.domain.MembershipRepository;
 import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
+import ca.vicilearning.dashboard.domain.StudentStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -296,17 +297,28 @@ public class DashboardMetricsService {
      * roster matches the page-wide location/category filter.
      */
     public List<StudentRow> studentRows(ServiceScope scope) {
+        return studentRows(scope, null);
+    }
+
+    /**
+     * As {@link #studentRows(ServiceScope)} but additionally filtered by enrolment status: when
+     * {@code statusFilter} is non-null only students with that {@link StudentStatus} are returned
+     * (null = both). Backs the Students roster's ACTIVE/PAUSED filter (Meeting #4). The status is
+     * carried on each row so the view can badge it.
+     */
+    public List<StudentRow> studentRows(ServiceScope scope, StudentStatus statusFilter) {
         Map<Long, double[]> byStudent = hoursThisWeekByStudent(scope);
         Set<Long> matching = isAll(scope) ? null : studentIdsMatching(scope);
 
         return studentRepo.findByDeletedAtIsNull().stream()
                 .filter(s -> matching == null || matching.contains(s.getId()))
+                .filter(s -> statusFilter == null || s.getStatus() == statusFilter)
                 .sorted(Comparator.comparing(Student::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .map(s -> {
                     double[] cell = byStudent.getOrDefault(s.getId(), new double[]{0.0, 0.0});
                     return new StudentRow(
                             s.getId(), s.getName(), s.getAccountId(), s.getExtId(), s.getEmail(), s.getPhone(),
-                            (int) cell[1], round1(cell[0]));
+                            (int) cell[1], round1(cell[0]), s.getStatus());
                 })
                 .toList();
     }
@@ -667,7 +679,7 @@ public class DashboardMetricsService {
     public record TutorHours(String tutorName, double hours, int sessions) {}
 
     public record StudentRow(Long id, String name, String accountId, String extId, String email, String phone,
-                             int sessionsThisWeek, double hoursThisWeek) {}
+                             int sessionsThisWeek, double hoursThisWeek, StudentStatus status) {}
 
     /**
      * A family: the students (siblings) sharing one Account_ID, with this week's combined totals
