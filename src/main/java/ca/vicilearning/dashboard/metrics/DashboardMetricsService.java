@@ -71,15 +71,29 @@ public class DashboardMetricsService {
     }
 
     /**
-     * Distinct non-blank service locations (the export's "Service category" column — At Home /
-     * Virtual Tutoring / VICI Learning Centre), sorted, for the filter dropdown. Reads active
-     * services only.
+     * Distinct non-blank service <b>locations</b> — the delivery mode from SimplyBook (At Home /
+     * Virtual Tutoring / VICI Learning Centre / Study Clubs), sorted, for the Location filter
+     * dropdown. Reads active services only. (Meeting #4: these are locations, not categories.)
      */
     public List<String> serviceLocations() {
+        return distinctServiceAttr(ca.vicilearning.dashboard.domain.Service::getLocation);
+    }
+
+    /**
+     * Distinct non-blank service <b>categories</b> — the session type from SimplyBook
+     * (Private 1:1 / Study Club / Assessment), sorted, for the Category filter dropdown.
+     * A separate axis from {@link #serviceLocations()} (Meeting #4).
+     */
+    public List<String> serviceCategories() {
+        return distinctServiceAttr(ca.vicilearning.dashboard.domain.Service::getCategory);
+    }
+
+    private List<String> distinctServiceAttr(
+            java.util.function.Function<ca.vicilearning.dashboard.domain.Service, String> attr) {
         return serviceRepo.findByDeletedAtIsNull().stream()
-                .map(ca.vicilearning.dashboard.domain.Service::getLocation)
+                .map(attr)
                 .filter(Objects::nonNull)
-                .filter(l -> !l.isBlank())
+                .filter(v -> !v.isBlank())
                 .distinct()
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
@@ -87,34 +101,34 @@ public class DashboardMetricsService {
 
     // ── Public metrics ─────────────────────────────────────────────────────────
 
-    /** Headline overview cards for the current week / month (all service locations). */
+    /** Headline overview cards for the current week / month (all services). */
     public Overview overview() {
         return overview(null);
     }
 
     /**
-     * Headline overview cards, optionally scoped to a single service location (the export's
-     * "Service category" filter — At Home / Virtual / Centre). When {@code location} is set,
-     * sessions/hours/cancellations count only that location and "active students" becomes the number
-     * of students with a booking there, so the whole overview reflects the same page-wide filter.
+     * Headline overview cards, optionally scoped to a {@link ServiceScope} (location and/or
+     * category). When a scope is set, sessions/hours/cancellations count only matching bookings and
+     * "active students" becomes the number of students with a matching booking, so the whole
+     * overview reflects the same page-wide filter.
      */
-    public Overview overview(String location) {
+    public Overview overview(ServiceScope scope) {
         LocalDate today = today();
         LocalDate weekStart = weekStart(today);
 
         List<Booking> thisWeek = activeBetween(weekStart, weekStart.plusWeeks(1));
         int sessions = (int) thisWeek.stream()
-                .filter(b -> isCounted(b) && matchesLocation(b, location)).count();
+                .filter(b -> isCounted(b) && matches(b, scope)).count();
         double hours = thisWeek.stream()
-                .filter(b -> isCounted(b) && matchesLocation(b, location)).mapToDouble(this::hoursOf).sum();
+                .filter(b -> isCounted(b) && matches(b, scope)).mapToDouble(this::hoursOf).sum();
 
         LocalDate monthStart = today.withDayOfMonth(1);
         long cancellations = activeBetween(monthStart, monthStart.plusMonths(1)).stream()
-                .filter(b -> isCancelled(b) && matchesLocation(b, location)).count();
+                .filter(b -> isCancelled(b) && matches(b, scope)).count();
 
-        long activeStudents = isAllLocations(location)
+        long activeStudents = isAll(scope)
                 ? studentRepo.countByDeletedAtIsNull()
-                : studentIdsInLocation(location).size();
+                : studentIdsMatching(scope).size();
 
         return new Overview(activeStudents, sessions, round1(hours), (int) cancellations);
     }
@@ -145,11 +159,11 @@ public class DashboardMetricsService {
     }
 
     /**
-     * As {@link #hoursByPeriod(PeriodUnit, int, int)} but restricted to bookings whose service is in
-     * the given location (the export's "Service category" — At Home / Virtual / Centre). A null or
-     * blank {@code location} means no filter. Backs Sara's "filter hours booked by category" ask.
+     * As {@link #hoursByPeriod(PeriodUnit, int, int)} but restricted to bookings matching the given
+     * {@link ServiceScope} (location and/or category). A null/empty scope means no filter. Backs
+     * Sara's "filter hours booked by location/category" ask.
      */
-    public List<PeriodHours> hoursByPeriod(PeriodUnit unit, int periodsBack, int periodsAhead, String location) {
+    public List<PeriodHours> hoursByPeriod(PeriodUnit unit, int periodsBack, int periodsAhead, ServiceScope scope) {
         LocalDate currentBucket = bucketStart(unit, today());
         LocalDate firstBucket = stepBucket(unit, currentBucket, -periodsBack);
         LocalDate endExclusive = stepBucket(unit, currentBucket, periodsAhead + 1L);
@@ -161,7 +175,7 @@ public class DashboardMetricsService {
         }
 
         for (Booking bk : activeBetween(firstBucket, endExclusive)) {
-            if (!isCounted(bk) || !matchesLocation(bk, location)) continue;
+            if (!isCounted(bk) || !matches(bk, scope)) continue;
             LocalDate bucket = bucketStart(unit, bk.getStartTime().toLocalDate());
             double[] cell = byBucket.get(bucket);
             if (cell != null) {
@@ -183,11 +197,11 @@ public class DashboardMetricsService {
         return hoursInRange(fromInclusive, toExclusive, null);
     }
 
-    /** As {@link #hoursInRange(LocalDate, LocalDate)} but restricted to a service location filter. */
-    public RangeHours hoursInRange(LocalDate fromInclusive, LocalDate toExclusive, String location) {
+    /** As {@link #hoursInRange(LocalDate, LocalDate)} but restricted to a {@link ServiceScope} filter. */
+    public RangeHours hoursInRange(LocalDate fromInclusive, LocalDate toExclusive, ServiceScope scope) {
         List<Booking> bookings = activeBetween(fromInclusive, toExclusive).stream()
                 .filter(this::isCounted)
-                .filter(b -> matchesLocation(b, location))
+                .filter(b -> matches(b, scope))
                 .toList();
         double hours = bookings.stream().mapToDouble(this::hoursOf).sum();
         return new RangeHours(round1(hours), bookings.size());
@@ -198,12 +212,12 @@ public class DashboardMetricsService {
         return upcoming(limit, null);
     }
 
-    /** As {@link #upcoming(int)} but restricted to a service location (null/blank = all). */
-    public List<UpcomingSession> upcoming(int limit, String location) {
+    /** As {@link #upcoming(int)} but restricted to a {@link ServiceScope} (null/empty = all). */
+    public List<UpcomingSession> upcoming(int limit, ServiceScope scope) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         return bookingRepo.findActiveWithRefsBetween(now, now.plusDays(60)).stream()
                 .filter(this::isCounted)
-                .filter(b -> matchesLocation(b, location))
+                .filter(b -> matches(b, scope))
                 .sorted(Comparator.comparing(Booking::getStartTime))
                 .limit(limit)
                 .map(b -> new UpcomingSession(
@@ -232,10 +246,10 @@ public class DashboardMetricsService {
         return tutorHoursForPeriod(unit, sortByName, null);
     }
 
-    /** As {@link #tutorHoursForPeriod(PeriodUnit, boolean)} but restricted to a service location. */
-    public List<TutorHours> tutorHoursForPeriod(PeriodUnit unit, boolean sortByName, String location) {
+    /** As {@link #tutorHoursForPeriod(PeriodUnit, boolean)} but restricted to a {@link ServiceScope}. */
+    public List<TutorHours> tutorHoursForPeriod(PeriodUnit unit, boolean sortByName, ServiceScope scope) {
         LocalDate start = bucketStart(unit, today());
-        return tutorHoursForRange(start, stepBucket(unit, start, 1), sortByName, location);
+        return tutorHoursForRange(start, stepBucket(unit, start, 1), sortByName, scope);
     }
 
     /**
@@ -247,12 +261,12 @@ public class DashboardMetricsService {
         return tutorHoursForRange(fromInclusive, toExclusive, sortByName, null);
     }
 
-    /** As {@link #tutorHoursForRange(LocalDate, LocalDate, boolean)} but with a service-location filter. */
+    /** As {@link #tutorHoursForRange(LocalDate, LocalDate, boolean)} but with a {@link ServiceScope} filter. */
     public List<TutorHours> tutorHoursForRange(LocalDate fromInclusive, LocalDate toExclusive,
-                                               boolean sortByName, String location) {
+                                               boolean sortByName, ServiceScope scope) {
         Map<String, double[]> byTutor = new LinkedHashMap<>();
         for (Booking b : activeBetween(fromInclusive, toExclusive)) {
-            if (!isCounted(b) || !matchesLocation(b, location)) continue;
+            if (!isCounted(b) || !matches(b, scope)) continue;
             String tutor = b.getTutor() != null ? b.getTutor().getName() : "Unassigned";
             double[] cell = byTutor.computeIfAbsent(tutor, k -> new double[]{0.0, 0.0});
             cell[0] += hoursOf(b);
@@ -277,16 +291,16 @@ public class DashboardMetricsService {
     }
 
     /**
-     * As {@link #studentRows()} but scoped to a service location: only students with a booking in
-     * that location are returned, and their weekly sessions/hours count only that location — so the
-     * roster matches the page-wide "Service category" filter.
+     * As {@link #studentRows()} but scoped to a {@link ServiceScope}: only students with a matching
+     * booking are returned, and their weekly sessions/hours count only matching bookings — so the
+     * roster matches the page-wide location/category filter.
      */
-    public List<StudentRow> studentRows(String location) {
-        Map<Long, double[]> byStudent = hoursThisWeekByStudent(location);
-        Set<Long> inLocation = isAllLocations(location) ? null : studentIdsInLocation(location);
+    public List<StudentRow> studentRows(ServiceScope scope) {
+        Map<Long, double[]> byStudent = hoursThisWeekByStudent(scope);
+        Set<Long> matching = isAll(scope) ? null : studentIdsMatching(scope);
 
         return studentRepo.findByDeletedAtIsNull().stream()
-                .filter(s -> inLocation == null || inLocation.contains(s.getId()))
+                .filter(s -> matching == null || matching.contains(s.getId()))
                 .sorted(Comparator.comparing(Student::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .map(s -> {
                     double[] cell = byStudent.getOrDefault(s.getId(), new double[]{0.0, 0.0});
@@ -312,20 +326,20 @@ public class DashboardMetricsService {
     }
 
     /**
-     * As {@link #familyGroups()} but scoped to a service location: only families with at least one
-     * member booked in that location are returned, and weekly hours count only that location — so
-     * the Families rollup matches the page-wide "Service category" filter.
+     * As {@link #familyGroups()} but scoped to a {@link ServiceScope}: only families with at least
+     * one matching-booked member are returned, and weekly hours count only matching bookings — so
+     * the Families rollup matches the page-wide location/category filter.
      */
-    public List<FamilyGroup> familyGroups(String location) {
-        Map<Long, double[]> byStudent = hoursThisWeekByStudent(location);
-        Set<Long> inLocation = isAllLocations(location) ? null : studentIdsInLocation(location);
+    public List<FamilyGroup> familyGroups(ServiceScope scope) {
+        Map<Long, double[]> byStudent = hoursThisWeekByStudent(scope);
+        Set<Long> matching = isAll(scope) ? null : studentIdsMatching(scope);
 
-        // Per-student service categories/locations (from all bookings) and membership balances,
-        // built once so the rollup below is O(students) rather than querying per family.
+        // Per-student service categories/locations (from all bookings) and each student's latest
+        // membership balance, built once so the rollup below is O(students) rather than per-family.
         Map<Long, Set<String>> categoriesByStudent = new LinkedHashMap<>();
         Map<Long, Set<String>> locationsByStudent = new LinkedHashMap<>();
         collectServiceAttrs(categoriesByStudent, locationsByStudent);
-        Map<Long, List<Integer>> balancesByStudent = membershipBalancesByStudent();
+        Map<Long, Integer> latestBalanceByStudent = latestMembershipBalanceByStudent(false);
 
         // Preserve insertion order per key so members stay sorted by the pre-sorted stream below.
         Map<String, List<FamilyMember>> byAccount = new LinkedHashMap<>();
@@ -341,8 +355,8 @@ public class DashboardMetricsService {
 
         return byAccount.entrySet().stream()
                 .filter(e -> e.getValue().size() >= 2)
-                .filter(e -> inLocation == null
-                        || e.getValue().stream().anyMatch(m -> inLocation.contains(m.id())))
+                .filter(e -> matching == null
+                        || e.getValue().stream().anyMatch(m -> matching.contains(m.id())))
                 .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
                 .map(e -> {
                     List<FamilyMember> members = e.getValue();
@@ -350,13 +364,15 @@ public class DashboardMetricsService {
                     double hours = members.stream().mapToDouble(FamilyMember::hoursThisWeek).sum();
 
                     // Union the compact distinct lists across the family's members (Meeting #3 rows).
+                    // Balances are each member's LATEST membership only (Meeting #4).
                     Set<String> categories = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
                     Set<String> locations = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
                     List<Integer> balances = new ArrayList<>();
                     for (FamilyMember m : members) {
                         categories.addAll(categoriesByStudent.getOrDefault(m.id(), Set.of()));
                         locations.addAll(locationsByStudent.getOrDefault(m.id(), Set.of()));
-                        balances.addAll(balancesByStudent.getOrDefault(m.id(), List.of()));
+                        Integer bal = latestBalanceByStudent.get(m.id());
+                        if (bal != null) balances.add(bal);
                     }
                     return new FamilyGroup(e.getKey(), members, sessions, round1(hours),
                             List.copyOf(categories), List.copyOf(locations), balances);
@@ -379,36 +395,46 @@ public class DashboardMetricsService {
         map.computeIfAbsent(studentId, k -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)).add(value.trim());
     }
 
-    /** studentId → each membership's remaining prepaid sessions (the export's {@code rest}). */
-    private Map<Long, List<Integer>> membershipBalancesByStudent() {
-        return membershipBalancesByStudent(false);
-    }
-
     /**
-     * studentId → remaining prepaid sessions per membership. When {@code activeOnly}, cancelled
-     * memberships are skipped — used by the low/zero-balance alerting, which shouldn't flag a
-     * family whose membership is already cancelled.
+     * studentId → the remaining prepaid-session balance of the student's <b>latest</b> membership
+     * (the most recently purchased, by {@code startDate}). Sara confirmed (Meeting #4) the counter
+     * should reflect the latest membership they bought, not every membership they've ever held.
+     * When {@code activeOnly}, cancelled memberships are ignored — used by the low/zero-balance
+     * alerting, which shouldn't flag a family whose latest active membership is fine.
      */
-    private Map<Long, List<Integer>> membershipBalancesByStudent(boolean activeOnly) {
-        Map<Long, List<Integer>> map = new LinkedHashMap<>();
+    private Map<Long, Integer> latestMembershipBalanceByStudent(boolean activeOnly) {
+        Map<Long, Membership> latest = new LinkedHashMap<>();
         for (Membership m : membershipRepo.findByDeletedAtIsNull()) {
             // getStudent() returns the lazy proxy (or null); getId() on it needs no DB hit.
             if (m.getStudent() == null || m.getRemainingCount() == null) continue;
             if (activeOnly && !m.isActive()) continue;
-            map.computeIfAbsent(m.getStudent().getId(), k -> new ArrayList<>()).add(m.getRemainingCount());
+            Long sid = m.getStudent().getId();
+            Membership incumbent = latest.get(sid);
+            if (incumbent == null || isLater(m.getStartDate(), incumbent.getStartDate())) {
+                latest.put(sid, m);
+            }
         }
-        return map;
+        Map<Long, Integer> out = new LinkedHashMap<>();
+        latest.forEach((sid, m) -> out.put(sid, m.getRemainingCount()));
+        return out;
+    }
+
+    /** True when {@code candidate} is a later start date than {@code incumbent} (nulls sort earliest). */
+    private boolean isLater(LocalDateTime candidate, LocalDateTime incumbent) {
+        if (candidate == null) return false;
+        if (incumbent == null) return true;
+        return candidate.isAfter(incumbent);
     }
 
     /**
      * This week's booked [hours, sessions] per active student id, cancellations excluded and
-     * optionally restricted to a single service location (null/blank = all).
+     * optionally restricted to a {@link ServiceScope} (null/empty = all).
      */
-    private Map<Long, double[]> hoursThisWeekByStudent(String location) {
+    private Map<Long, double[]> hoursThisWeekByStudent(ServiceScope scope) {
         LocalDate weekStart = weekStart(today());
         Map<Long, double[]> byStudent = new LinkedHashMap<>(); // [hours, sessions]
         for (Booking b : activeBetween(weekStart, weekStart.plusWeeks(1))) {
-            if (!isCounted(b) || !matchesLocation(b, location)) continue;
+            if (!isCounted(b) || !matches(b, scope)) continue;
             double[] cell = byStudent.computeIfAbsent(b.getStudent().getId(), k -> new double[]{0.0, 0.0});
             cell[0] += hoursOf(b);
             cell[1] += 1;
@@ -416,16 +442,16 @@ public class DashboardMetricsService {
         return byStudent;
     }
 
-    /** True when {@code location} means "all locations" (no filter). */
-    private boolean isAllLocations(String location) {
-        return location == null || location.isBlank();
+    /** True when {@code scope} means "everything" (no filter). */
+    private boolean isAll(ServiceScope scope) {
+        return scope == null || scope.isAll();
     }
 
-    /** Distinct ids of active students with at least one non-cancelled booking in {@code location}. */
-    private Set<Long> studentIdsInLocation(String location) {
+    /** Distinct ids of active students with at least one non-cancelled booking matching {@code scope}. */
+    private Set<Long> studentIdsMatching(ServiceScope scope) {
         Set<Long> ids = new HashSet<>();
         for (Booking b : bookingRepo.findActiveWithStudentAndService()) {
-            if (isCounted(b) && matchesLocation(b, location) && b.getStudent() != null) {
+            if (isCounted(b) && matches(b, scope) && b.getStudent() != null) {
                 ids.add(b.getStudent().getId());
             }
         }
@@ -445,7 +471,7 @@ public class DashboardMetricsService {
 
         Map<Long, LocalDateTime> lastBookingByStudent = new LinkedHashMap<>();
         Map<Long, Integer> cancellationsThisMonth = new LinkedHashMap<>();
-        Map<Long, List<Integer>> balancesByStudent = membershipBalancesByStudent(true);
+        Map<Long, Integer> latestBalanceByStudent = latestMembershipBalanceByStudent(true);
 
         for (Booking b : bookingRepo.findByDeletedAtIsNull()) {
             Long sid = b.getStudent().getId();
@@ -479,8 +505,9 @@ public class DashboardMetricsService {
                         cancels + " cancellations this month", null, cancels));
             }
 
-            // One alert per low/empty active membership the student owns ("can't book at 0").
-            for (int balance : balancesByStudent.getOrDefault(s.getId(), List.of())) {
+            // One alert from the student's latest active membership balance ("can't book at 0").
+            Integer balance = latestBalanceByStudent.get(s.getId());
+            if (balance != null) {
                 if (balance <= 0) {
                     items.add(new ActionItem(s.getId(), s.getName(), "MEMBERSHIP_EMPTY",
                             "Membership empty — 0 sessions left (can't book)", null,
@@ -549,13 +576,22 @@ public class DashboardMetricsService {
     }
 
     /**
-     * True when the booking's service is in {@code location} (case-insensitive). A null/blank
-     * location means "no filter" (matches everything). The service is join-fetched by
-     * {@code activeBetween}, so reading its location is safe with open-in-view off.
+     * True when the booking's service satisfies every set dimension of {@code scope} — its location
+     * (if the scope sets one) and its category (if the scope sets one), both case-insensitive. A
+     * null/empty scope matches everything. The service is join-fetched by {@code activeBetween}, so
+     * reading its attributes is safe with open-in-view off.
      */
-    private boolean matchesLocation(Booking b, String location) {
-        if (location == null || location.isBlank()) return true;
-        return b.getService() != null && location.equalsIgnoreCase(b.getService().getLocation());
+    private boolean matches(Booking b, ServiceScope scope) {
+        if (isAll(scope)) return true;
+        ca.vicilearning.dashboard.domain.Service sv = b.getService();
+        if (sv == null) return false;
+        if (!isBlank(scope.location()) && !scope.location().equalsIgnoreCase(sv.getLocation())) return false;
+        if (!isBlank(scope.category()) && !scope.category().equalsIgnoreCase(sv.getCategory())) return false;
+        return true;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     /** Hours from the booking's actual duration, falling back to the service's configured length. */
@@ -602,6 +638,16 @@ public class DashboardMetricsService {
     }
 
     // ── DTOs (records carried to the view) ───────────────────────────────────────
+
+    /**
+     * A page-wide service filter: an optional {@code location} (At Home / Virtual / Centre / Study
+     * Clubs) and/or an optional {@code category} (Private 1:1 / Study Club / Assessment). Either or
+     * both may be set; a booking matches only if it satisfies every set dimension (AND). Blank
+     * fields mean "any". (Meeting #4 established location and category as two distinct axes.)
+     */
+    public record ServiceScope(String location, String category) {
+        public boolean isAll() { return isBlank(location) && isBlank(category); }
+    }
 
     public record Overview(long activeStudents, int sessionsThisWeek,
                            double hoursThisWeek, int cancellationsThisMonth) {}
