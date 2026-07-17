@@ -31,6 +31,14 @@ public class Student {
     // from accountId, which is the family. Nullable until synced from Brevo. (Meeting #3.)
     private String extId;
 
+    // Enrolment status — a manual ACTIVE/PAUSED flag (Meeting #4), stored as text so the value is
+    // readable in the DB. Defaults to ACTIVE and is non-null; SimplyBook doesn't carry it, so the
+    // sync preserves it across upserts (see SyncService.syncStudents). Distinct from "lapsed",
+    // which is computed from booking recency.
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private StudentStatus status = StudentStatus.ACTIVE;
+
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
@@ -57,6 +65,9 @@ public class Student {
 
     public String getExtId() { return extId; }
     public void setExtId(String extId) { this.extId = extId; }
+
+    public StudentStatus getStatus() { return status; }
+    public void setStatus(StudentStatus status) { this.status = status; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

@@ -213,6 +213,12 @@ public class SyncService {
         Map<Long, String> knownExtIds = existing.stream()
                 .filter(s -> s.getExtId() != null)
                 .collect(Collectors.toMap(Student::getId, Student::getExtId));
+        // Status is a local/Brevo-held flag SimplyBook never returns, so a freshly adapted student
+        // always carries the default ACTIVE. Carry over the stored status so a staff-set PAUSED
+        // isn't reset to ACTIVE on every sync.
+        Map<Long, StudentStatus> knownStatuses = existing.stream()
+                .filter(s -> s.getStatus() != null)
+                .collect(Collectors.toMap(Student::getId, Student::getStatus));
         for (Student s : students) {
             String knownAccount = knownAccountIds.get(s.getId());
             if (knownAccount != null) {
@@ -221,6 +227,10 @@ public class SyncService {
             String knownExt = knownExtIds.get(s.getId());
             if (knownExt != null) {
                 s.setExtId(knownExt);
+            }
+            StudentStatus knownStatus = knownStatuses.get(s.getId());
+            if (knownStatus != null) {
+                s.setStatus(knownStatus);
             }
         }
 
