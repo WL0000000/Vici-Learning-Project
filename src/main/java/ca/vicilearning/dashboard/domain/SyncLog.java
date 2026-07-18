@@ -45,6 +45,9 @@ public class SyncLog {
     // Company's linked contacts this run.
     private int familyLinksLinked;
 
+    // Count of students whose ACTIVE/PAUSED status was updated from Brevo STUDENT_STATUS this run.
+    private int statusesUpdated;
+
     @Column(columnDefinition = "text")
     private String errorMessage;
 
@@ -103,6 +106,9 @@ public class SyncLog {
 
     public int getFamilyLinksLinked() { return familyLinksLinked; }
     public void setFamilyLinksLinked(int familyLinksLinked) { this.familyLinksLinked = familyLinksLinked; }
+
+    public int getStatusesUpdated() { return statusesUpdated; }
+    public void setStatusesUpdated(int statusesUpdated) { this.statusesUpdated = statusesUpdated; }
 
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
