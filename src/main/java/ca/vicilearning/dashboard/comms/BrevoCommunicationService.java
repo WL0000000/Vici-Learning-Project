@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,12 @@ public class BrevoCommunicationService {
     private static final String ENDPOINT_SMTP_EMAIL = "/smtp/email";
     private static final String DEFAULT_STATUS = "Active";
 
+    // Page sizes for the family-link sync's paginated pulls. Contacts allow up to 1000/page;
+    // companies up to 100/page. (The older single-page methods above still use the 100 cap — a
+    // known limitation flagged separately; only the family-link pulls are paginated for now.)
+    private static final int CONTACTS_PAGE_SIZE = 1000;
+    private static final int COMPANIES_PAGE_SIZE = 100;
+
     // --- Inner DTO Node Data Enclaves (Records) ---
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -37,6 +44,9 @@ public class BrevoCommunicationService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record BrevoContactNode(
+        // Brevo's numeric contact id. This is what a Company's linkedContactsIds reference, so it's
+        // the join key between a family Company and its student contacts.
+        @JsonProperty("id") Long id,
         @JsonProperty("email") String email,
         // Brevo's top-level external id = the per-student EXT_ID (not an attribute).
         @JsonProperty("ext_id") String extId,
@@ -48,6 +58,32 @@ public class BrevoCommunicationService {
         @JsonProperty("contacts") List<BrevoContactNode> contacts,
         @JsonProperty("count") Long count
     ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record BrevoCompanyNode(
+        @JsonProperty("id") String id,
+        // The family name lives in attributes.name (free text); there is no dedicated Account_ID
+        // field on a Brevo company (confirmed via GET /companies/attributes).
+        @JsonProperty("attributes") Map<String, Object> attributes,
+        // Numeric ids of the contacts (students) linked to this company/family.
+        @JsonProperty("linkedContactsIds") List<Long> linkedContactsIds
+    ) {
+        public String name() {
+            Object n = (attributes == null) ? null : attributes.get("name");
+            return n == null ? null : n.toString();
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record BrevoListCompaniesResponse(
+        @JsonProperty("items") List<BrevoCompanyNode> items
+    ) {}
+
+    /**
+     * A Brevo family Company reduced to what the family-link sync needs: the free-text family
+     * {@code name} and the numeric ids of its linked student contacts.
+     */
+    public record CompanyLink(String name, List<Long> contactIds) {}
 
     private final RestClient brevoRestClient;
 
@@ -173,6 +209,76 @@ public class BrevoCommunicationService {
                 familyBucket.put(cleanName, cleanStatus); 
             }
         }
+    }
+
+    /**
+     * Pulls every family Company from Brevo (paginated), each reduced to its free-text name and the
+     * numeric ids of its linked student contacts. This is the association link that Brevo's contact
+     * CSV export omits but the API exposes. Returns an empty list on any failure (no key, CRM feature
+     * off, or no companies), so callers treat that as "nothing to link" and skip cleanly.
+     */
+    public List<CompanyLink> fetchCompanies() {
+        List<CompanyLink> companies = new ArrayList<>();
+        try {
+            int page = 1;
+            while (true) {
+                BrevoListCompaniesResponse response = brevoRestClient.get()
+                        .uri("/companies?limit={limit}&page={page}", COMPANIES_PAGE_SIZE, page)
+                        .retrieve()
+                        .body(BrevoListCompaniesResponse.class);
+
+                if (response == null || response.items() == null || response.items().isEmpty()) {
+                    break;
+                }
+                for (BrevoCompanyNode node : response.items()) {
+                    companies.add(new CompanyLink(
+                            node.name(),
+                            node.linkedContactsIds() == null ? List.of() : node.linkedContactsIds()));
+                }
+                if (response.items().size() < COMPANIES_PAGE_SIZE) {
+                    break;
+                }
+                page++;
+            }
+        } catch (Exception e) {
+            log.error("Failed fetching Brevo companies for family-link sync.", e);
+        }
+        return companies;
+    }
+
+    /**
+     * Pulls all contacts (paginated past the 100 cap the other methods hit) and maps each Brevo
+     * numeric contact id to its email. Lets the family-link sync resolve a Company's
+     * {@code linkedContactsIds} to local students, which are matched to Brevo by email. Returns an
+     * empty map on any failure.
+     */
+    public Map<Long, String> fetchContactIdToEmailMap() {
+        Map<Long, String> lookupMap = new HashMap<>();
+        try {
+            int offset = 0;
+            while (true) {
+                BrevoListContactsResponse response = brevoRestClient.get()
+                        .uri("/contacts?limit={limit}&offset={offset}", CONTACTS_PAGE_SIZE, offset)
+                        .retrieve()
+                        .body(BrevoListContactsResponse.class);
+
+                if (response == null || response.contacts() == null || response.contacts().isEmpty()) {
+                    break;
+                }
+                for (BrevoContactNode contact : response.contacts()) {
+                    if (contact.id() != null && contact.email() != null && !contact.email().isBlank()) {
+                        lookupMap.put(contact.id(), contact.email().trim());
+                    }
+                }
+                if (response.contacts().size() < CONTACTS_PAGE_SIZE) {
+                    break;
+                }
+                offset += CONTACTS_PAGE_SIZE;
+            }
+        } catch (Exception e) {
+            log.error("Failed fetching Brevo contact id to email map.", e);
+        }
+        return lookupMap;
     }
 
     /**

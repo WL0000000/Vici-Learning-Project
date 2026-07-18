@@ -296,6 +296,85 @@ class SyncServiceTest {
         verifyNoInteractions(invoiceAdapter, membershipAdapter, invoiceRepo, membershipRepo);
     }
 
+    // Shared no-op stubs for the JSON-RPC steps, so a test can isolate the Brevo family-link step.
+    private void stubEmptyJsonRpcSteps() {
+        when(performerAdapter.toTutors(any())).thenReturn(List.of());
+        when(serviceAdapter.toServices(any())).thenReturn(List.of());
+        when(clientAdapter.toStudents(any())).thenReturn(List.of());
+        when(studentRepo.findAll()).thenReturn(List.of());
+        when(tutorRepo.findAll()).thenReturn(List.of());
+        when(serviceRepo.findAll()).thenReturn(List.of());
+        when(bookingAdapter.toBookings(any(), any(), any(), any())).thenReturn(List.of());
+        when(bookingRepo.findByStartTimeBetween(any(), any())).thenReturn(List.of());
+    }
+
+    @Test
+    void familyLinksStep_assignsUnassignedStudentFromBrevoCompany_inCanonicalForm() {
+        stubEmptyJsonRpcSteps();
+
+        Student unassigned = new Student();
+        unassigned.setId(9L);
+        unassigned.setEmail("Kid@Example.com");   // mixed case: matching must be case-insensitive
+        when(studentRepo.findByDeletedAtIsNullAndAccountIdIsNull()).thenReturn(List.of(unassigned));
+        // No family exists yet, so the key is minted canonically from the company name.
+        when(studentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of());
+
+        when(brevoService.fetchCompanies()).thenReturn(
+                List.of(new BrevoCommunicationService.CompanyLink("Smith", List.of(100L))));
+        when(brevoService.fetchContactIdToEmailMap()).thenReturn(java.util.Map.of(100L, "kid@example.com"));
+
+        SyncLog result = syncService.sync();
+
+        assertThat(unassigned.getAccountId()).isEqualTo("Smith_Account");
+        assertThat(result.getFamilyLinksLinked()).isEqualTo(1);
+        assertThat(result.isSuccess()).isTrue();
+        verify(studentRepo).save(unassigned);
+    }
+
+    @Test
+    void familyLinksStep_reusesExistingFamilyKey_whenCompanyNameMatchesModuloSuffixAndCase() {
+        stubEmptyJsonRpcSteps();
+
+        // A sibling is already in the family under a specific stored spelling.
+        Student sibling = new Student();
+        sibling.setId(8L);
+        sibling.setEmail("sib@example.com");
+        sibling.setAccountId("GRAY_Account");
+
+        Student unassigned = new Student();
+        unassigned.setId(9L);
+        unassigned.setEmail("kid@example.com");
+
+        when(studentRepo.findByDeletedAtIsNullAndAccountIdIsNull()).thenReturn(List.of(unassigned));
+        when(studentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(sibling));
+
+        // Brevo spells the company differently ("gray"); the student must still land in "GRAY_Account",
+        // the existing key — not a freshly-minted "gray_Account" fork.
+        when(brevoService.fetchCompanies()).thenReturn(
+                List.of(new BrevoCommunicationService.CompanyLink("gray", List.of(200L))));
+        when(brevoService.fetchContactIdToEmailMap()).thenReturn(java.util.Map.of(200L, "kid@example.com"));
+
+        SyncLog result = syncService.sync();
+
+        assertThat(unassigned.getAccountId()).isEqualTo("GRAY_Account");
+        assertThat(result.getFamilyLinksLinked()).isEqualTo(1);
+        assertThat(result.isSuccess()).isTrue();
+    }
+
+    @Test
+    void familyLinksStep_skippedCleanly_whenBrevoReturnsNoCompanies() {
+        stubEmptyJsonRpcSteps();
+        when(brevoService.fetchCompanies()).thenReturn(List.of());
+
+        SyncLog result = syncService.sync();
+
+        assertThat(result.getFamilyLinksLinked()).isEqualTo(0);
+        assertThat(result.isSuccess()).isTrue();
+        // No companies → we must never even query the unassigned backlog or fetch the contact map.
+        verify(studentRepo, never()).findByDeletedAtIsNullAndAccountIdIsNull();
+        verify(brevoService, never()).fetchContactIdToEmailMap();
+    }
+
     @Test
     void accountIdStep_isSkippedCleanly_whenRestNotConfigured() {
         when(performerAdapter.toTutors(any())).thenReturn(List.of());
