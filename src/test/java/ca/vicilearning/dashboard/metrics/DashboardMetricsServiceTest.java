@@ -39,13 +39,16 @@ class DashboardMetricsServiceTest {
 
     // Membership low-balance threshold of 2 for tests (a family with ≤2 sessions left is "low").
     private static final int LOW_THRESHOLD = 2;
+    // Lapse threshold of 21 days for tests (matches the production default).
+    private static final int LAPSE_THRESHOLD = 21;
 
     private final LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
 
     @BeforeEach
     void setUp() {
         service = new DashboardMetricsService(
-                bookingRepo, studentRepo, invoiceRepo, serviceRepo, membershipRepo, LOW_THRESHOLD);
+                bookingRepo, studentRepo, invoiceRepo, serviceRepo, membershipRepo,
+                LOW_THRESHOLD, LAPSE_THRESHOLD);
     }
 
     @Test

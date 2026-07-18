@@ -54,6 +54,11 @@ public class DashboardMetricsService {
     // rules engine exists. (Meeting #3 confirmed the credit model, so this alerting is valid.)
     private final int membershipLowThreshold;
 
+    // A student with no booking in at least this many days is "lapsed" — the top follow-up target.
+    // One configurable value shared with BrevoSyncEngineService so the dashboard action items and
+    // the Brevo reconciliation agree on who's lapsed (previously 21 here vs 14 there).
+    private final int lapseThresholdDays;
+
     // Action-item severities (sort key, higher = shown first). Membership problems rank high
     // because a family at/near 0 literally can't book more sessions.
     private static final int SEVERITY_MEMBERSHIP_EMPTY = 1000;
@@ -62,13 +67,15 @@ public class DashboardMetricsService {
     public DashboardMetricsService(BookingRepository bookingRepo, StudentRepository studentRepo,
                                     InvoiceRepository invoiceRepo, ServiceRepository serviceRepo,
                                     MembershipRepository membershipRepo,
-                                    @Value("${metrics.membership-low-threshold:2}") int membershipLowThreshold) {
+                                    @Value("${metrics.membership-low-threshold:2}") int membershipLowThreshold,
+                                    @Value("${metrics.lapse-threshold-days:21}") int lapseThresholdDays) {
         this.bookingRepo = bookingRepo;
         this.studentRepo = studentRepo;
         this.invoiceRepo = invoiceRepo;
         this.serviceRepo = serviceRepo;
         this.membershipRepo = membershipRepo;
         this.membershipLowThreshold = membershipLowThreshold;
+        this.lapseThresholdDays = lapseThresholdDays;
     }
 
     /**
@@ -472,7 +479,7 @@ public class DashboardMetricsService {
 
     /**
      * Students/families needing attention:
-     *  - no booking in 21+ days (using their most recent active booking)
+     *  - no booking in {@code metrics.lapse-threshold-days}+ days (from their most recent active booking)
      *  - 3+ cancellations this calendar month
      *  - membership balance at 0 ("can't book") or at/below the configurable low threshold
      * Sorted worst-first by severity (membership problems rank highest).
@@ -505,7 +512,7 @@ public class DashboardMetricsService {
             long daysSince = last == null ? Long.MAX_VALUE
                     : ChronoUnit.DAYS.between(last.toLocalDate(), today());
 
-            if (daysSince >= 21) {
+            if (daysSince >= lapseThresholdDays) {
                 items.add(new ActionItem(s.getId(), s.getName(), "NO_BOOKING",
                         last == null ? "No bookings on record" : "No booking in " + daysSince + " days",
                         last == null ? null : last.toLocalDate(), (int) Math.min(daysSince, Integer.MAX_VALUE)));
