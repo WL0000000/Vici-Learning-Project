@@ -376,6 +376,38 @@ class SyncServiceTest {
     }
 
     @Test
+    void statusStep_updatesStudentStatusFromBrevo_matchedByEmailCaseInsensitively() {
+        stubEmptyJsonRpcSteps();
+
+        Student student = new Student();
+        student.setId(11L);
+        student.setEmail("Kid@Example.com");   // default status ACTIVE; match must be case-insensitive
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(student));
+        when(brevoService.fetchEmailToStatusMap())
+                .thenReturn(java.util.Map.of("kid@example.com", "Paused"));
+
+        SyncLog result = syncService.sync();
+
+        assertThat(student.getStatus()).isEqualTo(StudentStatus.PAUSED);
+        assertThat(result.getStatusesUpdated()).isEqualTo(1);
+        assertThat(result.isSuccess()).isTrue();
+        verify(studentRepo).save(student);
+    }
+
+    @Test
+    void statusStep_skippedCleanly_whenBrevoReturnsNoStatuses() {
+        stubEmptyJsonRpcSteps();
+        when(brevoService.fetchEmailToStatusMap()).thenReturn(java.util.Map.of());
+
+        SyncLog result = syncService.sync();
+
+        assertThat(result.getStatusesUpdated()).isEqualTo(0);
+        assertThat(result.isSuccess()).isTrue();
+        // Empty map → the step returns before ever querying the roster.
+        verify(studentRepo, never()).findByDeletedAtIsNull();
+    }
+
+    @Test
     void accountIdStep_isSkippedCleanly_whenRestNotConfigured() {
         when(performerAdapter.toTutors(any())).thenReturn(List.of());
         when(serviceAdapter.toServices(any())).thenReturn(List.of());
