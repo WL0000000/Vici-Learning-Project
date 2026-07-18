@@ -2,6 +2,7 @@ package ca.vicilearning.dashboard.comms;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -26,10 +27,8 @@ public class BrevoCommunicationService {
     private static final String ENDPOINT_SMTP_EMAIL = "/smtp/email";
     private static final String DEFAULT_STATUS = "Active";
 
-    // Page sizes for the family-link sync's paginated pulls. Contacts allow up to 1000/page;
-    // companies up to 100/page. (The older single-page methods above still use the 100 cap — a
-    // known limitation flagged separately; only the family-link pulls are paginated for now.)
-    private static final int CONTACTS_PAGE_SIZE = 1000;
+    // Company page size for the family-link pull (Brevo allows up to 100/page). The contact page
+    // size is injectable (see constructor, default 1000) so tests can force a multi-page path.
     private static final int COMPANIES_PAGE_SIZE = 100;
 
     // --- Inner DTO Node Data Enclaves (Records) ---
@@ -86,9 +85,42 @@ public class BrevoCommunicationService {
     public record CompanyLink(String name, List<Long> contactIds) {}
 
     private final RestClient brevoRestClient;
+    private final int contactsPageSize;
 
-    public BrevoCommunicationService(RestClient brevoRestClient) {
+    public BrevoCommunicationService(RestClient brevoRestClient,
+            @Value("${brevo.contacts-page-size:1000}") int contactsPageSize) {
         this.brevoRestClient = brevoRestClient;
+        this.contactsPageSize = contactsPageSize;
+    }
+
+    /**
+     * Pulls <b>every</b> Brevo contact, paging past the API's per-request cap (default 1000/page) so
+     * callers never silently miss records once Vici exceeds one page. Returns whatever was read
+     * (empty on an immediate failure — e.g. no API key), so callers can treat that as "skip".
+     */
+    private List<BrevoContactNode> fetchAllContacts() {
+        List<BrevoContactNode> all = new ArrayList<>();
+        try {
+            int offset = 0;
+            while (true) {
+                BrevoListContactsResponse response = brevoRestClient.get()
+                        .uri("/contacts?limit={limit}&offset={offset}", contactsPageSize, offset)
+                        .retrieve()
+                        .body(BrevoListContactsResponse.class);
+
+                if (response == null || response.contacts() == null || response.contacts().isEmpty()) {
+                    break;
+                }
+                all.addAll(response.contacts());
+                if (response.contacts().size() < contactsPageSize) {
+                    break;
+                }
+                offset += contactsPageSize;
+            }
+        } catch (Exception e) {
+            log.error("Failed fetching Brevo contacts (paginated).", e);
+        }
+        return all;
     }
 
     /**
@@ -254,29 +286,10 @@ public class BrevoCommunicationService {
      */
     public Map<Long, String> fetchContactIdToEmailMap() {
         Map<Long, String> lookupMap = new HashMap<>();
-        try {
-            int offset = 0;
-            while (true) {
-                BrevoListContactsResponse response = brevoRestClient.get()
-                        .uri("/contacts?limit={limit}&offset={offset}", CONTACTS_PAGE_SIZE, offset)
-                        .retrieve()
-                        .body(BrevoListContactsResponse.class);
-
-                if (response == null || response.contacts() == null || response.contacts().isEmpty()) {
-                    break;
-                }
-                for (BrevoContactNode contact : response.contacts()) {
-                    if (contact.id() != null && contact.email() != null && !contact.email().isBlank()) {
-                        lookupMap.put(contact.id(), contact.email().trim());
-                    }
-                }
-                if (response.contacts().size() < CONTACTS_PAGE_SIZE) {
-                    break;
-                }
-                offset += CONTACTS_PAGE_SIZE;
+        for (BrevoContactNode contact : fetchAllContacts()) {
+            if (contact.id() != null && contact.email() != null && !contact.email().isBlank()) {
+                lookupMap.put(contact.id(), contact.email().trim());
             }
-        } catch (Exception e) {
-            log.error("Failed fetching Brevo contact id to email map.", e);
         }
         return lookupMap;
     }
