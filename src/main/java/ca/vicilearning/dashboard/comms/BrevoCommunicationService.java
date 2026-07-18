@@ -36,6 +36,9 @@ public class BrevoCommunicationService {
     public record BrevoAttributesNode(
         @JsonProperty("VICI_ACCOUNT_ID") String viciAccountId,
         @JsonProperty("STUDENT_NAMES") String studentNames,
+        // Enrolment status (ACTIVE/PAUSED) — distinct from ACTIVITY_STATUS, which drives lapse
+        // detection. Read per contact for the StudentStatus sync.
+        @JsonProperty("STUDENT_STATUS") String studentStatus,
         @JsonProperty("ACTIVITY_STATUS") String activityStatus,
         @JsonProperty("LAST_BOOKING_DATE") String lastBookingDate
     ) {}
@@ -153,6 +156,33 @@ public class BrevoCommunicationService {
         for (BrevoContactNode contact : fetchAllContacts()) {
             if (contact.email() != null && contact.extId() != null && !contact.extId().isBlank()) {
                 lookupMap.put(contact.email().trim().toLowerCase(), contact.extId().trim());
+            }
+        }
+        return lookupMap;
+    }
+
+    /**
+     * Maps each contact's email (lower-cased) to its raw Brevo {@code STUDENT_STATUS} string — the
+     * enrolment status the {@link ca.vicilearning.dashboard.sync.SyncService} parses to
+     * {@code ACTIVE}/{@code PAUSED} and stamps onto local students (matched by email). Contacts with
+     * no status are omitted, so a sync only overrides a local status when Brevo specifies one. Empty
+     * on any failure (e.g. no API key), so the caller skips cleanly.
+     *
+     * <p><b>Assumption to verify against real data (Meeting #4 field-shape check):</b> this reads
+     * {@code STUDENT_STATUS} as a <em>per-contact</em> attribute matched by email, consistent with the
+     * one-student = one-Brevo-contact identity model. If Vici's Brevo instead stores it as a parallel
+     * list on a family/parent contact (like {@code STUDENT_NAMES}/{@code ACTIVITY_STATUS}), the match
+     * key would move to account-id + name — swap the mapping here.
+     */
+    public Map<String, String> fetchEmailToStatusMap() {
+        Map<String, String> lookupMap = new HashMap<>();
+        for (BrevoContactNode contact : fetchAllContacts()) {
+            if (contact.email() == null || contact.attributes() == null) {
+                continue;
+            }
+            String status = contact.attributes().studentStatus();
+            if (status != null && !status.isBlank()) {
+                lookupMap.put(contact.email().trim().toLowerCase(), status.trim());
             }
         }
         return lookupMap;
