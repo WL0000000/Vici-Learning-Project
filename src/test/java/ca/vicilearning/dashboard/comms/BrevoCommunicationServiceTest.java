@@ -68,4 +68,24 @@ class BrevoCommunicationServiceTest {
 
         assertThat(service.fetchEmailToExtIdMap()).isEmpty();
     }
+
+    @Test
+    void fetchEmailToStatusMap_readsStudentStatusPerContact_omittingBlanks() {
+        wm.stubFor(get(urlPathEqualTo("/contacts"))
+                .withQueryParam("offset", equalTo("0"))
+                .willReturn(okJson("""
+                        {"contacts":[
+                          {"email":"Active@x.com","attributes":{"STUDENT_STATUS":"Active"}},
+                          {"email":"paused@x.com","attributes":{"STUDENT_STATUS":"Paused"}},
+                          {"email":"none@x.com","attributes":{"STUDENT_STATUS":""}}
+                        ]}""")));
+
+        Map<String, String> map = service.fetchEmailToStatusMap();
+
+        // Email is lower-cased; the blank-status contact is omitted (sync leaves it untouched).
+        assertThat(map)
+                .containsEntry("active@x.com", "Active")
+                .containsEntry("paused@x.com", "Paused")
+                .doesNotContainKey("none@x.com");
+    }
 }
