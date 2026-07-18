@@ -22,7 +22,6 @@ public class BrevoCommunicationService {
     private static final Logger log = LoggerFactory.getLogger(BrevoCommunicationService.class);
 
     // Endpoint URIs and API Defaults
-    private static final String ENDPOINT_CONTACTS = "/contacts?limit=100&offset=0";
     private static final String ENDPOINT_CONTACT_BY_EMAIL = "/contacts/{email}";
     private static final String ENDPOINT_SMTP_EMAIL = "/smtp/email";
     private static final String DEFAULT_STATUS = "Active";
@@ -131,24 +130,13 @@ public class BrevoCommunicationService {
      */
     public Map<String, String> fetchViciIdToEmailMap() {
         Map<String, String> lookupMap = new HashMap<>();
-        try {
-            BrevoListContactsResponse response = brevoRestClient.get()
-                    .uri(ENDPOINT_CONTACTS) 
-                    .retrieve()
-                    .body(BrevoListContactsResponse.class);
-
-            if (response != null && response.contacts() != null) {
-                for (BrevoContactNode contact : response.contacts()) {
-                    if (contact.attributes() != null && contact.attributes().viciAccountId() != null) {
-                        String cleanViciId = contact.attributes().viciAccountId().trim().toUpperCase();
-                        if (!cleanViciId.isEmpty() && contact.email() != null) {
-                            lookupMap.put(cleanViciId, contact.email().trim());
-                        }
-                    }
+        for (BrevoContactNode contact : fetchAllContacts()) {
+            if (contact.attributes() != null && contact.attributes().viciAccountId() != null) {
+                String cleanViciId = contact.attributes().viciAccountId().trim().toUpperCase();
+                if (!cleanViciId.isEmpty() && contact.email() != null) {
+                    lookupMap.put(cleanViciId, contact.email().trim());
                 }
             }
-        } catch (Exception e) {
-            log.error("Failed compiling VICI ID to Email mapping matrix.", e);
         }
         return lookupMap;
     }
@@ -162,21 +150,10 @@ public class BrevoCommunicationService {
      */
     public Map<String, String> fetchEmailToExtIdMap() {
         Map<String, String> lookupMap = new HashMap<>();
-        try {
-            BrevoListContactsResponse response = brevoRestClient.get()
-                    .uri(ENDPOINT_CONTACTS)
-                    .retrieve()
-                    .body(BrevoListContactsResponse.class);
-
-            if (response != null && response.contacts() != null) {
-                for (BrevoContactNode contact : response.contacts()) {
-                    if (contact.email() != null && contact.extId() != null && !contact.extId().isBlank()) {
-                        lookupMap.put(contact.email().trim().toLowerCase(), contact.extId().trim());
-                    }
-                }
+        for (BrevoContactNode contact : fetchAllContacts()) {
+            if (contact.email() != null && contact.extId() != null && !contact.extId().isBlank()) {
+                lookupMap.put(contact.email().trim().toLowerCase(), contact.extId().trim());
             }
-        } catch (Exception e) {
-            log.error("Failed compiling email to EXT_ID mapping.", e);
         }
         return lookupMap;
     }
@@ -188,31 +165,14 @@ public class BrevoCommunicationService {
     public Map<String, Map<String, String>> fetchStudentStatusMap() {
         // Nested structure: Map<AccountId, Map<StudentName, Status>>
         Map<String, Map<String, String>> masterAccountMap = new HashMap<>();
-        
-        try {
-            BrevoListContactsResponse response = brevoRestClient.get()
-                    .uri(ENDPOINT_CONTACTS)
-                    .retrieve()
-                    .body(BrevoListContactsResponse.class);
-
-            if (response != null && response.contacts() != null) {
-                for (BrevoContactNode contact : response.contacts()) {
-                    BrevoAttributesNode attributes = contact.attributes();
-                    
-                    // Enforce that we only process records with a valid family account identifier
-                    if (attributes != null && attributes.viciAccountId() != null && !attributes.viciAccountId().isBlank()) {
-                        String cleanAccountId = attributes.viciAccountId().trim().toUpperCase();
-                        
-                        // Isolate or initialize the nested collection bucket unique to this family row
-                        Map<String, String> familyBucket = masterAccountMap.computeIfAbsent(cleanAccountId, k -> new HashMap<>());
-                        
-                        // Unpack the parallel strings directly into this family's protected bucket
-                        unpackContactStatuses(attributes, familyBucket);
-                    }
-                }
+        for (BrevoContactNode contact : fetchAllContacts()) {
+            BrevoAttributesNode attributes = contact.attributes();
+            // Only process records with a valid family account identifier.
+            if (attributes != null && attributes.viciAccountId() != null && !attributes.viciAccountId().isBlank()) {
+                String cleanAccountId = attributes.viciAccountId().trim().toUpperCase();
+                Map<String, String> familyBucket = masterAccountMap.computeIfAbsent(cleanAccountId, k -> new HashMap<>());
+                unpackContactStatuses(attributes, familyBucket);
             }
-        } catch (Exception e) {
-            log.error("Failed executing nested account-scoped status mappings.", e);
         }
         return masterAccountMap;
     }
