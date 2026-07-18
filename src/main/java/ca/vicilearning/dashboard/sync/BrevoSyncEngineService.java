@@ -4,6 +4,7 @@ import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
 import ca.vicilearning.dashboard.domain.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
@@ -18,7 +19,6 @@ import java.util.Map;
 public class BrevoSyncEngineService {
 
     private static final Logger log = LoggerFactory.getLogger(BrevoSyncEngineService.class);
-    private static final int LAPSE_THRESHOLD_DAYS = 14;
     private static final String STATUS_LAPSED = "Lapsed";
 
     private final StudentRepository studentRepository;
@@ -26,14 +26,20 @@ public class BrevoSyncEngineService {
     private final AlertStudentRepository alertStudentRepository;
     private final BrevoCommunicationService communicationService;
 
+    // Shared with DashboardMetricsService (same property) so the Brevo reconciliation and the
+    // dashboard action items agree on who's lapsed — previously 14 here vs 21 there.
+    private final int lapseThresholdDays;
+
     public BrevoSyncEngineService(StudentRepository studentRepository,
                                   BookingRepository bookingRepository,
                                   AlertStudentRepository alertStudentRepository,
-                                  BrevoCommunicationService communicationService) {
+                                  BrevoCommunicationService communicationService,
+                                  @Value("${metrics.lapse-threshold-days:21}") int lapseThresholdDays) {
         this.studentRepository = studentRepository;
         this.bookingRepository = bookingRepository;
         this.alertStudentRepository = alertStudentRepository;
         this.communicationService = communicationService;
+        this.lapseThresholdDays = lapseThresholdDays;
     }
 
     /**
@@ -48,7 +54,7 @@ public class BrevoSyncEngineService {
         Map<String, Map<String, String>> brevoStudentStatuses = communicationService.fetchStudentStatusMap();
         
         List<Student> activeStudents = studentRepository.findByDeletedAtIsNull();
-        LocalDateTime thresholdDateTime = LocalDateTime.now().minusDays(LAPSE_THRESHOLD_DAYS);
+        LocalDateTime thresholdDateTime = LocalDateTime.now().minusDays(lapseThresholdDays);
         
         log.info("Synchronizing {} student tracking configurations...", activeStudents.size());
         for (Student student : activeStudents) {
