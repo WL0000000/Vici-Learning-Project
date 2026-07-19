@@ -108,7 +108,7 @@ public class SimplybookRestClient {
             ObjectNode body = mapper.createObjectNode()
                     .put("company", props.companyLogin())
                     .put("login", props.adminUsername())
-                    .put("password", props.restAuthSecret());
+                    .put("password", props.authSecret());
             JsonNode res = exchange("POST", props.apiV2Url() + "/admin/auth", body, null);
             String fresh = res.path("token").asText(null);
             if (fresh == null || fresh.isBlank()) {
