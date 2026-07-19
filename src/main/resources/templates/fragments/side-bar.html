@@ -41,14 +41,8 @@
             Tutors
         </a>
 
-        <a th:href="@{/bookings}" th:classappend="${activePage == 'bookings'} ? ' active'" class="sidebar-link">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/>
-                <path d="M3.5 9h17"/>
-                <path d="M8 2.5v4M16 2.5v4"/>
-            </svg>
-            Bookings
-        </a>
+        <!-- Bookings page not built yet — link removed so it can't 500 on an unmapped /bookings route.
+             Re-add here once a /bookings controller + template exist. -->
 
         <a th:href="@{/associations}" th:classappend="${activePage == 'associations'} ? ' active'" class="sidebar-link">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
