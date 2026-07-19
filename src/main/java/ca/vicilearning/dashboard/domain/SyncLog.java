@@ -1,6 +1,7 @@
 package ca.vicilearning.dashboard.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnDefault;
 import java.time.LocalDateTime;
 
 @Entity
@@ -19,33 +20,49 @@ public class SyncLog {
     @Column(nullable = false)
     private boolean success;
 
+    @ColumnDefault("0")
     private int studentsUpserted;
+    @ColumnDefault("0")
     private int tutorsUpserted;
+    @ColumnDefault("0")
     private int servicesUpserted;
+    @ColumnDefault("0")
     private int bookingsUpserted;
 
+    @ColumnDefault("0")
     private int studentsRemoved;
+    @ColumnDefault("0")
     private int tutorsRemoved;
+    @ColumnDefault("0")
     private int servicesRemoved;
+    @ColumnDefault("0")
     private int bookingsRemoved;
 
     // Invoices and memberships come from REST v2 (not JSON-RPC), so they get their own counters.
+    @ColumnDefault("0")
     private int invoicesUpserted;
+    @ColumnDefault("0")
     private int invoicesRemoved;
+    @ColumnDefault("0")
     private int membershipsUpserted;
+    @ColumnDefault("0")
     private int membershipsRemoved;
 
     // Count of students whose Account_ID (Brevo link) was set/updated from REST v2 this run.
+    @ColumnDefault("0")
     private int accountIdsLinked;
 
     // Count of students whose EXT_ID (Brevo per-student id) was matched/set from Brevo this run.
+    @ColumnDefault("0")
     private int extIdsLinked;
 
     // Count of previously-unassigned students assigned to a family (Account_ID) from a Brevo
     // Company's linked contacts this run.
+    @ColumnDefault("0")
     private int familyLinksLinked;
 
     // Count of students whose ACTIVE/PAUSED status was updated from Brevo STUDENT_STATUS this run.
+    @ColumnDefault("0")
     private int statusesUpdated;
 
     @Column(columnDefinition = "text")
