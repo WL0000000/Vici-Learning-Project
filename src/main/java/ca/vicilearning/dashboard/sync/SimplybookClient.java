@@ -69,10 +69,13 @@ public class SimplybookClient {
 
     private synchronized void ensureAdminToken() {
         if (adminToken == null) {
+            // getUserToken(company, login, secret). The third arg is the API User Key when one is
+            // configured, else the admin password — an API User Key bypasses SimplyBook's
+            // trusted-IP restriction and 2FA, which password auth is blocked by from a cloud host.
             ArrayNode params = mapper.createArrayNode()
                     .add(props.companyLogin())
                     .add(props.adminUsername())
-                    .add(props.adminPassword());
+                    .add(props.authSecret());
             adminToken = rpcCall(props.loginUrl(), null, "getUserToken", params).asText();
         }
     }
