@@ -1,6 +1,7 @@
 package ca.vicilearning.dashboard.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnDefault;
 import java.time.LocalDateTime;
 
 @Entity
@@ -35,8 +36,14 @@ public class Student {
     // readable in the DB. Defaults to ACTIVE and is non-null; SimplyBook doesn't carry it, so the
     // sync preserves it across upserts (see SyncService.syncStudents). Distinct from "lapsed",
     // which is computed from booking recency.
+    //
+    // @ColumnDefault gives the column a DB-level default so ddl-auto=update can add it to an
+    // already-populated table (ALTER TABLE ADD COLUMN ... DEFAULT 'ACTIVE' NOT NULL). Without it,
+    // adding a NOT NULL column to a table that already has rows fails on Postgres and the column
+    // silently never gets created — the deploy bug we hit on the Neon prod DB.
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    @ColumnDefault("'ACTIVE'")
     private StudentStatus status = StudentStatus.ACTIVE;
 
     private LocalDateTime createdAt;
