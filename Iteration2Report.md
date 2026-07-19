@@ -322,12 +322,15 @@ The login and registration pages, the role split, and the sync page are the same
 
 ![Sync status](docs/07-sync.png)
 
-<span style="color:#1a7f37">**[NEW · Iteration 2]**</span> The Iteration 2 features add two screens that a reader cannot picture from the stories alone, so please capture these before submitting and drop them in `docs/`:
+<span style="color:#1a7f37">**[NEW · Iteration 2]**</span> The Iteration 2 features add two screens that the stories alone don't fully convey:
 
-- The **associations page** (`/associations`): the Unassigned Students panel with the assign dropdown, and the Families rollup with the editable name and notes (Stories 9 to 12). Suggested filename `docs/09-associations.png`.
-- The **students page filters** (`/students`): the Location and Category dropdowns, the family rows with the category, location, and balance columns, and the status badges (Stories 13, 14, and 16). Suggested filename `docs/10-students-families.png`.
+**Associations page** (`/associations`) — the Unassigned Students queue with the assign-to-family dropdown, and the Families rollup with the editable family name and notes (Stories 9–12):
 
-Once captured, add them here with a one-line caption so the mockup section covers the new work as well.
+![Associations page: unassigned-student queue and editable family rollup](docs/associations.png)
+
+**Students page** (`/students`) — the Location and Category filters plus the Active/Paused status filter, the family rows showing distinct category, location, and remaining membership balance, and the per-student status badges (Stories 13, 14, and 16):
+
+![Students page: location/category/status filters and the family rows with balances](docs/students.png)
 
 ---
 
