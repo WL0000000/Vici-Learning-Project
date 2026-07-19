@@ -2,10 +2,10 @@ package ca.vicilearning.dashboard.sync;
 
 import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
 import ca.vicilearning.dashboard.domain.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -25,7 +25,15 @@ class BrevoSyncEngineServiceTest {
     @Mock BookingRepository bookingRepository;
     @Mock AlertStudentRepository alertStudentRepository;
     @Mock BrevoCommunicationService communicationService;
-    @InjectMocks BrevoSyncEngineService syncEngine;
+    BrevoSyncEngineService syncEngine;
+
+    @BeforeEach
+    void setUp() {
+        // Constructed manually (not @InjectMocks) so the primitive lapse-threshold arg can be
+        // supplied; 21 matches the production default the day-gap assertions below assume.
+        syncEngine = new BrevoSyncEngineService(
+                studentRepository, bookingRepository, alertStudentRepository, communicationService, 21);
+    }
 
     // Helper to generate consistent mock students
     private Student makeStudent(long id, String name, String accountId) {
