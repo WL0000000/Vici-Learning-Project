@@ -40,7 +40,12 @@ public class BrevoCommunicationService {
         // detection. Read per contact for the StudentStatus sync.
         @JsonProperty("STUDENT_STATUS") String studentStatus,
         @JsonProperty("ACTIVITY_STATUS") String activityStatus,
-        @JsonProperty("LAST_BOOKING_DATE") String lastBookingDate
+        @JsonProperty("LAST_BOOKING_DATE") String lastBookingDate,
+        // The per-student EXT_ID as a custom ATTRIBUTE. A live probe (2026-07-20) confirmed Brevo
+        // does NOT return the top-level ext_id in the contact body, but a custom attribute IS
+        // returned — so this is where a readable EXT_ID must live. The attribute name must match
+        // Vici's real Brevo (confirm against their account); change this @JsonProperty if it differs.
+        @JsonProperty("EXT_ID") String extIdAttribute
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -154,8 +159,19 @@ public class BrevoCommunicationService {
     public Map<String, String> fetchEmailToExtIdMap() {
         Map<String, String> lookupMap = new HashMap<>();
         for (BrevoContactNode contact : fetchAllContacts()) {
-            if (contact.email() != null && contact.extId() != null && !contact.extId().isBlank()) {
-                lookupMap.put(contact.email().trim().toLowerCase(), contact.extId().trim());
+            if (contact.email() == null) {
+                continue;
+            }
+            // Prefer the EXT_ID custom attribute — Brevo doesn't return the top-level ext_id in the
+            // contact body (confirmed by a live probe 2026-07-20), so reading only ext_id yielded an
+            // empty map against real data. Fall back to top-level ext_id for any account that does
+            // surface it (and so the existing pagination test still passes).
+            String ext = (contact.attributes() != null) ? contact.attributes().extIdAttribute() : null;
+            if (ext == null || ext.isBlank()) {
+                ext = contact.extId();
+            }
+            if (ext != null && !ext.isBlank()) {
+                lookupMap.put(contact.email().trim().toLowerCase(), ext.trim());
             }
         }
         return lookupMap;

@@ -63,6 +63,25 @@ class BrevoCommunicationServiceTest {
     }
 
     @Test
+    void fetchEmailToExtIdMap_readsExtIdFromAttribute_preferringItOverTopLevel() {
+        // Real Brevo returns EXT_ID as a custom attribute (not the top-level ext_id, which the API
+        // never echoes). The attribute must win; a contact with only the attribute still resolves.
+        wm.stubFor(get(urlPathEqualTo("/contacts"))
+                .withQueryParam("offset", equalTo("0"))
+                .willReturn(okJson("""
+                        {"contacts":[
+                          {"email":"a@x.com","ext_id":"TOP","attributes":{"EXT_ID":"ATTR-1"}},
+                          {"email":"b@x.com","attributes":{"EXT_ID":"ATTR-2"}}
+                        ]}""")));
+
+        Map<String, String> map = service.fetchEmailToExtIdMap();
+
+        assertThat(map)
+                .containsEntry("a@x.com", "ATTR-1")   // attribute preferred over top-level "TOP"
+                .containsEntry("b@x.com", "ATTR-2");   // resolves from the attribute alone
+    }
+
+    @Test
     void fetchEmailToExtIdMap_returnsEmpty_whenBrevoFails() {
         wm.stubFor(get(urlPathEqualTo("/contacts")).willReturn(aResponse().withStatus(401)));
 
