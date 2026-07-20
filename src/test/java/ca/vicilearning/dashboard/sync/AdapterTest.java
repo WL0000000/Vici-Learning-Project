@@ -302,6 +302,59 @@ class AdapterTest {
             assertThat(bookings.get(0).getTutor()).isNull();
         }
 
+        // Captured verbatim from the live admin getBookings response (2026-07-20): the full
+        // datetime lives in "start_date"/"end_date" (no separate start_time), the confirm flag is
+        // "is_confirm" (not "is_confirmed"), the provider is "unit_id", the service is "event_id".
+        // Guards the two bugs real data exposed: null start times and always-"confirmed" status.
+        @Test
+        void realAdminApiShape_datetimeInStartDate_andIsConfirm() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    {"1":{"id":"1","client_id":"1","unit_id":"2","event_id":"3",
+                          "start_date":"2026-07-20 11:00:00","end_date":"2026-07-20 12:00:00",
+                          "is_confirm":"1"}}
+                    """);
+
+            List<Booking> bookings = adapter.toBookings(json,
+                    Map.of(1L, studentWithId(1L)),
+                    Map.of(2L, tutorWithId(2L)),
+                    Map.of(3L, serviceWithId(3L)));
+
+            assertThat(bookings).hasSize(1);
+            Booking b = bookings.get(0);
+            assertThat(b.getStartTime()).isEqualTo(LocalDateTime.of(2026, 7, 20, 11, 0, 0)); // not null
+            assertThat(b.getEndTime()).isEqualTo(LocalDateTime.of(2026, 7, 20, 12, 0, 0));
+            assertThat(b.getStatus()).isEqualTo("confirmed"); // via is_confirm, not defaulted
+            assertThat(b.getTutor()).isNotNull();   // unit_id resolved
+            assertThat(b.getService()).isNotNull(); // event_id resolved
+        }
+
+        @Test
+        void isConfirmZero_mapsToPending() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    {"1":{"id":"1","client_id":"1","event_id":"3",
+                          "start_date":"2026-07-20 11:00:00","is_confirm":"0"}}
+                    """);
+
+            List<Booking> bookings = adapter.toBookings(json,
+                    Map.of(1L, studentWithId(1L)), Map.of(), Map.of(3L, serviceWithId(3L)));
+
+            assertThat(bookings.get(0).getStatus()).isEqualTo("pending");
+        }
+
+        @Test
+        void cancelDate_marksBookingCancelled() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    {"1":{"id":"1","client_id":"1","event_id":"3","is_confirm":"1",
+                          "start_date":"2026-07-20 11:00:00","cancel_date":"2026-07-19 09:00:00"}}
+                    """);
+
+            List<Booking> bookings = adapter.toBookings(json,
+                    Map.of(1L, studentWithId(1L)), Map.of(), Map.of(3L, serviceWithId(3L)));
+
+            assertThat(bookings.get(0).getStatus()).isEqualTo("cancelled");
+            assertThat(bookings.get(0).getCancelledAt()).isEqualTo(LocalDateTime.of(2026, 7, 19, 9, 0, 0));
+        }
+
         // ── helpers ──
 
         private Student studentWithId(long id) {

@@ -69,28 +69,43 @@ public class BookingAdapter {
         return b;
     }
 
-    // Admin API returns is_confirmed (0/1); older shapes use a string "status"
+    // Status flag: the real admin getBookings response uses "is_confirm" (no "ed"); other/older
+    // shapes use "is_confirmed" or a string "status". A set "cancel_date" means the booking was
+    // cancelled, regardless of the confirm flag. (Confirmed against live admin API 2026-07-20:
+    // the field is "is_confirm" — reading only "is_confirmed" defaulted every booking to confirmed.)
     private String resolveStatus(JsonNode node) {
-        if (node.has("is_confirmed")) {
-            return AdapterUtils.parseBool(node.path("is_confirmed")) ? "confirmed" : "pending";
+        if (AdapterUtils.blankToNull(node.path("cancel_date").asText(null)) != null) {
+            return "cancelled";
+        }
+        JsonNode confirm = node.has("is_confirm") ? node.path("is_confirm")
+                : node.has("is_confirmed") ? node.path("is_confirmed") : null;
+        if (confirm != null) {
+            return AdapterUtils.parseBool(confirm) ? "confirmed" : "pending";
         }
         return node.path("status").asText("confirmed");
     }
 
-    // SimplyBook.me may give start_date + start_time or start_date_time
+    // Start time across the SimplyBook shapes: a combined "start_date_time"; a date-only
+    // "start_date" plus a separate "start_time"; OR (the real admin getBookings, confirmed
+    // 2026-07-20) a "start_date" that already holds the full datetime "yyyy-MM-dd HH:mm:ss".
+    // parseDateTime handles that last case (and a bare date), so routing "start_date" straight to
+    // parseDateAndTime — which does LocalDate.parse and threw on the datetime string, yielding a
+    // null start time for every real booking — is the bug this guards against.
     private LocalDateTime resolveStartTime(JsonNode node) {
         String combined = node.path("start_date_time").asText(null);
         if (combined != null && !combined.isBlank()) return AdapterUtils.parseDateTime(combined);
-        return AdapterUtils.parseDateAndTime(
-                node.path("start_date").asText(null),
-                node.path("start_time").asText(null));
+        String date = node.path("start_date").asText(null);
+        String time = node.path("start_time").asText(null);
+        if (time != null && !time.isBlank()) return AdapterUtils.parseDateAndTime(date, time);
+        return AdapterUtils.parseDateTime(date);
     }
 
     private LocalDateTime resolveEndTime(JsonNode node) {
         String combined = node.path("end_date_time").asText(null);
         if (combined != null && !combined.isBlank()) return AdapterUtils.parseDateTime(combined);
-        return AdapterUtils.parseDateAndTime(
-                node.path("end_date").asText(null),
-                node.path("end_time").asText(null));
+        String date = node.path("end_date").asText(null);
+        String time = node.path("end_time").asText(null);
+        if (time != null && !time.isBlank()) return AdapterUtils.parseDateAndTime(date, time);
+        return AdapterUtils.parseDateTime(date);
     }
 }
