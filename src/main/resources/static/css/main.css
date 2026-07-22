@@ -489,11 +489,35 @@ details.vici-family[open] > summary .vici-chevron { transform: rotate(90deg); }
   padding: 12px;
 }
 
+.notion-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 210px) auto auto;
+  align-items: end;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--vici-border);
+  background: #fff;
+}
+
+.notion-filter-field {
+  display: grid;
+  gap: 5px;
+}
+
+.notion-filter-field label {
+  color: var(--vici-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .notion-tutor-card {
   border: 1px solid var(--vici-border);
   border-radius: 8px;
   background: #fff;
   overflow: hidden;
+  margin: 0;
 }
 
 .notion-tutor-head {
@@ -563,6 +587,65 @@ details.vici-family[open] > summary .vici-chevron { transform: rotate(90deg); }
   overflow-wrap: anywhere;
 }
 
+.notion-edit-input,
+.notion-edit-select,
+.notion-edit-textarea {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: #faf8f4;
+  color: var(--vici-text);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 8px;
+  outline: none;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+
+.notion-edit-input:focus,
+.notion-edit-select:focus,
+.notion-edit-textarea:focus {
+  background: #fff;
+  border-color: var(--vici-gold);
+  box-shadow: 0 0 0 3px rgba(232, 169, 60, 0.18);
+}
+
+.notion-edit-name {
+  background: transparent;
+  border-color: transparent;
+  padding: 2px 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.notion-edit-select {
+  min-width: 118px;
+  font-weight: 700;
+}
+
+.notion-edit-textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.notion-save-message {
+  margin: 12px 12px 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.notion-save-message.is-success {
+  background: var(--vici-green-bg);
+  color: var(--vici-green);
+}
+
+.notion-save-message.is-error {
+  background: var(--vici-red-bg);
+  color: var(--vici-red);
+}
+
 .table-link {
   color: var(--vici-navy);
   font-size: 12px;
@@ -627,6 +710,10 @@ details.vici-family[open] > summary .vici-chevron { transform: rotate(90deg); }
 }
 
 @media (max-width: 620px) {
+  .notion-filter-bar {
+    grid-template-columns: 1fr;
+  }
+
   .notion-tutor-head {
     align-items: flex-start;
     flex-direction: column;
