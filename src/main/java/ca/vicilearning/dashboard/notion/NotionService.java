@@ -394,7 +394,7 @@ public class NotionService {
                     }
                 }
             }
-        } catch (RuntimeException | JsonProcessingException ignored) {
+        } catch (RuntimeException ignored) {
             // If the integration cannot read a related page, keep the relation visible as its id.
         }
         return pageId;
