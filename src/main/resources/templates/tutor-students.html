@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Students — Tutor Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link th:href="@{/css/main.css}" rel="stylesheet">
+
+    <style>
+        .student-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 14px;
+            padding: 18px;
+        }
+        .student-card {
+            background: var(--vici-card);
+            border: 1px solid var(--vici-border);
+            border-radius: 12px;
+            padding: 16px;
+            transition: box-shadow .15s ease, border-color .15s ease;
+        }
+        .student-card:hover {
+            border-color: var(--vici-navy);
+            box-shadow: 0 4px 14px rgba(21, 49, 92, 0.08);
+        }
+        .student-card-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .student-card-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: var(--vici-navy);
+            color: var(--vici-gold);
+            font-family: 'Fraunces', serif;
+            font-weight: 700;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .student-card-name {
+            font-family: 'Fraunces', serif;
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--vici-text);
+        }
+        .student-card-badge {
+            display: inline-block;
+            margin-top: 3px;
+            background: var(--vici-green-bg);
+            color: var(--vici-green);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+        .student-card-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12.5px;
+            color: var(--vici-muted);
+            margin-top: 6px;
+        }
+        .student-card-row svg { flex-shrink: 0; }
+        .student-card-footer {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--vici-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .student-card-sessions {
+            font-weight: 700;
+            color: var(--vici-navy);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+
+<div th:replace="~{fragments/tutor-header :: tutor-header('My Students', 'Students currently booked with you')}"></div>
+  
+<div class="vici-layout">
+
+    <script th:replace = "fragments/tutor-side-bar :: tutor-side-bar('tutor-students')"></script>
+
+    <main class="vici-main">
+
+        <div class="vici-panel">
+            <div class="vici-panel-header">
+                <div>
+                    <h2>My Students</h2>
+                    <p th:text="${#lists.size(myStudents)} + ' student(s)'">students</p>
+                </div>
+            </div>
+
+            <div class="student-card-grid">
+                <div th:each="s : ${myStudents}" class="student-card">
+                    <div class="student-card-top">
+                        <div class="student-card-avatar" th:text="${#strings.substring(s.name, 0, 1)}">?</div>
+                        <div>
+                            <div class="student-card-name" th:text="${s.name}">—</div>
+                            <span class="student-card-badge">Active</span>
+                        </div>
+                    </div>
+
+                    <div class="student-card-row">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6.5l9 6 9-6"/>
+                            <rect x="3" y="4.5" width="18" height="15" rx="2"/>
+                        </svg>
+                        <span th:text="${s.email}">—</span>
+                    </div>
+                    <div class="student-card-row">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4.5 4.5h4l1.6 4-2 1.2a11 11 0 0 0 5.2 5.2l1.2-2 4 1.6v4a2 2 0 0 1-2 2A16 16 0 0 1 3.5 6.5a2 2 0 0 1 2-2z"/>
+                        </svg>
+                        <span th:text="${s.phone}">—</span>
+                    </div>
+
+                    <div class="student-card-footer">
+                        <span class="text-muted" style="font-size:12px;">This week</span>
+                        <span class="student-card-sessions" th:text="${s.sessionsThisWeek} + ' session(s)'">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div th:if="${#lists.isEmpty(myStudents)}" class="text-center text-muted" style="padding:24px;">
+                No students assigned yet.
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
