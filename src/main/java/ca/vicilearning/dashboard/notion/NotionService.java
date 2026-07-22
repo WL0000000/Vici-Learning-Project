@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,10 +81,27 @@ public class NotionService {
                 ));
             }
 
+            tutors.sort(Comparator
+                    .comparingInt((NotionTutor tutor) -> statusRank(tutor.status()))
+                    .thenComparing(NotionTutor::name, String.CASE_INSENSITIVE_ORDER));
+
             return tutors;
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to parse Notion tutors response", e);
         }
+    }
+
+    private int statusRank(String status) {
+        if ("Active".equalsIgnoreCase(status)) {
+            return 0;
+        }
+        if ("Not started".equalsIgnoreCase(status)) {
+            return 1;
+        }
+        if ("Inactive".equalsIgnoreCase(status)) {
+            return 2;
+        }
+        return 3;
     }
 
     private String firstValue(JsonNode properties, Map<String, String> relationTitleCache, String... propertyNames) {
