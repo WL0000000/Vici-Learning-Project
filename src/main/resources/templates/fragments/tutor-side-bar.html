@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+</head>
+<body>
+
+    <nav th:fragment="tutor-side-bar(activePage)" class="vici-sidebar d-flex flex-column">
+        <div class="sidebar-section-label">Tutor Portal</div>
+
+        <a th:href="@{/tutor-portal/overview}" th:classappend="${activePage == 'tutor-overview'} ? ' active'" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="9" rx="1.5"/>
+                <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+                <rect x="14" y="12" width="7" height="9" rx="1.5"/>
+                <rect x="3" y="16" width="7" height="5" rx="1.5"/>
+            </svg>
+            Overview
+        </a>
+
+        <a th:href="@{/tutor-portal/bookings}" th:classappend="${activePage == 'tutor-bookings'} ? ' active'" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/>
+                <path d="M3.5 9h17"/>
+                <path d="M8 2.5v4M16 2.5v4"/>
+            </svg>
+            Bookings
+        </a>
+
+        <a th:href="@{/tutor-portal/students}" th:classappend="${activePage == 'tutor-students'} ? ' active'" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="8" r="3.2"/>
+                <path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>
+                <path d="M16 6.2a3 3 0 0 1 0 5.6"/>
+                <path d="M17.5 14.4A5.2 5.2 0 0 1 21 19.4"/>
+            </svg>
+            Students
+        </a>
+
+    </nav>
+</body>
+</html>
