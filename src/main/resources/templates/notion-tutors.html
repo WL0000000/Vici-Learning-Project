@@ -22,7 +22,9 @@
                     <div class="sync-text">Notion tutors connected</div>
                     <div class="sync-sub">
                         <strong th:text="${#lists.size(tutors)}">0</strong>
-                        rows from the tutors data source
+                        shown from
+                        <strong th:text="${totalTutorCount}">0</strong>
+                        tutors
                     </div>
                 </div>
             </div>
@@ -33,21 +35,21 @@
             <div class="col-12 col-md-4">
                 <div class="stat-card" style="border-left-color: #15315c;">
                     <div class="stat-label">Total Tutors</div>
-                    <div class="stat-val" th:text="${#lists.size(tutors)}">0</div>
+                    <div class="stat-val" th:text="${totalTutorCount}">0</div>
                     <div class="stat-sub">Pulled live from Notion</div>
                 </div>
             </div>
             <div class="col-12 col-md-4">
                 <div class="stat-card" style="border-left-color: #2f8a6a;">
                     <div class="stat-label">Active</div>
-                    <div class="stat-val" th:text="${tutors.?[status == 'Active'].size()}">0</div>
+                    <div class="stat-val" th:text="${activeTutorCount}">0</div>
                     <div class="stat-sub">Available for matching</div>
                 </div>
             </div>
             <div class="col-12 col-md-4">
                 <div class="stat-card" style="border-left-color: #c0492f;">
                     <div class="stat-label">Inactive</div>
-                    <div class="stat-val" th:text="${tutors.?[status == 'Inactive'].size()}">0</div>
+                    <div class="stat-val" th:text="${inactiveTutorCount}">0</div>
                     <div class="stat-sub">Hidden from active workflows</div>
                 </div>
             </div>
@@ -61,26 +63,68 @@
                 </div>
             </div>
 
+            <div th:if="${successMessage}" class="notion-save-message is-success" th:text="${successMessage}">
+                Tutor saved to Notion.
+            </div>
+            <div th:if="${errorMessage}" class="notion-save-message is-error" th:text="${errorMessage}">
+                Could not save tutor.
+            </div>
+
+            <form class="notion-filter-bar" th:action="@{/api/notion/tutors}" method="get">
+                <div class="notion-filter-field">
+                    <label for="tutor-search">Search</label>
+                    <input id="tutor-search"
+                           class="notion-edit-input"
+                           type="search"
+                           name="q"
+                           th:value="${query}"
+                           placeholder="Name, subject, or email">
+                </div>
+                <div class="notion-filter-field">
+                    <label for="tutor-sort">Sort</label>
+                    <select id="tutor-sort" class="notion-edit-select" name="sort">
+                        <option value="active" th:selected="${sort == 'active'}">Active first</option>
+                        <option value="name" th:selected="${sort == 'name'}">Name A-Z</option>
+                        <option value="subject" th:selected="${sort == 'subject'}">Subject A-Z</option>
+                        <option value="status" th:selected="${sort == 'status'}">Status</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-vici">Apply</button>
+                <a th:href="@{/api/notion/tutors}" class="btn-vici-outline text-decoration-none">Reset</a>
+            </form>
+
             <div th:if="${#lists.isEmpty(tutors)}" class="p-4 text-center tutor-empty">
-                No tutors found in Notion.
+                No tutors match the current search.
             </div>
 
             <div class="notion-tutor-list" th:if="${!#lists.isEmpty(tutors)}">
-                <article class="notion-tutor-card" th:each="tutor : ${tutors}">
+                <form class="notion-tutor-card"
+                      th:each="tutor : ${tutors}"
+                      th:action="@{/api/notion/tutors/{pageId}(pageId=${tutor.id})}"
+                      method="post">
+                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
                     <div class="notion-tutor-head">
                         <div class="d-flex align-items-center gap-2">
                             <div class="student-avatar"
                                  th:text="${#strings.substring((#strings.isEmpty(tutor.name) ? '?' : tutor.name), 0, 1)}">T</div>
                             <div>
-                                <div class="student-name" th:text="${#strings.isEmpty(tutor.name) ? 'Untitled tutor' : tutor.name}">Tutor</div>
+                                <input class="notion-edit-input notion-edit-name"
+                                       type="text"
+                                       name="name"
+                                       th:value="${tutor.name}"
+                                       placeholder="Tutor name">
                                 <div class="student-sub" th:text="${#strings.isEmpty(tutor.tutorId) ? tutor.id : 'Tutor ID ' + tutor.tutorId}">Tutor ID</div>
                             </div>
                         </div>
                         <div class="notion-tutor-actions">
-                            <span class="status-pill"
-                                  th:classappend="${tutor.status == 'Active' ? ' pill-confirmed' : (tutor.status == 'Inactive' ? ' pill-cancelled' : ' pill-pending')}"
-                                  th:text="${#strings.isEmpty(tutor.status) ? 'Unknown' : tutor.status}">Status</span>
+                            <select class="notion-edit-select" name="status" aria-label="Tutor status">
+                                <option value="Active" th:selected="${tutor.status == 'Active'}">Active</option>
+                                <option value="Not started" th:selected="${tutor.status == 'Not started'}">Not started</option>
+                                <option value="Inactive" th:selected="${tutor.status == 'Inactive'}">Inactive</option>
+                            </select>
                             <a class="table-link" th:href="${tutor.url}" target="_blank" rel="noopener noreferrer">Notion</a>
+                            <button type="submit" class="btn-vici">Save</button>
                         </div>
                     </div>
 
@@ -88,27 +132,27 @@
                         <section>
                             <h3>Contact</h3>
                             <dl>
-                                <div><dt>Email</dt><dd th:text="${#strings.isEmpty(tutor.email) ? '-' : tutor.email}">email</dd></div>
-                                <div><dt>Phone</dt><dd th:text="${#strings.isEmpty(tutor.phone) ? '-' : tutor.phone}">phone</dd></div>
-                                <div><dt>City</dt><dd th:text="${#strings.isEmpty(tutor.city) ? '-' : tutor.city}">city</dd></div>
-                                <div><dt>Postal Code</dt><dd th:text="${#strings.isEmpty(tutor.postalCode) ? '-' : tutor.postalCode}">postal</dd></div>
-                                <div><dt>Street Address</dt><dd th:text="${#strings.isEmpty(tutor.streetAddress) ? '-' : tutor.streetAddress}">address</dd></div>
+                                <div><dt>Email</dt><dd><input class="notion-edit-input" type="email" name="email" th:value="${tutor.email}" placeholder="-"></dd></div>
+                                <div><dt>Phone</dt><dd><input class="notion-edit-input" type="text" name="phone" th:value="${tutor.phone}" placeholder="-"></dd></div>
+                                <div><dt>City</dt><dd><input class="notion-edit-input" type="text" name="city" th:value="${tutor.city}" placeholder="-"></dd></div>
+                                <div><dt>Postal Code</dt><dd><input class="notion-edit-input" type="text" name="postalCode" th:value="${tutor.postalCode}" placeholder="-"></dd></div>
+                                <div><dt>Street Address</dt><dd><input class="notion-edit-input" type="text" name="streetAddress" th:value="${tutor.streetAddress}" placeholder="-"></dd></div>
                             </dl>
                         </section>
 
                         <section>
                             <h3>Tutoring Profile</h3>
                             <dl>
-                                <div><dt>Bio</dt><dd th:text="${#strings.isEmpty(tutor.oneSentenceBio) ? '-' : tutor.oneSentenceBio}">bio</dd></div>
-                                <div><dt>Languages</dt><dd th:text="${#strings.isEmpty(tutor.languages) ? '-' : tutor.languages}">languages</dd></div>
-                                <div><dt>Subjects</dt><dd th:text="${#strings.isEmpty(tutor.subjects) ? '-' : tutor.subjects}">subjects</dd></div>
-                                <div><dt>At-Home</dt><dd th:text="${#strings.isEmpty(tutor.atHomeTutoring) ? '-' : tutor.atHomeTutoring}">at-home</dd></div>
-                                <div><dt>Centre</dt><dd th:text="${#strings.isEmpty(tutor.centreTutoring) ? '-' : tutor.centreTutoring}">centre</dd></div>
-                                <div><dt>Virtual</dt><dd th:text="${#strings.isEmpty(tutor.virtualTutoring) ? '-' : tutor.virtualTutoring}">virtual</dd></div>
+                                <div><dt>Bio</dt><dd><textarea class="notion-edit-textarea" name="oneSentenceBio" rows="2" th:text="${tutor.oneSentenceBio}" placeholder="-"></textarea></dd></div>
+                                <div><dt>Languages</dt><dd><input class="notion-edit-input" type="text" name="languages" th:value="${tutor.languages}" placeholder="-"></dd></div>
+                                <div><dt>Subjects</dt><dd><input class="notion-edit-input" type="text" name="subjects" th:value="${tutor.subjects}" placeholder="-"></dd></div>
+                                <div><dt>At-Home</dt><dd><input class="notion-edit-input" type="text" name="atHomeTutoring" th:value="${tutor.atHomeTutoring}" placeholder="-"></dd></div>
+                                <div><dt>Centre</dt><dd><input class="notion-edit-input" type="text" name="centreTutoring" th:value="${tutor.centreTutoring}" placeholder="-"></dd></div>
+                                <div><dt>Virtual</dt><dd><input class="notion-edit-input" type="text" name="virtualTutoring" th:value="${tutor.virtualTutoring}" placeholder="-"></dd></div>
                                 <div>
                                     <dt>Booking</dt>
                                     <dd>
-                                        <span th:if="${#strings.isEmpty(tutor.bookingLink)}">-</span>
+                                        <input class="notion-edit-input" type="url" name="bookingLink" th:value="${tutor.bookingLink}" placeholder="-">
                                         <a th:if="${!#strings.isEmpty(tutor.bookingLink)}" class="table-link" th:href="${tutor.bookingLink}" target="_blank" rel="noopener noreferrer">Open</a>
                                     </dd>
                                 </div>
@@ -118,21 +162,21 @@
                         <section>
                             <h3>Role Details</h3>
                             <dl>
-                                <div><dt>Start Date</dt><dd th:text="${#strings.isEmpty(tutor.startDate) ? '-' : tutor.startDate}">start</dd></div>
-                                <div><dt>End Date</dt><dd th:text="${#strings.isEmpty(tutor.endDate) ? '-' : tutor.endDate}">end</dd></div>
-                                <div><dt>At-Home Rate</dt><dd th:text="${#strings.isEmpty(tutor.atHomeRate) ? '-' : tutor.atHomeRate}">rate</dd></div>
-                                <div><dt>Virtual/Centre Rate</dt><dd th:text="${#strings.isEmpty(tutor.virtualCentreRate) ? '-' : tutor.virtualCentreRate}">rate</dd></div>
-                                <div><dt>Support Rate</dt><dd th:text="${#strings.isEmpty(tutor.supportPayRate) ? '-' : tutor.supportPayRate}">rate</dd></div>
+                                <div><dt>Start Date</dt><dd><input class="notion-edit-input" type="text" name="startDate" th:value="${tutor.startDate}" placeholder="YYYY-MM-DD"></dd></div>
+                                <div><dt>End Date</dt><dd><input class="notion-edit-input" type="text" name="endDate" th:value="${tutor.endDate}" placeholder="YYYY-MM-DD"></dd></div>
+                                <div><dt>At-Home Rate</dt><dd><input class="notion-edit-input" type="text" name="atHomeRate" th:value="${tutor.atHomeRate}" placeholder="-"></dd></div>
+                                <div><dt>Virtual/Centre Rate</dt><dd><input class="notion-edit-input" type="text" name="virtualCentreRate" th:value="${tutor.virtualCentreRate}" placeholder="-"></dd></div>
+                                <div><dt>Support Rate</dt><dd><input class="notion-edit-input" type="text" name="supportPayRate" th:value="${tutor.supportPayRate}" placeholder="-"></dd></div>
                                 <div><dt>Person</dt><dd th:text="${#strings.isEmpty(tutor.person) ? '-' : tutor.person}">person</dd></div>
-                                <div><dt>Vici Role</dt><dd th:text="${#strings.isEmpty(tutor.viciRole) ? '-' : tutor.viciRole}">role</dd></div>
-                                <div><dt>Tutor Profile</dt><dd th:text="${#strings.isEmpty(tutor.tutorProfile) ? '-' : tutor.tutorProfile}">profile</dd></div>
-                                <div><dt>Tutor Role</dt><dd th:text="${#strings.isEmpty(tutor.tutorRole) ? '-' : tutor.tutorRole}">role</dd></div>
+                                <div><dt>Vici Role</dt><dd><input class="notion-edit-input" type="text" name="viciRole" th:value="${tutor.viciRole}" placeholder="-"></dd></div>
+                                <div><dt>Tutor Profile</dt><dd><input class="notion-edit-input" type="text" name="tutorProfile" th:value="${tutor.tutorProfile}" placeholder="-"></dd></div>
+                                <div><dt>Tutor Role</dt><dd><input class="notion-edit-input" type="text" name="tutorRole" th:value="${tutor.tutorRole}" placeholder="-"></dd></div>
                                 <div><dt>Assigned Admin</dt><dd th:text="${#strings.isEmpty(tutor.assignedAdmin) ? '-' : tutor.assignedAdmin}">admin</dd></div>
-                                <div><dt>Admin Notes</dt><dd th:text="${#strings.isEmpty(tutor.adminNotes) ? '-' : tutor.adminNotes}">notes</dd></div>
+                                <div><dt>Admin Notes</dt><dd><textarea class="notion-edit-textarea" name="adminNotes" rows="2" th:text="${tutor.adminNotes}" placeholder="-"></textarea></dd></div>
                             </dl>
                         </section>
                     </div>
-                </article>
+                </form>
             </div>
         </div>
     </main>

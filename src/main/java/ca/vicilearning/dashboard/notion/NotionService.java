@@ -1,18 +1,22 @@
 package ca.vicilearning.dashboard.notion;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
+
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 @Service
 public class NotionService {
@@ -91,6 +95,63 @@ public class NotionService {
         }
     }
 
+    public void updateTutor(String pageId, Map<String, String> formValues) {
+        JsonNode currentPage = retrievePage(pageId);
+        JsonNode currentProperties = currentPage.path("properties");
+        ObjectNode updatedProperties = mapper.createObjectNode();
+
+        putUpdate(updatedProperties, currentProperties, formValues, "name",
+                "Tutor Name", "Name", "Tutor", "Full Name");
+        putUpdate(updatedProperties, currentProperties, formValues, "tutorId", "Tutor ID");
+        putUpdate(updatedProperties, currentProperties, formValues, "email", "Tutor Email", "Email");
+        putUpdate(updatedProperties, currentProperties, formValues, "phone", "Tutor Phone", "Phone");
+        putUpdate(updatedProperties, currentProperties, formValues, "city", "City");
+        putUpdate(updatedProperties, currentProperties, formValues, "postalCode", "Postal Code");
+        putUpdate(updatedProperties, currentProperties, formValues, "streetAddress", "Street Address");
+        putUpdate(updatedProperties, currentProperties, formValues, "oneSentenceBio",
+                "One Sentence Bio", "One Sentence", "Bio");
+        putUpdate(updatedProperties, currentProperties, formValues, "bookingLink", "Booking Link", "Booking URL");
+        putUpdate(updatedProperties, currentProperties, formValues, "atHomeTutoring", "At-Home Tutoring", "At-Home");
+        putUpdate(updatedProperties, currentProperties, formValues, "centreTutoring",
+                "Centre Tutoring", "Center Tutoring");
+        putUpdate(updatedProperties, currentProperties, formValues, "virtualTutoring", "Virtual Tutoring", "Virtual");
+        putUpdate(updatedProperties, currentProperties, formValues, "languages", "Languages");
+        putUpdate(updatedProperties, currentProperties, formValues, "subjects", "Subjects");
+        putUpdate(updatedProperties, currentProperties, formValues, "startDate", "Start Date");
+        putUpdate(updatedProperties, currentProperties, formValues, "endDate", "End Date");
+        putUpdate(updatedProperties, currentProperties, formValues, "status", "Status");
+        putUpdate(updatedProperties, currentProperties, formValues, "atHomeRate",
+                "At-Home Pay Rate", "At-Home Rate");
+        putUpdate(updatedProperties, currentProperties, formValues, "virtualCentreRate",
+                "Virtual/Centre Pay Rate", "Virtual/Centre Rate");
+        putUpdate(updatedProperties, currentProperties, formValues, "supportPayRate",
+                "Support Pay Rate", "Support Pay");
+        putUpdate(updatedProperties, currentProperties, formValues, "viciRole", "Vici Role");
+        putUpdate(updatedProperties, currentProperties, formValues, "tutorProfile",
+                "Tutor Profile", "Tutor Profile Link");
+        putUpdate(updatedProperties, currentProperties, formValues, "tutorRole", "Tutor Role");
+        putUpdate(updatedProperties, currentProperties, formValues, "adminNotes", "Admin Notes", "Admin Note");
+
+        if (updatedProperties.isEmpty()) {
+            return;
+        }
+
+        ObjectNode body = mapper.createObjectNode();
+        body.set("properties", updatedProperties);
+
+        restClient.patch()
+                .uri(props.apiBaseUrl() + "/v1/pages/" + pageId)
+                .header("Authorization", "Bearer " + props.token())
+                .header("Notion-Version", NOTION_VERSION)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body.toString())
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, (request, response) -> {
+                    throw new IllegalStateException("Notion update failed with status " + response.getStatusCode());
+                })
+                .body(String.class);
+    }
+
     private int statusRank(String status) {
         if ("Active".equalsIgnoreCase(status)) {
             return 0;
@@ -112,6 +173,139 @@ public class NotionService {
             }
         }
         return "";
+    }
+
+    private JsonNode retrievePage(String pageId) {
+        String rawJson = restClient.get()
+                .uri(props.apiBaseUrl() + "/v1/pages/" + pageId)
+                .header("Authorization", "Bearer " + props.token())
+                .header("Notion-Version", NOTION_VERSION)
+                .retrieve()
+                .body(String.class);
+        try {
+            return mapper.readTree(rawJson);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to parse Notion page response", e);
+        }
+    }
+
+    private void putUpdate(ObjectNode updatedProperties,
+                           JsonNode currentProperties,
+                           Map<String, String> formValues,
+                           String formField,
+                           String... propertyNames) {
+        if (!formValues.containsKey(formField)) {
+            return;
+        }
+
+        PropertyMatch match = findProperty(currentProperties, propertyNames);
+        if (match == null) {
+            return;
+        }
+
+        JsonNode value = writeValue(match.property(), formValues.getOrDefault(formField, ""));
+        if (value != null) {
+            updatedProperties.set(match.name(), value);
+        }
+    }
+
+    private PropertyMatch findProperty(JsonNode properties, String... propertyNames) {
+        for (String propertyName : propertyNames) {
+            JsonNode property = properties.path(propertyName);
+            if (!property.isMissingNode() && !property.isNull()) {
+                return new PropertyMatch(propertyName, property);
+            }
+        }
+        return null;
+    }
+
+    private JsonNode writeValue(JsonNode currentProperty, String rawValue) {
+        String value = rawValue == null ? "" : rawValue.trim();
+        String type = currentProperty.path("type").asText("");
+        ObjectNode property = mapper.createObjectNode();
+
+        switch (type) {
+            case "title" -> property.set("title", richTextArray(value));
+            case "rich_text" -> property.set("rich_text", richTextArray(value));
+            case "email" -> property.set("email", nullableText(value));
+            case "phone_number" -> property.set("phone_number", nullableText(value));
+            case "url" -> property.set("url", nullableText(value));
+            case "number" -> property.set("number", numberValue(value));
+            case "status" -> {
+                if (value.isBlank()) {
+                    return null;
+                }
+                property.set("status", nameObject(value));
+            }
+            case "select" -> property.set("select", value.isBlank() ? null : nameObject(value));
+            case "multi_select" -> property.set("multi_select", multiSelect(value));
+            case "date" -> property.set("date", dateValue(value));
+            case "checkbox" -> property.put("checkbox", Boolean.parseBoolean(value));
+            default -> {
+                return null;
+            }
+        }
+
+        return property;
+    }
+
+    private ArrayNode richTextArray(String value) {
+        ArrayNode values = mapper.createArrayNode();
+        if (!value.isBlank()) {
+            ObjectNode richText = mapper.createObjectNode();
+            ObjectNode text = mapper.createObjectNode();
+            text.put("content", value);
+            richText.set("text", text);
+            values.add(richText);
+        }
+        return values;
+    }
+
+    private JsonNode nullableText(String value) {
+        return value.isBlank() ? mapper.nullNode() : mapper.getNodeFactory().textNode(value);
+    }
+
+    private JsonNode numberValue(String value) {
+        if (value.isBlank()) {
+            return mapper.nullNode();
+        }
+        String normalized = value.replace("$", "").replace(",", "").trim();
+        try {
+            return mapper.getNodeFactory().numberNode(Double.parseDouble(normalized));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Expected a number but got \"" + value + "\"");
+        }
+    }
+
+    private ObjectNode nameObject(String value) {
+        ObjectNode node = mapper.createObjectNode();
+        node.put("name", value);
+        return node;
+    }
+
+    private ArrayNode multiSelect(String value) {
+        ArrayNode options = mapper.createArrayNode();
+        for (String item : value.split(",")) {
+            String name = item.trim();
+            if (!name.isBlank()) {
+                options.add(nameObject(name));
+            }
+        }
+        return options;
+    }
+
+    private JsonNode dateValue(String value) {
+        if (value.isBlank()) {
+            return mapper.nullNode();
+        }
+
+        String[] dates = value.split("\\s+-\\s+", 2);
+        ObjectNode date = mapper.createObjectNode();
+        date.put("start", dates[0].trim());
+        if (dates.length > 1 && !dates[1].trim().isBlank()) {
+            date.put("end", dates[1].trim());
+        }
+        return date;
     }
 
     private String value(JsonNode properties, String propertyName, Map<String, String> relationTitleCache) {
@@ -191,13 +385,7 @@ public class NotionService {
 
     private String pageTitle(String pageId) {
         try {
-            String rawJson = restClient.get()
-                    .uri(props.apiBaseUrl() + "/v1/pages/" + pageId)
-                    .header("Authorization", "Bearer " + props.token())
-                    .header("Notion-Version", NOTION_VERSION)
-                    .retrieve()
-                    .body(String.class);
-            JsonNode properties = mapper.readTree(rawJson).path("properties");
+            JsonNode properties = retrievePage(pageId).path("properties");
             for (JsonNode property : properties) {
                 if ("title".equals(property.path("type").asText(""))) {
                     String title = textArray(property.path("title"));
@@ -206,9 +394,11 @@ public class NotionService {
                     }
                 }
             }
-        } catch (RuntimeException | JsonProcessingException ignored) {
+        } catch (RuntimeException ignored) {
             // If the integration cannot read a related page, keep the relation visible as its id.
         }
         return pageId;
     }
+
+    private record PropertyMatch(String name, JsonNode property) {}
 }
