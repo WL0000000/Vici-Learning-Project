@@ -10,6 +10,7 @@ import java.util.StringJoiner;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -26,6 +27,7 @@ public class NotionService {
     private final NotionProperties props;
     private final RestClient restClient;
     private final ObjectMapper mapper;
+    private volatile String resolvedTutorsDataSourceId;
 
     public NotionService(NotionProperties props, RestClient.Builder builder, ObjectMapper mapper) {
         this.props = props;
@@ -34,14 +36,13 @@ public class NotionService {
     }
 
     public String getTutors() {
-        return restClient.post()
-                .uri(props.apiBaseUrl() + "/v1/data_sources/" + props.tutorsDataSourceId() + "/query")
-                .header("Authorization", "Bearer " + props.token())
-                .header("Notion-Version", NOTION_VERSION)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body("{}")
-                .retrieve()
-                .body(String.class);
+        String id = tutorsDataSourceId();
+        try {
+            return queryDataSource(id);
+        } catch (HttpClientErrorException.NotFound e) {
+            resolvedTutorsDataSourceId = resolveTutorsDataSourceId(id);
+            return queryDataSource(resolvedTutorsDataSourceId);
+        }
     }
 
     public List<NotionTutor> getTutorRows() {
@@ -150,6 +151,54 @@ public class NotionService {
                     throw new IllegalStateException("Notion update failed with status " + response.getStatusCode());
                 })
                 .body(String.class);
+    }
+
+    private String queryDataSource(String dataSourceId) {
+        return restClient.post()
+                .uri(props.apiBaseUrl() + "/v1/data_sources/" + dataSourceId + "/query")
+                .header("Authorization", "Bearer " + props.token())
+                .header("Notion-Version", NOTION_VERSION)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{}")
+                .retrieve()
+                .body(String.class);
+    }
+
+    private String tutorsDataSourceId() {
+        if (resolvedTutorsDataSourceId != null && !resolvedTutorsDataSourceId.isBlank()) {
+            return resolvedTutorsDataSourceId;
+        }
+        if (props.tutorsDataSourceId() != null && !props.tutorsDataSourceId().isBlank()) {
+            return props.tutorsDataSourceId();
+        }
+        return resolveTutorsDataSourceId(props.tutorsDatabaseId());
+    }
+
+    private String resolveTutorsDataSourceId(String databaseId) {
+        if (databaseId == null || databaseId.isBlank()) {
+            throw new IllegalStateException("Set NOTION_TUTORS_DATA_SOURCE_ID or NOTION_TUTORS_DATABASE_ID.");
+        }
+
+        String rawJson = restClient.get()
+                .uri(props.apiBaseUrl() + "/v1/databases/" + databaseId)
+                .header("Authorization", "Bearer " + props.token())
+                .header("Notion-Version", NOTION_VERSION)
+                .retrieve()
+                .body(String.class);
+
+        try {
+            String dataSourceId = mapper.readTree(rawJson)
+                    .path("data_sources")
+                    .path(0)
+                    .path("id")
+                    .asText("");
+            if (dataSourceId.isBlank()) {
+                throw new IllegalStateException("Notion database has no data sources: " + databaseId);
+            }
+            return dataSourceId;
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to parse Notion database response", e);
+        }
     }
 
     private int statusRank(String status) {
