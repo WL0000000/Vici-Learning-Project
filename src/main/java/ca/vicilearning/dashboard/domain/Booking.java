@@ -30,6 +30,14 @@ public class Booking {
     @Column(nullable = false)
     private String status;
 
+    // Session category (e.g. Private 1:1 / Study Club / Assessment) and delivery location
+    // (At Home / Virtual / Centre) as they arrive on the booking itself (SimplyBook's real
+    // getBookings carries event_category + location per booking, not on the Service). Nullable:
+    // absent for seeded bookings, which carry these on the Service instead.
+    private String category;
+
+    private String location;
+
     private LocalDateTime cancelledAt;
 
     @Column(nullable = false)
@@ -59,6 +67,12 @@ public class Booking {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getLocation() { return location; }
+    public void setLocation(String location) { this.location = location; }
 
     public LocalDateTime getCancelledAt() { return cancelledAt; }
     public void setCancelledAt(LocalDateTime cancelledAt) { this.cancelledAt = cancelledAt; }
