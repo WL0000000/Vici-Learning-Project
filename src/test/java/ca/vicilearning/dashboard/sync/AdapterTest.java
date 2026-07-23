@@ -478,14 +478,53 @@ class AdapterTest {
 
         @Test
         void zeroRemainingIsKept_notTreatedAsMissing() throws Exception {
+            // "rest" is the remaining balance (real REST v2 field); "count" is the package total and
+            // must NOT be read as the balance.
             JsonNode json = mapper.readTree("""
-                    [{"id":"9","client_id":"1","name":"Pack","active":true,"count":"0"}]
+                    [{"id":"9","client_id":"1","name":"Pack","active":true,"rest":"0","count":"10"}]
                     """);
 
             List<Membership> memberships = adapter.toMemberships(json, Map.of(1L, studentWithId(1L)));
 
-            // 0 is a real balance ("can't book at 0"), must not be dropped to null.
+            // 0 is a real balance ("can't book at 0"), must not be dropped to null — and must be the
+            // "rest" value, not the total "count" of 10.
             assertThat(memberships.get(0).getRemainingCount()).isEqualTo(0);
+        }
+
+        @Test
+        void parsesRealRestV2Shape_nestedNameRestPeriodDatesAndCanBeUsed() throws Exception {
+            // Captured verbatim from the live REST v2 /admin/clients/memberships (2026-07-23):
+            // remaining is "rest", "count" is the package total, name is nested under "membership",
+            // dates are period_start/period_end, and there is no is_active — use can_be_used.
+            JsonNode json = mapper.readTree("""
+                    {"data":[
+                      {"id":"77","client_id":"1","rest":"4","count":"8","can_be_used":true,
+                       "is_expired":false,"status":"Active",
+                       "period_start":"2026-01-15 00:00:00","period_end":"2027-01-15 00:00:00",
+                       "membership":{"id":"3","name":"One-on-One Virtual (8 x 1 hr)"}}
+                    ]}
+                    """);
+
+            List<Membership> memberships = adapter.toMemberships(json, Map.of(1L, studentWithId(1L)));
+
+            Membership m = memberships.get(0);
+            assertThat(m.getName()).isEqualTo("One-on-One Virtual (8 x 1 hr)"); // nested membership.name
+            assertThat(m.getRemainingCount()).isEqualTo(4);                     // "rest", not "count"=8
+            assertThat(m.isActive()).isTrue();                                  // via can_be_used
+            assertThat(m.getStartDate()).isEqualTo(LocalDateTime.of(2026, 1, 15, 0, 0, 0));
+            assertThat(m.getEndDate()).isEqualTo(LocalDateTime.of(2027, 1, 15, 0, 0, 0));
+        }
+
+        @Test
+        void expiredMembership_isInactive() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"78","client_id":"1","rest":"0","is_expired":true,
+                      "membership":{"name":"Old Pack"}}]
+                    """);
+
+            List<Membership> memberships = adapter.toMemberships(json, Map.of(1L, studentWithId(1L)));
+
+            assertThat(memberships.get(0).isActive()).isFalse();   // is_expired → inactive
         }
 
         @Test

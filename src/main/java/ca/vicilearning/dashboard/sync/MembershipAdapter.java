@@ -33,11 +33,11 @@ public class MembershipAdapter {
         Membership m = new Membership();
         m.setId(id);
         m.setStudent(students.get(resolveClientId(node)));
-        m.setName(AdapterUtils.blankToNull(firstNonBlank(node, "name", "title", "membership_name")));
+        m.setName(AdapterUtils.blankToNull(resolveName(node)));
         m.setActive(resolveActive(node));
         m.setRemainingCount(resolveRemaining(node));
-        m.setStartDate(AdapterUtils.parseDateTime(firstNonBlank(node, "start_date", "date_start")));
-        m.setEndDate(AdapterUtils.parseDateTime(firstNonBlank(node, "end_date", "date_end")));
+        m.setStartDate(AdapterUtils.parseDateTime(firstNonBlank(node, "period_start", "start_date", "date_start")));
+        m.setEndDate(AdapterUtils.parseDateTime(firstNonBlank(node, "period_end", "end_date", "date_end")));
         m.setSyncedAt(now);
         return m;
     }
@@ -47,18 +47,35 @@ public class MembershipAdapter {
         return node.path("client").path("id").asLong();
     }
 
-    // Defaults to active when upstream omits the flag: a membership we can see but whose state
-    // is unstated is safer treated as live than silently ignored by any downstream alerting.
+    // The package name is nested under "membership" in the real REST v2 shape (confirmed against the
+    // live account 2026-07-23); older/other shapes put name/title at the top level.
+    private String resolveName(JsonNode node) {
+        String nested = node.path("membership").path("name").asText(null);
+        if (nested != null && !nested.isBlank()) return nested;
+        return firstNonBlank(node, "name", "title", "membership_name");
+    }
+
+    // Real REST v2 shape (confirmed 2026-07-23) has no is_active/active; it exposes can_be_used
+    // (bool), is_expired (bool), and a text status. Prefer those. Defaults to active when nothing
+    // is stated, so a membership we can see is never silently ignored by balance alerting.
     private boolean resolveActive(JsonNode node) {
-        if (node.has("is_active")) return AdapterUtils.parseBool(node.path("is_active"));
-        if (node.has("active"))    return AdapterUtils.parseBool(node.path("active"));
+        if (node.has("is_active"))   return AdapterUtils.parseBool(node.path("is_active"));
+        if (node.has("active"))      return AdapterUtils.parseBool(node.path("active"));
+        if (node.has("can_be_used")) return AdapterUtils.parseBool(node.path("can_be_used"));
+        if (node.has("is_expired"))  return !AdapterUtils.parseBool(node.path("is_expired"));
+        String status = node.path("status").asText(null);
+        if (status != null && !status.isBlank()) {
+            String s = status.trim().toLowerCase();
+            return !(s.contains("cancel") || s.contains("expire") || s.contains("inactive"));
+        }
         return true;
     }
 
-    // Remaining balance under whichever name the endpoint uses; null when none is present.
-    // Provisional: under a status/renewal membership model this is expected to be null throughout.
+    // Remaining prepaid-session balance. The real REST v2 field is "rest" (confirmed 2026-07-23,
+    // matches the memberships-export "rest" column). NB: "count" is the package TOTAL, not the
+    // remaining balance, so it is deliberately NOT used here.
     private Integer resolveRemaining(JsonNode node) {
-        for (String field : new String[]{"remaining", "visits_remaining", "count", "left"}) {
+        for (String field : new String[]{"rest", "remaining", "visits_remaining", "left"}) {
             JsonNode value = node.path(field);
             if (!value.isMissingNode() && !value.isNull() && value.asText("").matches("-?\\d+")) {
                 return value.asInt();
