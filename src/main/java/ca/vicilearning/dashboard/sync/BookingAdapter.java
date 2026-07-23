@@ -64,9 +64,25 @@ public class BookingAdapter {
         b.setStartTime(resolveStartTime(node));
         b.setEndTime(resolveEndTime(node));
         b.setStatus(resolveStatus(node));
+        // Category + location live on the booking in the real admin getBookings (confirmed
+        // 2026-07-23): "event_category" and "location". These aren't on the Service, so the
+        // Families view / filters read them from the booking.
+        b.setCategory(AdapterUtils.blankToNull(
+                firstNonBlank(node, "event_category", "category", "service_category")));
+        b.setLocation(AdapterUtils.blankToNull(
+                firstNonBlank(node, "location", "service_location")));
         b.setCancelledAt(AdapterUtils.parseDateTime(node.path("cancel_date").asText(null)));
         b.setSyncedAt(now);
         return b;
+    }
+
+    // First non-blank string among the given field names, or null if none is present.
+    private String firstNonBlank(JsonNode node, String... fields) {
+        for (String field : fields) {
+            String value = node.path(field).asText(null);
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
     }
 
     // Status flag: the real admin getBookings response uses "is_confirm" (no "ed"); other/older

@@ -329,6 +329,23 @@ class AdapterTest {
         }
 
         @Test
+        void readsEventCategoryAndLocationOffTheBooking() throws Exception {
+            // Real getBookings carries the session category + delivery location per booking
+            // (confirmed 2026-07-23): "event_category" and "location".
+            JsonNode json = mapper.readTree("""
+                    {"1":{"id":"1","client_id":"1","event_id":"3","is_confirm":"1",
+                          "start_date":"2026-07-20 11:00:00",
+                          "event_category":"Private 1:1","location":"Virtual Tutoring"}}
+                    """);
+
+            List<Booking> bookings = adapter.toBookings(json,
+                    Map.of(1L, studentWithId(1L)), Map.of(), Map.of(3L, serviceWithId(3L)));
+
+            assertThat(bookings.get(0).getCategory()).isEqualTo("Private 1:1");
+            assertThat(bookings.get(0).getLocation()).isEqualTo("Virtual Tutoring");
+        }
+
+        @Test
         void isConfirmZero_mapsToPending() throws Exception {
             JsonNode json = mapper.readTree("""
                     {"1":{"id":"1","client_id":"1","event_id":"3",

@@ -84,7 +84,7 @@ public class DashboardMetricsService {
      * dropdown. Reads active services only. (Meeting #4: these are locations, not categories.)
      */
     public List<String> serviceLocations() {
-        return distinctServiceAttr(ca.vicilearning.dashboard.domain.Service::getLocation);
+        return distinctBookingAttr(this::bookingLocation);
     }
 
     /**
@@ -93,18 +93,35 @@ public class DashboardMetricsService {
      * A separate axis from {@link #serviceLocations()} (Meeting #4).
      */
     public List<String> serviceCategories() {
-        return distinctServiceAttr(ca.vicilearning.dashboard.domain.Service::getCategory);
+        return distinctBookingAttr(this::bookingCategory);
     }
 
-    private List<String> distinctServiceAttr(
-            java.util.function.Function<ca.vicilearning.dashboard.domain.Service, String> attr) {
-        return serviceRepo.findByDeletedAtIsNull().stream()
+    // Distinct non-blank category/location values across active bookings (real data carries these
+    // per booking; seeded data via the Service fallback). Sorted, for the filter dropdowns.
+    private List<String> distinctBookingAttr(
+            java.util.function.Function<Booking, String> attr) {
+        return bookingRepo.findActiveWithStudentAndService().stream()
+                .filter(this::isCounted)
                 .map(attr)
                 .filter(Objects::nonNull)
                 .filter(v -> !v.isBlank())
                 .distinct()
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
+    }
+
+    // Category/location resolution: prefer the value on the booking (real SimplyBook getBookings
+    // carries event_category + location per booking), falling back to the booking's Service (where
+    // seeded data puts them). One source of truth used by the filter, the Families columns, and the
+    // dropdowns.
+    private String bookingCategory(Booking b) {
+        if (b.getCategory() != null && !b.getCategory().isBlank()) return b.getCategory();
+        return (b.getService() != null) ? b.getService().getCategory() : null;
+    }
+
+    private String bookingLocation(Booking b) {
+        if (b.getLocation() != null && !b.getLocation().isBlank()) return b.getLocation();
+        return (b.getService() != null) ? b.getService().getLocation() : null;
     }
 
     // ── Public metrics ─────────────────────────────────────────────────────────
@@ -404,8 +421,8 @@ public class DashboardMetricsService {
         for (Booking b : bookingRepo.findActiveWithStudentAndService()) {
             if (!isCounted(b) || b.getStudent() == null || b.getService() == null) continue;
             Long sid = b.getStudent().getId();
-            addAttr(categories, sid, b.getService().getCategory());
-            addAttr(locations, sid, b.getService().getLocation());
+            addAttr(categories, sid, bookingCategory(b));
+            addAttr(locations, sid, bookingLocation(b));
         }
     }
 
@@ -602,10 +619,9 @@ public class DashboardMetricsService {
      */
     private boolean matches(Booking b, ServiceScope scope) {
         if (isAll(scope)) return true;
-        ca.vicilearning.dashboard.domain.Service sv = b.getService();
-        if (sv == null) return false;
-        if (!isBlank(scope.location()) && !scope.location().equalsIgnoreCase(sv.getLocation())) return false;
-        if (!isBlank(scope.category()) && !scope.category().equalsIgnoreCase(sv.getCategory())) return false;
+        // Read category/location from the booking (real data), falling back to its Service (seeded).
+        if (!isBlank(scope.location()) && !scope.location().equalsIgnoreCase(bookingLocation(b))) return false;
+        if (!isBlank(scope.category()) && !scope.category().equalsIgnoreCase(bookingCategory(b))) return false;
         return true;
     }
 
