@@ -5,6 +5,7 @@ import ca.vicilearning.dashboard.notion.NotionService;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,7 +33,20 @@ public class NotionController {
     public String tutors(@RequestParam(defaultValue = "") String q,
                          @RequestParam(defaultValue = "active") String sort,
                          Model model) {
-        List<NotionTutor> allTutors = notionService.getTutorRows();
+        List<NotionTutor> allTutors;
+        try {
+            allTutors = notionService.getTutorRows();
+        } catch (RestClientResponseException e) {
+            model.addAttribute("tutors", List.of());
+            model.addAttribute("totalTutorCount", 0);
+            model.addAttribute("activeTutorCount", 0);
+            model.addAttribute("inactiveTutorCount", 0);
+            model.addAttribute("query", q);
+            model.addAttribute("sort", sort);
+            model.addAttribute("errorMessage", "Notion could not load tutors: " + e.getResponseBodyAsString());
+            return "notion-tutors";
+        }
+
         List<NotionTutor> tutors = allTutors.stream()
                 .filter(tutor -> matchesQuery(tutor, q))
                 .sorted(sortComparator(sort))

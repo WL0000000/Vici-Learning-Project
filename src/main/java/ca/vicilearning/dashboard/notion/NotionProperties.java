@@ -6,5 +6,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record NotionProperties(
         String token,
         String tutorsDataSourceId,
+        String tutorsDatabaseId,
         String apiBaseUrl
 ) {}
