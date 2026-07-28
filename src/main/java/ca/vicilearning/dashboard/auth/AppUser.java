@@ -3,11 +3,6 @@ package ca.vicilearning.dashboard.auth;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
-/**
- * A login account for the staff console. Named {@code AppUser} (not {@code User}) to avoid
- * confusion with Spring Security's {@code org.springframework.security.core.userdetails.User}.
- * The password is always stored as a BCrypt hash 
- */
 @Entity
 @Table(name = "app_users")
 public class AppUser {
@@ -27,6 +22,9 @@ public class AppUser {
     @Column(nullable = false)
     private Role role;
 
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean approved = true;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -41,6 +39,9 @@ public class AppUser {
 
     public Role getRole() { return role; }
     public void setRole(Role role) { this.role = role; }
+
+    public boolean isApproved() { return approved; }
+    public void setApproved(boolean approved) { this.approved = approved; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
