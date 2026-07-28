@@ -171,11 +171,11 @@
             <div class="login-brand-icon">V</div>
             <div>
                 <div class="login-brand-name">Vici Learning</div>
-                <div class="login-brand-sub">Staff Console</div>
+                <div class="login-brand-sub">Company Dashboard</div>
             </div>
         </div>
         <div class="login-heading">Create an account</div>
-        <div class="login-sub">Register for staff access to the dashboard</div>
+        <div class="login-sub">Register for tutor portal access. New accounts need admin approval before signing in.</div>
 
         <!-- validation / duplicate-username error -->
         <div class="login-alert login-alert-error" th:if="${error}" th:text="${error}">
@@ -183,16 +183,12 @@
         </div>
 
         <form th:action="@{/register}" method="post">
-            <label class="login-label" for="username">Username</label>
-            <input class="login-input" type="text" id="username" name="username"
-                   th:value="${username}" placeholder="Choose a username" autofocus required/>
-
-            <!-- Added a verification code section that requires new account 
-            to submit to confirm what permissions they will and for security purpoes-->
-            <!-- TO BE REVIEWED-->
-            <label class="login-label" for="verificationCode">Verification Code</label>
-            <input class="login-input" type="text" id="verificationCode" name="verificationCode"
-                   th:value="${username}" placeholder="Enter Verification Code" autofocus required/>
+            <label class="login-label" for="username">Email</label>
+            <input class="login-input" type="email" id="username" name="username"
+                   th:value="${username}" placeholder="you@example.com" autofocus required/>
+            <div class="text-muted" style="font-size:11.5px; margin-top:-10px; margin-bottom:16px;">
+                Use the same email SimplyBookMe/Notion has on file for you, so we can link your account.
+            </div>
 
             <label class="login-label" for="password">Password</label>
             <input class="login-input" type="password" id="password" name="password"
@@ -208,8 +204,6 @@
         <div class="login-footer">
             Already have an account? <a th:href="@{/login}">Sign in</a>
         </div>
-
-        
 
     </div>
 </div>

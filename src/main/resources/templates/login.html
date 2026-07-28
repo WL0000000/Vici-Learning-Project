@@ -182,7 +182,7 @@
             <div class="login-brand-icon">V</div>
             <div>
                 <div class="login-brand-name">Vici Learning</div>
-                <div class="login-brand-sub">Staff Console</div>
+                <div class="login-brand-sub">Company Dashboard</div>
             </div>
         </div>
         <div class="login-heading">Welcome back</div>
@@ -198,9 +198,14 @@
             You have been logged out.
         </div>
 
-        <!-- just-registered message -->
+        <!-- just-registered message (senior tutors, auto-approved) -->
         <div class="login-alert login-alert-success" th:if="${param.registered}">
             Account created. Please sign in.
+        </div>
+
+        <!-- pending-approval message (regular tutors, waiting on an admin) -->
+        <div class="login-alert login-alert-success" th:if="${param.pending}">
+            Account created! An admin needs to approve it before you can sign in.
         </div>
 
         <form th:action="@{/login}" method="post">
