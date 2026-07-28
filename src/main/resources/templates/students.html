@@ -243,10 +243,10 @@
                                 <span class="status-pill"
                                       th:classappend="${s.status.name() == 'ACTIVE'} ? 'pill-confirmed' : 'pill-pending'"
                                       th:text="${#strings.capitalize(#strings.toLowerCase(s.status))}">Active</span>
-                                <!-- ADMIN-only inline toggle → flips to the opposite status. The
-                                     POST endpoint is admin-guarded in SecurityConfig too; th:action
-                                     makes Thymeleaf inject the CSRF token automatically. -->
-                                <form sec:authorize="hasRole('ADMIN')" method="post" class="d-inline"
+                                <!-- ADMIN/STAFF inline toggle → flips to the opposite status and
+                                     writes it back to Brevo. The POST endpoint is role-guarded in
+                                     SecurityConfig too; th:action injects the CSRF token. -->
+                                <form sec:authorize="hasAnyRole('ADMIN','STAFF')" method="post" class="d-inline"
                                       th:action="@{/students/{id}/status(id=${s.id})}">
                                     <input type="hidden" name="status"
                                            th:value="${s.status.name() == 'ACTIVE'} ? 'PAUSED' : 'ACTIVE'">

@@ -155,9 +155,10 @@ public class StudentsController {
     }
 
     /**
-     * Set a student's ACTIVE/PAUSED enrolment status from the roster (ADMIN only — enforced in
-     * {@code SecurityConfig}). Redirects back to the students page the edit came from so the current
-     * period/location/category/status filters are preserved.
+     * Set a student's ACTIVE/PAUSED enrolment status from the roster (ADMIN/STAFF — the whole
+     * {@code /students} area is gated to those roles in {@code SecurityConfig}). The service also
+     * writes the change back to Brevo. Redirects back to the students page the edit came from so the
+     * current period/location/category/status filters are preserved.
      */
     @PostMapping("/students/{id}/status")
     public String updateStatus(@PathVariable Long id,

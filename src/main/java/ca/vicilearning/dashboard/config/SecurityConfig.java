@@ -2,7 +2,6 @@ package ca.vicilearning.dashboard.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -25,10 +24,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/register", "/css/**", "/js/**").permitAll()
                 .requestMatchers("/admin/users/**").hasRole("ADMIN")
-                // Editing a student's ACTIVE/PAUSED status is admin-only — narrower than the rest
-                // of the students page (ADMIN/STAFF, matched below), so it must come first.
-                .requestMatchers(HttpMethod.POST, "/students/*/status").hasRole("ADMIN")
                 .requestMatchers("/sync/**", "/comms/**").hasAnyRole("ADMIN", "STAFF")
+                // Everything under /students — including POST /students/{id}/status (the enrolment
+                // ACTIVE/PAUSED toggle) — is ADMIN/STAFF; tutors are redirected to their own portal.
                 .requestMatchers("/", "/students/**", "/api/notion/**", "/associations/**")
                     .hasAnyRole("ADMIN", "STAFF")
                 .requestMatchers("/tutor-portal/**").hasAnyRole("ADMIN", "STAFF", "TUTOR")
