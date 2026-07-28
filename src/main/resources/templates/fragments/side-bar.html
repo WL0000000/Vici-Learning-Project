@@ -91,8 +91,7 @@
                     <span class="week-dot"></span>
                     This Week
                 </div>
-                <!-- TODO wire this up to real booking count -->
-                <div class="big-num">92</div>
+                <div class="big-num" th:text="${overview.sessionsThisWeek}">0</div>
                 <div class="num-label">sessions booked</div>
             </div>
 

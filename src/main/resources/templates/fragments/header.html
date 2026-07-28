@@ -1,9 +1,12 @@
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <header th:fragment="header(title, subtitle)" class="vici-topbar">
     <div class="d-flex align-items-center gap-2">
         <div class="brand-icon">V</div>
         <div>
             <div class="brand-name">Vici Learning</div>
-            <div class="brand-sub">Staff Console</div>
+            <div class="brand-sub" sec:authorize="hasRole('ADMIN')">Admin Console</div>
+            <div class="brand-sub" sec:authorize="!hasRole('ADMIN') and hasRole('STAFF')">Staff Console</div>
+            <div class="brand-sub" sec:authorize="hasRole('TUTOR')">Tutor Console</div>
         </div>
     </div>
 
@@ -19,3 +22,4 @@
         </form>
     </div>
 </header>
+</html>
