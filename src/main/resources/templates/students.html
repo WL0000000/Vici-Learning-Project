@@ -243,6 +243,18 @@
                                 <span class="status-pill"
                                       th:classappend="${s.status.name() == 'ACTIVE'} ? 'pill-confirmed' : 'pill-pending'"
                                       th:text="${#strings.capitalize(#strings.toLowerCase(s.status))}">Active</span>
+                                <!-- ADMIN-only inline toggle → flips to the opposite status. The
+                                     POST endpoint is admin-guarded in SecurityConfig too; th:action
+                                     makes Thymeleaf inject the CSRF token automatically. -->
+                                <form sec:authorize="hasRole('ADMIN')" method="post" class="d-inline"
+                                      th:action="@{/students/{id}/status(id=${s.id})}">
+                                    <input type="hidden" name="status"
+                                           th:value="${s.status.name() == 'ACTIVE'} ? 'PAUSED' : 'ACTIVE'">
+                                    <button type="submit" class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+                                            style="font-size:12px; text-decoration:none;"
+                                            th:title="${s.status.name() == 'ACTIVE'} ? 'Set to Paused' : 'Set to Active'"
+                                            th:text="${s.status.name() == 'ACTIVE'} ? 'Pause' : 'Activate'">Pause</button>
+                                </form>
                             </td>
                             <td sec:authorize="hasAnyRole('ADMIN','STAFF')">
                                 <span th:if="${s.extId != null}" class="text-muted" th:text="${s.extId}">EXT-0000</span>
