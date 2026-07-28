@@ -12,6 +12,12 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final RoleBasedLoginSuccessHandler loginSuccessHandler;
+
+    public SecurityConfig(RoleBasedLoginSuccessHandler loginSuccessHandler) {
+        this.loginSuccessHandler = loginSuccessHandler;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -19,10 +25,13 @@ public class SecurityConfig {
                 .requestMatchers("/login", "/register", "/css/**", "/js/**").permitAll()
                 .requestMatchers("/admin/users/**").hasRole("ADMIN")
                 .requestMatchers("/sync/**", "/comms/**").hasAnyRole("ADMIN", "STAFF")
+                .requestMatchers("/", "/students/**", "/api/notion/**", "/associations/**")
+                    .hasAnyRole("ADMIN", "STAFF")
+                .requestMatchers("/tutor-portal/**").hasAnyRole("ADMIN", "STAFF", "TUTOR")
                 .anyRequest().authenticated())
             .formLogin(form -> form
                 .loginPage("/login")
-                .defaultSuccessUrl("/", true)
+                .successHandler(loginSuccessHandler)
                 .permitAll())
             .logout(logout -> logout
                 .logoutSuccessUrl("/login?logout")

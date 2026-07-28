@@ -13,14 +13,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Collections;
 
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-// students page pulls a LOT from DashboardMetricsService
-// just mocking everything to return empty lists/null for now, dont actually care about the values
-// just want to make sure the page doesnt blow up and renders the right view
 @SpringBootTest
 @AutoConfigureMockMvc
 class StudentsControllerTest {
@@ -32,15 +28,9 @@ class StudentsControllerTest {
     private DashboardMetricsService metrics;
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "ADMIN")
     void studentsPageLoadsForLoggedInUser() throws Exception {
-        when(metrics.overview(null)).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
-        when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2, null)).thenReturn(Collections.emptyList());
-        when(metrics.studentRows(null, null)).thenReturn(Collections.emptyList());
-        when(metrics.upcoming(10, null)).thenReturn(Collections.emptyList());
-        when(metrics.familyGroups(null)).thenReturn(Collections.emptyList());
-        when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false, null)).thenReturn(Collections.emptyList());
-
+        stubEmptyMetrics();
         mockMvc.perform(get("/students"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("students"));
@@ -48,17 +38,9 @@ class StudentsControllerTest {
 
     @Test
     @WithMockUser(roles = "TUTOR")
-    void studentsPageLoadsForTutor() throws Exception {
-        // Tutors are allowed to see the students page (sensitive columns are hidden in the view).
-        when(metrics.overview(null)).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
-        when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2, null)).thenReturn(Collections.emptyList());
-        when(metrics.studentRows(null, null)).thenReturn(Collections.emptyList());
-        when(metrics.upcoming(10, null)).thenReturn(Collections.emptyList());
-        when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false, null)).thenReturn(Collections.emptyList());
-
+    void studentsPageForbiddenForTutor() throws Exception {
         mockMvc.perform(get("/students"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("students"));
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -69,17 +51,6 @@ class StudentsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Account ID")))
                 .andExpect(content().string(containsString("Email")));
-    }
-
-    @Test
-    @WithMockUser(roles = "TUTOR")
-    void studentsPageHidesSensitiveColumnsFromTutor() throws Exception {
-        stubEmptyMetrics();
-        mockMvc.perform(get("/students"))
-                .andExpect(status().isOk())
-                // The sensitive column headers must not be rendered for a tutor.
-                .andExpect(content().string(not(containsString("Account ID"))))
-                .andExpect(content().string(not(containsString(">Email<"))));
     }
 
     @Test
