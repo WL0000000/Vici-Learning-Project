@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.web;
 
+import ca.vicilearning.dashboard.auth.AppUserRepository;
 import ca.vicilearning.dashboard.domain.SyncLog;
 import ca.vicilearning.dashboard.domain.SyncLogRepository;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
@@ -18,10 +19,12 @@ public class HomeController {
 
     private final DashboardMetricsService metrics;
     private final SyncLogRepository syncLogRepo;
+    private final AppUserRepository userRepo;
 
-    public HomeController(DashboardMetricsService metrics, SyncLogRepository syncLogRepo) {
+    public HomeController(DashboardMetricsService metrics, SyncLogRepository syncLogRepo, AppUserRepository userRepo) {
         this.metrics = metrics;
         this.syncLogRepo = syncLogRepo;
+        this.userRepo = userRepo;
     }
 
     @GetMapping("/")
@@ -38,6 +41,9 @@ public class HomeController {
         Long minutesAgo = last == null ? null
                 : ChronoUnit.MINUTES.between(last.getStartedAt(), LocalDateTime.now(ZoneOffset.UTC));
         model.addAttribute("minutesAgo", minutesAgo);
+
+        // banner shown only to ADMIN via sec:authorize in the template, harmless to compute for everyone
+        model.addAttribute("pendingApprovalCount", userRepo.countByApprovedFalse());
 
         return "index";
     }
