@@ -4,9 +4,13 @@ import ca.vicilearning.dashboard.domain.StudentStatus;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.ServiceScope;
+import ca.vicilearning.dashboard.student.StudentStatusService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.LocalDate;
@@ -26,9 +30,11 @@ import java.util.List;
 public class StudentsController {
 
     private final DashboardMetricsService metrics;
+    private final StudentStatusService studentStatus;
 
-    public StudentsController(DashboardMetricsService metrics) {
+    public StudentsController(DashboardMetricsService metrics, StudentStatusService studentStatus) {
         this.metrics = metrics;
+        this.studentStatus = studentStatus;
     }
 
     // Default look-back/look-ahead per bucket granularity, chosen so each chart shows a
@@ -146,6 +152,34 @@ public class StudentsController {
         model.addAttribute("families", metrics.familyGroups(scope));
         model.addAttribute("upcoming", metrics.upcoming(10, scope));
         return "students";
+    }
+
+    /**
+     * Set a student's ACTIVE/PAUSED enrolment status from the roster (ADMIN only — enforced in
+     * {@code SecurityConfig}). Redirects back to the students page the edit came from so the current
+     * period/location/category/status filters are preserved.
+     */
+    @PostMapping("/students/{id}/status")
+    public String updateStatus(@PathVariable Long id,
+                               @RequestParam String status,
+                               @RequestHeader(value = "Referer", required = false) String referer) {
+        studentStatus.setStatus(id, status);
+        return "redirect:" + backToStudents(referer);
+    }
+
+    /**
+     * The students URL to return to after an edit: the path+query of the Referer (so filters are
+     * kept), reduced to a same-origin relative path to avoid an open redirect; falls back to the
+     * bare {@code /students} when there's no usable Referer.
+     */
+    private static String backToStudents(String referer) {
+        if (referer != null) {
+            int i = referer.indexOf("/students");
+            if (i >= 0) {
+                return referer.substring(i);
+            }
+        }
+        return "/students";
     }
 
     private static String blankToNull(String s) {
