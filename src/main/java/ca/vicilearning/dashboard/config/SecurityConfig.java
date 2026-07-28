@@ -2,6 +2,7 @@ package ca.vicilearning.dashboard.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -18,6 +19,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/register", "/css/**", "/js/**").permitAll()
                 .requestMatchers("/admin/users/**").hasRole("ADMIN")
+                // Editing a student's ACTIVE/PAUSED status is admin-only; the roster itself stays
+                // viewable by tutors (sensitive columns are hidden in the view).
+                .requestMatchers(HttpMethod.POST, "/students/*/status").hasRole("ADMIN")
                 .requestMatchers("/sync/**", "/comms/**").hasAnyRole("ADMIN", "STAFF")
                 .anyRequest().authenticated())
             .formLogin(form -> form
