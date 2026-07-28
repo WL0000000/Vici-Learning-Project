@@ -88,12 +88,23 @@
 <body>
 
 <div th:replace="~{fragments/tutor-header :: tutor-header('My Students', 'Students currently booked with you')}"></div>
-  
+
 <div class="vici-layout">
 
     <script th:replace = "fragments/tutor-side-bar :: tutor-side-bar('tutor-students')"></script>
 
     <main class="vici-main">
+
+    <div th:if="${!tutorLinked}" class="vici-panel" style="padding: 40px; text-align: center;">
+        <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:600; margin-bottom:8px;">
+            No tutor profile linked to your login yet
+        </div>
+        <div class="text-muted" style="font-size:13px;">
+            Ask an admin to confirm your login email matches your SimplyBookMe tutor record.
+        </div>
+    </div>
+
+    <div th:if="${tutorLinked}">
 
         <div class="vici-panel">
             <div class="vici-panel-header">
@@ -131,6 +142,16 @@
                         <span class="text-muted" style="font-size:12px;">This week</span>
                         <span class="student-card-sessions" th:text="${s.sessionsThisWeek} + ' session(s)'">0</span>
                     </div>
+
+                    <div class="student-card-footer" style="border-top: none; padding-top: 4px;">
+                        <span class="text-muted" style="font-size:12px;">All-time</span>
+                        <span class="student-card-sessions" th:text="${s.totalSessions} + ' total · ' + ${s.avgSessionsPerMonth} + '/mo avg'">—</span>
+                    </div>
+
+                    <div class="d-flex gap-2" style="margin-top: 10px;">
+                        <a th:href="'tel:' + ${s.phone}" class="btn-vici-outline text-decoration-none" style="flex:1; text-align:center; font-size:12px; padding:6px;">Call</a>
+                        <a th:href="'mailto:' + ${s.email}" class="btn-vici-outline text-decoration-none" style="flex:1; text-align:center; font-size:12px; padding:6px;">Email</a>
+                    </div>
                 </div>
             </div>
 
@@ -138,6 +159,8 @@
                 No students assigned yet.
             </div>
         </div>
+
+    </div>
 
     </main>
 </div>

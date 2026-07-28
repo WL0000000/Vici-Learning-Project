@@ -16,6 +16,17 @@
 
     <main class="vici-main">
 
+    <div th:if="${!tutorLinked}" class="vici-panel" style="padding: 40px; text-align: center;">
+        <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:600; margin-bottom:8px;">
+            No tutor profile linked to your login yet
+        </div>
+        <div class="text-muted" style="font-size:13px;">
+            Ask an admin to confirm your login email matches your SimplyBookMe tutor record.
+        </div>
+    </div>
+
+    <div th:if="${tutorLinked}">
+
         <div class="vici-panel mb-3" style="padding:18px 22px;">
             <div style="font-family:'Fraunces',serif; font-size:20px; font-weight:600;">
                 Welcome back, <span th:text="${tutorName}">Tutor</span>
@@ -45,6 +56,17 @@
                     <div class="stat-label">My Students</div>
                     <div class="stat-val" th:text="${studentCount}">0</div>
                     <div class="stat-sub">currently assigned to you</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- "overall for the tutor" stat Sara asked for in Meeting 5 -->
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md-4">
+                <div class="stat-card" style="border-left-color: #c98a2b;">
+                    <div class="stat-label">Avg Sessions / Student</div>
+                    <div class="stat-val" th:text="${avgSessionsPerStudent}">0</div>
+                    <div class="stat-sub">all-time, per assigned student</div>
                 </div>
             </div>
         </div>
@@ -91,6 +113,8 @@
                 </table>
             </div>
         </div>
+
+    </div>
 
     </main>
 </div>
