@@ -17,7 +17,7 @@ class HomeControllerTest {
     @Autowired MockMvc mockMvc;
 
     @Test
-    @WithMockUser(username = "admin", roles = "USER")
+    @WithMockUser(username = "admin", roles = "ADMIN")
     void homepage_loads_and_has_all_the_model_attributes_we_need() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
@@ -35,7 +35,14 @@ class HomeControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "admin", roles = "USER")
+    @WithMockUser(username = "tutor", roles = "TUTOR")
+    void homepage_forbidden_for_tutor() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
     void login_page_is_accessible() throws Exception {
         // just making sure this route doesn't 404 or throw
         mockMvc.perform(get("/login"))

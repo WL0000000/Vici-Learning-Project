@@ -28,21 +28,19 @@ class NotionControllerTest {
     private NotionService notionService;
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "ADMIN")
     void tutorsPageLoadsForLoggedInUser() throws Exception {
         when(notionService.getTutorRows()).thenReturn(Collections.emptyList());
-
         mockMvc.perform(get("/api/notion/tutors"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("notion-tutors"));
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "ADMIN")
     void rawTutorsReturnsJsonString() throws Exception {
         // service just returns a raw json string, not a real object, kind of a weird endpoint tbh
         when(notionService.getTutors()).thenReturn("{\"results\":[]}");
-
         mockMvc.perform(get("/api/notion/tutors/raw"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType("application/json"));
@@ -52,5 +50,12 @@ class NotionControllerTest {
     void tutorsPageRedirectsIfNotLoggedIn() throws Exception {
         mockMvc.perform(get("/api/notion/tutors"))
                 .andExpect(status().is3xxRedirection());
+    }
+
+    @Test
+    @WithMockUser(roles = "TUTOR")
+    void tutorsPageForbiddenForTutor() throws Exception {
+        mockMvc.perform(get("/api/notion/tutors"))
+                .andExpect(status().isForbidden());
     }
 }
