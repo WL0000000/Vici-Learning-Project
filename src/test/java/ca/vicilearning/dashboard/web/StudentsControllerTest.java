@@ -77,6 +77,15 @@ class StudentsControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "STAFF")
+    void staffCanUpdateStatus() throws Exception {
+        mockMvc.perform(post("/students/7/status").param("status", "ACTIVE").with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/students"));
+        verify(studentStatus).setStatus(7L, "ACTIVE");
+    }
+
+    @Test
     @WithMockUser(roles = "TUTOR")
     void tutorCannotUpdateStatus() throws Exception {
         // The status endpoint is admin-only; a tutor POST is rejected and never reaches the service.
