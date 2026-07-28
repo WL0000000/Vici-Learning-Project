@@ -34,7 +34,6 @@
         .week-empty-day { color: var(--vici-muted); font-size: 12px; text-align: center; padding-top: 40px; }
         @media (max-width: 900px) { .tutor-week-grid { grid-template-columns: repeat(2, 1fr); } }
 
-        /* session detail modal */
         .session-modal-avatar {
             width: 52px;
             height: 52px;
@@ -69,13 +68,34 @@
 
     <main class="vici-main">
 
+    <div th:if="${!tutorLinked}" class="vici-panel" style="padding: 40px; text-align: center;">
+        <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:600; margin-bottom:8px;">
+            No tutor profile linked to your login yet
+        </div>
+        <div class="text-muted" style="font-size:13px;">
+            Ask an admin to confirm your login email matches your SimplyBookMe tutor record.
+        </div>
+    </div>
+
+    <div th:if="${tutorLinked}">
+
         <div class="vici-panel mb-3" style="padding:14px 22px;">
-            <div class="text-muted" style="font-size:13px;">
-                To book or reschedule a session, use SimplyBookMe as usual. This calendar is for viewing only.
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="text-muted" style="font-size:13px;">
+                    To book or reschedule a session, use SimplyBookMe as usual. This calendar is for viewing only.
+                </div>
+                <div class="d-flex gap-2">
+                    <a th:href="@{/tutor-portal/bookings(view='week')}"
+                       th:class="${view == 'week'} ? 'btn-vici' : 'btn-vici-outline'"
+                       style="text-decoration:none; font-size:12px;">This Week</a>
+                    <a th:href="@{/tutor-portal/bookings(view='extended')}"
+                       th:class="${view == 'extended'} ? 'btn-vici' : 'btn-vici-outline'"
+                       style="text-decoration:none; font-size:12px;">Next 8 Weeks</a>
+                </div>
             </div>
         </div>
 
-        <div class="vici-panel">
+        <div class="vici-panel" th:if="${view != 'extended'}">
             <div class="vici-panel-header">
                 <div>
                     <h2>This Week's Schedule</h2>
@@ -90,7 +110,6 @@
                         <div class="week-day-num" th:text="${day.dateNum}">1</div>
                     </div>
 
-                    <!-- clicking a session pulls its info out of data attributes and fills the modal, no server round trip needed for this placeholder version -->
                     <div th:each="s : ${day.sessions}" class="week-session-card"
                          data-bs-toggle="modal" data-bs-target="#sessionDetailModal"
                          th:attr="data-student=${s.studentName}, data-service=${s.serviceName}, data-status=${s.status},
@@ -105,10 +124,42 @@
             </div>
         </div>
 
+        <div class="vici-panel" th:if="${view == 'extended'}">
+            <div class="vici-panel-header">
+                <div>
+                    <h2>Next 8 Weeks</h2>
+                    <p>Sessions grouped by week, weeks with nothing booked are hidden</p>
+                </div>
+            </div>
+
+            <div th:each="group : ${weekGroups}" style="padding: 0 18px;">
+                <div style="font-weight:700; font-size:13px; color: var(--vici-navy); padding: 14px 0 6px; border-bottom: 1px solid var(--vici-border);"
+                     th:text="${group.weekLabel}">Week</div>
+
+                <div th:each="s : ${group.sessions}" class="week-session-card" style="cursor: default; margin-top: 8px;">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="week-session-student" th:text="${s.studentName}">—</div>
+                            <div class="week-session-service" th:text="${s.serviceName}">—</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="week-session-time" th:text="${#temporals.format(s.startTime, 'EEE, MMM d')}">—</div>
+                            <div class="week-session-time" th:text="${#temporals.format(s.startTime, 'h:mm a')}">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div th:if="${#lists.isEmpty(weekGroups)}" class="text-center text-muted" style="padding:24px;">
+                Nothing booked in the next 8 weeks.
+            </div>
+        </div>
+
+    </div>
+
     </main>
 </div>
 
-<!-- session detail modal, populated via JS from the clicked card's data attributes -->
 <div class="modal fade" id="sessionDetailModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius: 14px; border: none;">
@@ -134,7 +185,6 @@
                     <span class="session-modal-value" id="modalTime">—</span>
                 </div>
 
-                <!-- placeholder for now, notes/history/etc can go here later -->
                 <div class="text-muted" style="font-size:12px; margin-top:14px;">
                     More session details (notes, history) coming soon.
                 </div>
@@ -145,8 +195,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // fills the modal from whichever session card was clicked, kept as plain JS since
-    // there's nothing dynamic enough here yet to warrant a server round trip
     document.getElementById('sessionDetailModal').addEventListener('show.bs.modal', function (event) {
         var card = event.relatedTarget;
         var student = card.getAttribute('data-student');
