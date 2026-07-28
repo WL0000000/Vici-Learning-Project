@@ -1,5 +1,7 @@
 package ca.vicilearning.dashboard.auth;
 
+import ca.vicilearning.dashboard.notion.NotionService;
+import ca.vicilearning.dashboard.notion.NotionTutor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -12,11 +14,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
-/**
- * Handles account creation (registration) and supplies user records to Spring Security at
- * login time via {@link UserDetailsService}. Passwords are BCrypt-hashed here and only ever
- * stored/compared as hashes.
- */
 @Service
 public class AppUserService implements UserDetailsService {
 
@@ -24,25 +21,32 @@ public class AppUserService implements UserDetailsService {
 
     private final AppUserRepository repo;
     private final PasswordEncoder encoder;
+    private final NotionService notionService;
 
-    public AppUserService(AppUserRepository repo, PasswordEncoder encoder) {
+    public AppUserService(AppUserRepository repo, PasswordEncoder encoder, NotionService notionService) {
         this.repo = repo;
         this.encoder = encoder;
+        this.notionService = notionService;
     }
 
-    /** Self-service registration: new accounts get the standard {@link Role#TUTOR} role. */
-    public AppUser register(String username, String rawPassword) {
-        return register(username, rawPassword, Role.TUTOR);
+    public RegistrationResult registerSelfService(String username, String rawPassword) {
+        boolean isSeniorTutor = isSeniorTutor(username);
+        Role role = isSeniorTutor ? Role.STAFF : Role.TUTOR;
+        boolean approved = isSeniorTutor;
+
+        AppUser user = register(username, rawPassword, role, approved);
+        return new RegistrationResult(user, !approved);
     }
 
-    /**
-     * Creates an account with the given role. Trims the username, rejects blanks, enforces a
-     * minimum password length, and rejects duplicates. The password is stored BCrypt-hashed.
-     *
-     * @throws IllegalArgumentException   if the username is blank or the password too short
-     * @throws DuplicateUsernameException if the username already exists
-     */
+    public AppUser registerAsAdmin(String username, String rawPassword, Role role) {
+        return register(username, rawPassword, role, true);
+    }
+
     public AppUser register(String username, String rawPassword, Role role) {
+        return register(username, rawPassword, role, true);
+    }
+
+    private AppUser register(String username, String rawPassword, Role role, boolean approved) {
         String name = username == null ? "" : username.trim();
         if (name.isBlank()) {
             throw new IllegalArgumentException("Username is required.");
@@ -59,8 +63,22 @@ public class AppUserService implements UserDetailsService {
         user.setUsername(name);
         user.setPassword(encoder.encode(rawPassword));
         user.setRole(role);
+        user.setApproved(approved);
         user.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
         return repo.save(user);
+    }
+
+    /** True if the username (email) matches a Notion tutor record marked Senior Tutor */
+    private boolean isSeniorTutor(String username) {
+        if (username == null || username.isBlank()) return false;
+        try {
+            List<NotionTutor> tutors = notionService.getTutorRows();
+            return tutors.stream().anyMatch(t ->
+                    t.email() != null && t.email().equalsIgnoreCase(username.trim())
+                            && t.tutorRole() != null && t.tutorRole().equalsIgnoreCase("Senior Tutor"));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override
@@ -70,6 +88,9 @@ public class AppUserService implements UserDetailsService {
         return User.withUsername(user.getUsername())
                 .password(user.getPassword())
                 .authorities(List.of(new SimpleGrantedAuthority(user.getRole().authority())))
+                .disabled(!user.isApproved())
                 .build();
     }
+
+    public record RegistrationResult(AppUser user, boolean pendingApproval) {}
 }

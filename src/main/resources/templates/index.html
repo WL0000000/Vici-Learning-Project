@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,6 +17,16 @@
 
     <!-- main content -->
     <main class="vici-main">
+
+        <div sec:authorize="hasRole('ADMIN')" th:if="${pendingApprovalCount > 0}"
+             class="vici-panel mb-3" style="padding:14px 22px; border-left: 4px solid var(--vici-gold); display:flex; align-items:center; justify-content:space-between;">
+            <div>
+                <strong th:text="${pendingApprovalCount}">0</strong>
+                tutor account(s) awaiting approval
+            </div>
+            <a th:href="@{/admin/users}" class="btn-vici" style="text-decoration:none;">Review</a>
+        </div>
+
         <div class="sync-strip">
             <div class="d-flex align-items-center gap-2">
                 <span class="sync-status-dot"></span>

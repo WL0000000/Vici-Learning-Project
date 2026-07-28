@@ -348,4 +348,19 @@ public class BrevoCommunicationService {
             log.error("SMTP delivery transaction aborted to target: {}", targetEmail, e);
         }
     }
+
+    /**
+     * Notifies the admin inbox that a new Tutor account is waiting for approval. Requires a
+     * Brevo transactional template to be created first (in Sara/admin's Brevo account) and its
+     * ID set via BREVO_TUTOR_APPROVAL_TEMPLATE_ID. If that's not configured yet, this just logs
+     * instead of failing — a missing email notification shouldn't block someone from registering.
+     */
+    public void notifyAdminOfPendingTutor(String adminEmail, long tutorApprovalTemplateId, String newTutorUsername) {
+        if (tutorApprovalTemplateId <= 0 || adminEmail == null || adminEmail.isBlank()) {
+            log.info("Tutor approval email skipped (template ID or admin email not configured) for {}", newTutorUsername);
+            return;
+        }
+        sendTemplatedEmail(adminEmail, "Vici Learning Admin", tutorApprovalTemplateId,
+                Map.of("tutorUsername", newTutorUsername));
+    }
 }

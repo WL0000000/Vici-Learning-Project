@@ -41,8 +41,7 @@
             Tutors
         </a>
 
-        <!-- Bookings page not built yet — link removed so it can't 500 on an unmapped /bookings route.
-             Re-add here once a /bookings controller + template exist. -->
+        <!-- bookings page not built yet -->
 
         <a th:href="@{/associations}" th:classappend="${activePage == 'associations'} ? ' active'" class="sidebar-link">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -56,8 +55,8 @@
         </a>
 
 
-        <!-- Admin-only tools: hidden from tutors (they also can't reach the routes). -->
-        <a sec:authorize="hasRole('ADMIN')" th:href="@{/comms/review}" th:classappend="${activePage == 'comms-review'} ? ' active'" class="sidebar-link">
+        <!-- Admin + Staff share these tools hidden from Tutors -->
+        <a sec:authorize="hasAnyRole('ADMIN','STAFF')" th:href="@{/comms/review}" th:classappend="${activePage == 'comms-review'} ? ' active'" class="sidebar-link">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 3.2v2.3M12 18.5v2.3M4.6 7.5l2 1.2M17.4 14.3l2 1.2M4.6 16.5l2-1.2M17.4 9.7l2-1.2"/>
                 <circle cx="12" cy="12" r="3.4"/>
@@ -65,7 +64,7 @@
             Automations
         </a>
 
-        <a sec:authorize="hasRole('ADMIN')" th:href="@{/sync}" th:classappend="${activePage == 'sync'} ? ' active'" class="sidebar-link">
+        <a sec:authorize="hasAnyRole('ADMIN','STAFF')" th:href="@{/sync}" th:classappend="${activePage == 'sync'} ? ' active'" class="sidebar-link">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3.5 12a8.5 8.5 0 0 1 14.5-6"/>
                 <path d="M20.5 12a8.5 8.5 0 0 1-14.5 6"/>
@@ -73,6 +72,17 @@
                 <path d="M5.8 21.5v-3.6h3.6"/>
             </svg>
             Sync Status
+        </a>
+
+        <!-- Admin-only: approving pending Tutor accounts, staff (incl. Senior Tutors) can't see this -->
+        <a sec:authorize="hasRole('ADMIN')" th:href="@{/admin/users}" th:classappend="${activePage == 'admin-users'} ? ' active'" class="sidebar-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="8" r="3.2"/>
+                <path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>
+                <path d="M16.5 3.5 21 8l-4.5 4.5"/>
+                <path d="M14 8h7"/>
+            </svg>
+            Users &amp; Approvals
         </a>
 
         <div class="mt-auto pt-3">
