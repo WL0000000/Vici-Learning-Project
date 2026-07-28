@@ -13,20 +13,29 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final RoleBasedLoginSuccessHandler loginSuccessHandler;
+
+    public SecurityConfig(RoleBasedLoginSuccessHandler loginSuccessHandler) {
+        this.loginSuccessHandler = loginSuccessHandler;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/register", "/css/**", "/js/**").permitAll()
                 .requestMatchers("/admin/users/**").hasRole("ADMIN")
-                // Editing a student's ACTIVE/PAUSED status is admin-only; the roster itself stays
-                // viewable by tutors (sensitive columns are hidden in the view).
+                // Editing a student's ACTIVE/PAUSED status is admin-only — narrower than the rest
+                // of the students page (ADMIN/STAFF, matched below), so it must come first.
                 .requestMatchers(HttpMethod.POST, "/students/*/status").hasRole("ADMIN")
                 .requestMatchers("/sync/**", "/comms/**").hasAnyRole("ADMIN", "STAFF")
+                .requestMatchers("/", "/students/**", "/api/notion/**", "/associations/**")
+                    .hasAnyRole("ADMIN", "STAFF")
+                .requestMatchers("/tutor-portal/**").hasAnyRole("ADMIN", "STAFF", "TUTOR")
                 .anyRequest().authenticated())
             .formLogin(form -> form
                 .loginPage("/login")
-                .defaultSuccessUrl("/", true)
+                .successHandler(loginSuccessHandler)
                 .permitAll())
             .logout(logout -> logout
                 .logoutSuccessUrl("/login?logout")

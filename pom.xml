@@ -71,6 +71,22 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!--
+            Flyway — versioned schema migrations (db/migration/V*.sql). Replaces
+            ddl-auto=update, which could not add NOT NULL columns or alter existing CHECK
+            constraints on the populated Neon DB (took prod down twice). ddl-auto is now
+            'validate'. Flyway 10+ splits the Postgres support into its own module, so both
+            artifacts are required. Versions are managed by the Spring Boot BOM.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
         <!-- Dev tools: auto-restart on class changes -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
