@@ -199,7 +199,7 @@
                                     <td class="text-end text-muted" th:text="${t.sessions}">0</td>
                                 </tr>
                                 <tr th:if="${#lists.isEmpty(tutorHours)}">
-                                    <td colspan="3" class="text-center text-muted p-4">No sessions in this period.</td>
+                                    <td colspan="3" class="vici-empty">No sessions in this period.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -271,7 +271,7 @@
                             <td class="text-end" style="font-weight:700;" th:text="${s.hoursThisWeek}">0</td>
                         </tr>
                         <tr th:if="${#lists.isEmpty(students)}">
-                            <td colspan="8" class="text-center text-muted p-4">
+                            <td colspan="8" class="vici-empty">
                                 No students. Run the seeder or a sync.
                             </td>
                         </tr>
@@ -294,11 +294,13 @@
                 <span class="vici-count-badge" th:text="${#lists.size(families)}">0</span>
             </summary>
 
-            <div th:if="${#lists.isEmpty(families)}" class="text-center text-muted p-4">
+            <div th:if="${#lists.isEmpty(families)}" class="vici-empty">
                 No families — no Account_ID is shared by two or more students.
             </div>
 
-            <!-- One collapsible block per family. -->
+            <!-- One collapsible block per family. Capped-height scroll list so a large roster
+                 (250+ clients) stays inside the panel instead of running off the page. -->
+            <div class="vici-scroll-list">
             <details class="vici-family" th:each="f : ${families}">
                 <summary>
                     <svg class="vici-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
@@ -363,6 +365,7 @@
                     </table>
                 </div>
             </details>
+            </div>
         </details>
 
         <!-- ── Upcoming sessions ───────────────────────────────────────────────── -->
@@ -401,7 +404,7 @@
                             </td>
                         </tr>
                         <tr th:if="${#lists.isEmpty(upcoming)}">
-                            <td colspan="5" class="text-center text-muted p-4">No upcoming sessions.</td>
+                            <td colspan="5" class="vici-empty">No upcoming sessions.</td>
                         </tr>
                     </tbody>
                 </table>

@@ -779,4 +779,43 @@ details.vici-family[open] > summary .vici-chevron { transform: rotate(90deg); }
   100% { background: var(--vici-card); }
 }
 
-/* TODO: add responsive stuff later, works fine on desktop for now */
+/* ── Shared empty-state + long-list utilities ──────────────────────────── */
+
+/* One consistent empty-state style for panels, tables and lists with no rows,
+   replacing the ad-hoc `text-center text-muted p-4` variants. Works in a <td>. */
+.vici-empty {
+  text-align: center;
+  color: var(--vici-muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 26px 16px;
+}
+
+/* Caps a long list at real-data volume (250+ clients) so a single panel never
+   runs off the page — the list scrolls within its own container instead. */
+.vici-scroll-list {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+/* ── Responsive: the shell is desktop-first (Sara works on desktop); these keep
+   it usable — not cramped — on smaller/narrower windows. ──────────────────── */
+@media (max-width: 991px) {
+  .vici-sidebar { width: 188px; }
+  .vici-main { padding: 16px; }
+}
+
+@media (max-width: 767px) {
+  /* Stack the sidebar above the content and fall back to natural page scroll
+     (the fixed app-shell height only makes sense when side-by-side). */
+  .vici-layout { flex-direction: column; height: auto; }
+  .vici-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--vici-border);
+    overflow-y: visible;
+  }
+  .vici-main { overflow-y: visible; }
+  .sidebar-stats-card { margin-top: 16px; }
+  .topbar-title { padding-left: 8px; }
+}
