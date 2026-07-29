@@ -29,6 +29,12 @@ public class Invoice {
     // Upstream status, lower-cased (e.g. "paid", "pending", "cancelled"). See isPaid().
     private String status;
 
+    // Explicit "payment received" flag from SimplyBook REST v2 — a far more reliable paid/unpaid
+    // signal than parsing the free-text status string, whose exact values vary per account and
+    // weren't nailed down for Vici's real data. null when the upstream shape didn't carry it (older
+    // API responses, or seeded rows that only set status) — isPaid() then falls back to status.
+    private Boolean paymentReceived;
+
     @Column(precision = 12, scale = 2)
     private BigDecimal amount;
 
@@ -44,8 +50,15 @@ public class Invoice {
     // null = still present in SimplyBook.me.
     private LocalDateTime deletedAt;
 
-    /** True when the upstream status marks this invoice as settled. */
+    /**
+     * True when the invoice is settled. Prefers the explicit {@code payment_received} flag from
+     * REST v2 (reliable); falls back to the status string only when that flag is absent (older
+     * shapes / seed data).
+     */
     public boolean isPaid() {
+        if (paymentReceived != null) {
+            return paymentReceived;
+        }
         return "paid".equalsIgnoreCase(status);
     }
 
@@ -60,6 +73,9 @@ public class Invoice {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public Boolean getPaymentReceived() { return paymentReceived; }
+    public void setPaymentReceived(Boolean paymentReceived) { this.paymentReceived = paymentReceived; }
 
     public BigDecimal getAmount() { return amount; }
     public void setAmount(BigDecimal amount) { this.amount = amount; }

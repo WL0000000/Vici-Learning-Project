@@ -343,6 +343,7 @@ public class MockDataSeeder implements ApplicationRunner {
                 inv.setStudent(student);
                 inv.setNumber(String.format("INV-2026-%04d", number++));
                 inv.setStatus(paid ? "paid" : "pending");
+                inv.setPaymentReceived(paid);
                 inv.setAmount(SESSION_PRICE.multiply(BigDecimal.valueOf(sessions)));
                 inv.setCurrency("CAD");
                 // Issued over the last ~10 weeks so "oldest first" ordering on the overview varies.
