@@ -463,6 +463,68 @@ class AdapterTest {
             assertThat(invoices).hasSize(1);
             assertThat(invoices.get(0).getId()).isEqualTo(504L);
         }
+
+        @Test
+        void paymentReceivedFlagWinsOverStatus() throws Exception {
+            // status says pending, but the explicit paid flag is true → treated as paid.
+            JsonNode json = mapper.readTree("""
+                    [{"id":"510","status":"pending","payment_received":true}]
+                    """);
+
+            Invoice inv = adapter.toInvoices(json, Map.of()).get(0);
+
+            assertThat(inv.getPaymentReceived()).isTrue();
+            assertThat(inv.isPaid()).isTrue();
+        }
+
+        @Test
+        void explicitPaymentReceivedFalseIsUnpaidEvenIfStatusPaid() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"511","status":"paid","payment_received":false}]
+                    """);
+
+            Invoice inv = adapter.toInvoices(json, Map.of()).get(0);
+
+            assertThat(inv.getPaymentReceived()).isFalse();
+            assertThat(inv.isPaid()).isFalse();
+        }
+
+        @Test
+        void populatedPaymentDatetimeImpliesPaid() throws Exception {
+            // No explicit flag, but a payment timestamp is an unambiguous "paid" signal.
+            JsonNode json = mapper.readTree("""
+                    [{"id":"512","status":"pending","payment_datetime":"2026-06-10 12:00:00"}]
+                    """);
+
+            Invoice inv = adapter.toInvoices(json, Map.of()).get(0);
+
+            assertThat(inv.getPaymentReceived()).isTrue();
+            assertThat(inv.isPaid()).isTrue();
+        }
+
+        @Test
+        void fallsBackToStatusWhenNoPaymentSignal() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"513","status":"paid"}]
+                    """);
+
+            Invoice inv = adapter.toInvoices(json, Map.of()).get(0);
+
+            assertThat(inv.getPaymentReceived()).isNull();   // nothing to key off upstream
+            assertThat(inv.isPaid()).isTrue();               // status fallback
+        }
+
+        @Test
+        void tolerantParsingOfNumericAndTextFlags() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"514","payment_received":1},{"id":"515","payment_received":"no"}]
+                    """);
+
+            List<Invoice> invoices = adapter.toInvoices(json, Map.of());
+
+            assertThat(invoices.get(0).isPaid()).isTrue();    // 1 → true
+            assertThat(invoices.get(1).isPaid()).isFalse();   // "no" → false
+        }
     }
 
     // ── MembershipAdapter ─────────────────────────────────────────────────────

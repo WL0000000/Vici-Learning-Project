@@ -38,6 +38,7 @@ public class InvoiceAdapter {
         invoice.setNumber(AdapterUtils.blankToNull(
                 firstNonBlank(node, "number", "invoice_number")));
         invoice.setStatus(lowerOrNull(firstNonBlank(node, "status")));
+        invoice.setPaymentReceived(resolvePaymentReceived(node));
         invoice.setAmount(resolveAmount(node));
         invoice.setCurrency(AdapterUtils.blankToNull(firstNonBlank(node, "currency")));
         invoice.setIssuedAt(AdapterUtils.parseDateTime(
@@ -50,6 +51,29 @@ public class InvoiceAdapter {
     private long resolveClientId(JsonNode node) {
         if (node.has("client_id")) return node.path("client_id").asLong();
         return node.path("client").path("id").asLong();
+    }
+
+    /**
+     * The explicit paid signal, preferred by {@link Invoice#isPaid()} over the status string.
+     * Reads {@code payment_received} tolerantly (boolean, 0/1, or "true"/"false"/"yes"/"no" text);
+     * if that's absent, a populated {@code payment_datetime} is itself an unambiguous "paid" mark.
+     * Returns {@code null} when neither is present, so isPaid() falls back to the status string.
+     */
+    private Boolean resolvePaymentReceived(JsonNode node) {
+        JsonNode flag = node.get("payment_received");
+        if (flag != null && !flag.isNull()) {
+            if (flag.isBoolean()) return flag.asBoolean();
+            if (flag.isNumber()) return flag.asInt() != 0;
+            switch (flag.asText("").trim().toLowerCase()) {
+                case "true", "1", "yes" -> { return true; }
+                case "false", "0", "no" -> { return false; }
+                default -> { /* unrecognized text → fall through to the timestamp check */ }
+            }
+        }
+        if (firstNonBlank(node, "payment_datetime", "payment_date") != null) {
+            return true;
+        }
+        return null;
     }
 
     private BigDecimal resolveAmount(JsonNode node) {
