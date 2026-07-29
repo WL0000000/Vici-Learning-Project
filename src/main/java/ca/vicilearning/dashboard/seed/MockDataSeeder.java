@@ -376,15 +376,21 @@ public class MockDataSeeder implements ApplicationRunner {
 
         for (Student owner : ownerByAccount.values()) {
             boolean active = rng.nextDouble() >= 0.15;           // ~15% paused
+            boolean unlimited = rng.nextDouble() < 0.15;         // ~15% unlimited packages
+            LocalDateTime start = now.minusDays(30 + rng.nextInt(300));
             Membership m = new Membership();
             m.setId(membershipId++);
             m.setStudent(owner);
-            m.setName("Prepaid Session Package");
+            m.setName(unlimited ? "Unlimited Sessions Package" : "Prepaid Session Package");
             m.setActive(active);
-            // 0–20 remaining; a handful land at 0 (the blocked-from-booking case).
-            m.setRemainingCount(rng.nextInt(21));
-            m.setStartDate(now.minusDays(30 + rng.nextInt(300)));
+            m.setUnlimited(unlimited);
+            m.setRecurring(rng.nextDouble() < 0.30);             // some plans auto-renew
+            // Unlimited packages have no countdown; others 0–20 remaining (a few land at 0 = blocked).
+            m.setRemainingCount(unlimited ? null : rng.nextInt(21));
+            m.setStartDate(start);
             m.setEndDate(now.plusDays(30 + rng.nextInt(120)));
+            m.setPurchaseDate(start.minusDays(rng.nextInt(5)));  // bought just before the term start
+            m.setInvoiceNumber(String.format("SI-2026%06d", membershipId));
             m.setSyncedAt(now);
             memberships.add(m);
         }

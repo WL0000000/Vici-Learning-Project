@@ -607,6 +607,36 @@ class AdapterTest {
         }
 
         @Test
+        void parsesUnlimitedRecurringPurchaseDateAndInvoiceNumber() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"80","client_id":"1","unlimited":true,"is_recurring":"1",
+                      "date":"2026-01-10 09:00:00","invoice_number":"SI-2026000096",
+                      "membership":{"name":"Unlimited Virtual"}}]
+                    """);
+
+            Membership m = adapter.toMemberships(json, Map.of(1L, studentWithId(1L))).get(0);
+
+            assertThat(m.getUnlimited()).isTrue();
+            assertThat(m.getRecurring()).isTrue();
+            assertThat(m.getPurchaseDate()).isEqualTo(LocalDateTime.of(2026, 1, 10, 9, 0, 0));
+            assertThat(m.getInvoiceNumber()).isEqualTo("SI-2026000096");
+        }
+
+        @Test
+        void newFieldsAreNull_whenUpstreamOmitsThem() throws Exception {
+            JsonNode json = mapper.readTree("""
+                    [{"id":"81","client_id":"1","rest":"5","membership":{"name":"Pack"}}]
+                    """);
+
+            Membership m = adapter.toMemberships(json, Map.of(1L, studentWithId(1L))).get(0);
+
+            assertThat(m.getUnlimited()).isNull();      // tri-state: "upstream didn't say"
+            assertThat(m.getRecurring()).isNull();
+            assertThat(m.getPurchaseDate()).isNull();
+            assertThat(m.getInvoiceNumber()).isNull();
+        }
+
+        @Test
         void defaultsActiveTrue_whenFlagAbsent() throws Exception {
             JsonNode json = mapper.readTree("""
                     [{"id":"9","client_id":"1","name":"Pack"}]

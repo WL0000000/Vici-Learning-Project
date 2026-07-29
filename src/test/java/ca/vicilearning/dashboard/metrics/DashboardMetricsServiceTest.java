@@ -237,10 +237,55 @@ class DashboardMetricsServiceTest {
 
         DashboardMetricsService.FamilyGroup fam = service.familyGroups().get(0);
 
-        // Distinct + sorted case-insensitively; each member's latest membership balance collected.
+        // Distinct + sorted case-insensitively; each member's latest membership summarised.
         assertThat(fam.categories()).containsExactly("One-on-One", "Study Club");
         assertThat(fam.locations()).containsExactly("At Home", "Virtual Tutoring");
-        assertThat(fam.membershipBalances()).containsExactlyInAnyOrder(8, 3);
+        assertThat(fam.memberships())
+                .extracting(DashboardMetricsService.MembershipSummary::sessionsLeft)
+                .containsExactlyInAnyOrder(8, 3);
+    }
+
+    @Test
+    void familyGroups_summarisesUnlimitedExpiryAndInvoice() {
+        Student sam = studentWithAccount(1L, "Sam Tran", "VICI-0001");
+        Student sara = studentWithAccount(2L, "Sara Tran", "VICI-0001");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(sam, sara));
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of());
+        when(bookingRepo.findActiveWithStudentAndService()).thenReturn(List.of());
+
+        Membership counted = membership(sam, 5);
+        counted.setEndDate(LocalDateTime.of(2026, 8, 1, 0, 0));
+        counted.setInvoiceNumber("SI-2026000096");
+        Membership unlimited = membership(sara, 0);   // remaining ignored once unlimited
+        unlimited.setUnlimited(true);
+        when(membershipRepo.findByDeletedAtIsNull()).thenReturn(List.of(counted, unlimited));
+
+        DashboardMetricsService.FamilyGroup fam = service.familyGroups().get(0);
+
+        DashboardMetricsService.MembershipSummary samSummary = fam.memberships().stream()
+                .filter(m -> !m.unlimited()).findFirst().orElseThrow();
+        assertThat(samSummary.sessionsLeft()).isEqualTo(5);
+        assertThat(samSummary.expires()).isEqualTo(LocalDateTime.of(2026, 8, 1, 0, 0));
+        assertThat(samSummary.invoiceNumber()).isEqualTo("SI-2026000096");
+
+        DashboardMetricsService.MembershipSummary saraSummary = fam.memberships().stream()
+                .filter(DashboardMetricsService.MembershipSummary::unlimited).findFirst().orElseThrow();
+        assertThat(saraSummary.sessionsLeft()).isNull();   // unlimited → no countdown shown
+    }
+
+    @Test
+    void actionRequired_doesNotFlagUnlimitedMembershipAsEmpty() {
+        // Latest membership is unlimited (remaining 0 is irrelevant) → no MEMBERSHIP_EMPTY/LOW item.
+        Student u = student(1L, "Unlimited Uma");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(u));
+        when(bookingRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                booking(1, u, "confirmed", now.minusDays(1), 60)));   // recent → no NO_BOOKING item
+        Membership unlimited = membership(u, 0);
+        unlimited.setUnlimited(true);
+        when(membershipRepo.findByDeletedAtIsNull()).thenReturn(List.of(unlimited));
+
+        assertThat(service.actionRequired()).extracting(DashboardMetricsService.ActionItem::type)
+                .doesNotContain("MEMBERSHIP_EMPTY", "MEMBERSHIP_LOW");
     }
 
     private Booking svcBooking(long id, Student student, String category, String location) {
