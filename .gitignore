@@ -27,8 +27,9 @@ Thumbs.db
 CLAUDE.md
 cursor.md
 
-# ─── Local notes (not for repo) ──────────────────────────────────────────────
+# ─── Local notes / onsite tooling (not for repo — may touch real API keys) ───
 document#*.md
+onsite-harness.py
 docs/DEMO.md
 docs/DEPLOYMENT.md
 docs/WEEK1-ONSITE-TEST.md
