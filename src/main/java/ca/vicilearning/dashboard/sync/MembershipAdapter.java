@@ -36,8 +36,14 @@ public class MembershipAdapter {
         m.setName(AdapterUtils.blankToNull(resolveName(node)));
         m.setActive(resolveActive(node));
         m.setRemainingCount(resolveRemaining(node));
+        m.setUnlimited(resolveBool(node, "unlimited", "is_unlimited"));
+        m.setRecurring(resolveBool(node, "is_recurring", "recurring"));
         m.setStartDate(AdapterUtils.parseDateTime(firstNonBlank(node, "period_start", "start_date", "date_start")));
         m.setEndDate(AdapterUtils.parseDateTime(firstNonBlank(node, "period_end", "end_date", "date_end")));
+        m.setPurchaseDate(AdapterUtils.parseDateTime(
+                firstNonBlank(node, "purchase_date", "date", "create_date", "created_date")));
+        m.setInvoiceNumber(AdapterUtils.blankToNull(
+                firstNonBlank(node, "invoice_number", "invoice", "invoice_no")));
         m.setSyncedAt(now);
         return m;
     }
@@ -79,6 +85,18 @@ public class MembershipAdapter {
             JsonNode value = node.path(field);
             if (!value.isMissingNode() && !value.isNull() && value.asText("").matches("-?\\d+")) {
                 return value.asInt();
+            }
+        }
+        return null;
+    }
+
+    // A tri-state boolean read: the parsed flag if any of the fields is present, else null so the
+    // entity records "upstream didn't say" rather than a misleading false.
+    private Boolean resolveBool(JsonNode node, String... fields) {
+        for (String field : fields) {
+            JsonNode value = node.get(field);
+            if (value != null && !value.isNull() && !value.isMissingNode()) {
+                return AdapterUtils.parseBool(value);
             }
         }
         return null;
