@@ -375,7 +375,7 @@ public class DashboardMetricsService {
         Map<Long, Set<String>> categoriesByStudent = new LinkedHashMap<>();
         Map<Long, Set<String>> locationsByStudent = new LinkedHashMap<>();
         collectServiceAttrs(categoriesByStudent, locationsByStudent);
-        Map<Long, Integer> latestBalanceByStudent = latestMembershipBalanceByStudent(false);
+        Map<Long, Membership> latestByStudent = latestMembershipByStudent(false);
 
         // Preserve insertion order per key so members stay sorted by the pre-sorted stream below.
         Map<String, List<FamilyMember>> byAccount = new LinkedHashMap<>();
@@ -400,18 +400,23 @@ public class DashboardMetricsService {
                     double hours = members.stream().mapToDouble(FamilyMember::hoursThisWeek).sum();
 
                     // Union the compact distinct lists across the family's members (Meeting #3 rows).
-                    // Balances are each member's LATEST membership only (Meeting #4).
+                    // Each member contributes their LATEST membership only (Meeting #4), summarised
+                    // as sessions-left / expires / next-invoice for the family-view display.
                     Set<String> categories = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
                     Set<String> locations = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-                    List<Integer> balances = new ArrayList<>();
+                    List<MembershipSummary> memberships = new ArrayList<>();
                     for (FamilyMember m : members) {
                         categories.addAll(categoriesByStudent.getOrDefault(m.id(), Set.of()));
                         locations.addAll(locationsByStudent.getOrDefault(m.id(), Set.of()));
-                        Integer bal = latestBalanceByStudent.get(m.id());
-                        if (bal != null) balances.add(bal);
+                        Membership mem = latestByStudent.get(m.id());
+                        if (mem != null) {
+                            memberships.add(new MembershipSummary(
+                                    isUnlimited(mem) ? null : mem.getRemainingCount(),
+                                    isUnlimited(mem), mem.getEndDate(), mem.getInvoiceNumber()));
+                        }
                     }
                     return new FamilyGroup(e.getKey(), members, sessions, round1(hours),
-                            List.copyOf(categories), List.copyOf(locations), balances);
+                            List.copyOf(categories), List.copyOf(locations), memberships);
                 })
                 .toList();
     }
@@ -439,10 +444,27 @@ public class DashboardMetricsService {
      * alerting, which shouldn't flag a family whose latest active membership is fine.
      */
     private Map<Long, Integer> latestMembershipBalanceByStudent(boolean activeOnly) {
+        Map<Long, Integer> out = new LinkedHashMap<>();
+        latestMembershipByStudent(activeOnly).forEach((sid, m) -> {
+            // Only a countable, non-unlimited latest membership yields a balance to alert on: an
+            // unlimited (or uncounted) latest plan means "can still book", so it must not alert.
+            if (!isUnlimited(m) && m.getRemainingCount() != null) {
+                out.put(sid, m.getRemainingCount());
+            }
+        });
+        return out;
+    }
+
+    /**
+     * studentId → their <b>latest</b> membership (most recent {@code startDate}), including
+     * unlimited/uncounted ones. Backs the families view's sessions-left / expires / next-invoice
+     * display and, via {@link #latestMembershipBalanceByStudent}, the balance alerting.
+     */
+    private Map<Long, Membership> latestMembershipByStudent(boolean activeOnly) {
         Map<Long, Membership> latest = new LinkedHashMap<>();
         for (Membership m : membershipRepo.findByDeletedAtIsNull()) {
             // getStudent() returns the lazy proxy (or null); getId() on it needs no DB hit.
-            if (m.getStudent() == null || m.getRemainingCount() == null) continue;
+            if (m.getStudent() == null) continue;
             if (activeOnly && !m.isActive()) continue;
             Long sid = m.getStudent().getId();
             Membership incumbent = latest.get(sid);
@@ -450,9 +472,11 @@ public class DashboardMetricsService {
                 latest.put(sid, m);
             }
         }
-        Map<Long, Integer> out = new LinkedHashMap<>();
-        latest.forEach((sid, m) -> out.put(sid, m.getRemainingCount()));
-        return out;
+        return latest;
+    }
+
+    private static boolean isUnlimited(Membership m) {
+        return Boolean.TRUE.equals(m.getUnlimited());
     }
 
     /** True when {@code candidate} is a later start date than {@code incumbent} (nulls sort earliest). */
@@ -707,15 +731,23 @@ public class DashboardMetricsService {
     /**
      * A family: the students (siblings) sharing one Account_ID, with this week's combined totals
      * plus the compact distinct lists that mirror Sara's join sheet (Meeting #3): the service
-     * {@code categories} and {@code locations} seen across the family's bookings, and each
-     * membership's remaining prepaid-session {@code balances}.
+     * {@code categories} and {@code locations} seen across the family's bookings, and one
+     * {@link MembershipSummary} per member (their latest membership).
      */
     public record FamilyGroup(String accountId, List<FamilyMember> members,
                               int sessionsThisWeek, double hoursThisWeek,
                               List<String> categories, List<String> locations,
-                              List<Integer> membershipBalances) {
+                              List<MembershipSummary> memberships) {
         public int size() { return members.size(); }
     }
+
+    /**
+     * A member's latest membership at a glance: {@code sessionsLeft} (null when {@code unlimited}
+     * or upstream exposes no countable balance), whether it's {@code unlimited}, when it
+     * {@code expires}, and the linked {@code invoiceNumber} ("next invoice").
+     */
+    public record MembershipSummary(Integer sessionsLeft, boolean unlimited,
+                                    LocalDateTime expires, String invoiceNumber) {}
 
     public record FamilyMember(Long id, String name, String extId, String email, String phone,
                                int sessionsThisWeek, double hoursThisWeek) {}

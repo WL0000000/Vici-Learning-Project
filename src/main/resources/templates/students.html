@@ -304,12 +304,13 @@
                     <svg class="vici-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
                     <span class="status-pill pill-confirmed" th:text="${f.accountId}">VICI-0000</span>
                     <span class="text-muted" th:text="${f.size()} + (${f.size()} == 1 ? ' student' : ' students')">0 students</span>
-                    <!-- Distinct membership balances at a glance (red when any are empty). -->
+                    <!-- Sessions left per member's latest membership at a glance: ∞ for unlimited,
+                         red when a countable balance is 0 (blocked from booking). -->
                     <span class="d-inline-flex align-items-center gap-1 ms-1">
-                        <span th:if="${#lists.isEmpty(f.membershipBalances)}" class="text-muted">no balance</span>
-                        <span th:each="bal : ${f.membershipBalances}" class="status-pill"
-                              th:classappend="${bal == 0} ? 'pill-cancelled' : 'pill-confirmed'"
-                              th:text="${bal}">0</span>
+                        <span th:if="${#lists.isEmpty(f.memberships)}" class="text-muted">no membership</span>
+                        <span th:each="mem : ${f.memberships}" class="status-pill"
+                              th:classappend="${!mem.unlimited and mem.sessionsLeft != null and mem.sessionsLeft == 0} ? 'pill-cancelled' : 'pill-confirmed'"
+                              th:text="${mem.unlimited} ? '∞' : (${mem.sessionsLeft != null} ? ${mem.sessionsLeft} : '—')">0</span>
                     </span>
                     <span class="ms-auto text-muted" style="font-size:12px;"
                           th:text="${f.hoursThisWeek} + ' h · ' + ${f.sessionsThisWeek} + ' sess (wk)'">0 h</span>
@@ -321,6 +322,20 @@
                         <span th:text="${#lists.isEmpty(f.categories)} ? '—' : ${#strings.listJoin(f.categories, ', ')}">—</span></span>
                     <span><span class="text-muted">Location:</span>
                         <span th:text="${#lists.isEmpty(f.locations)} ? '—' : ${#strings.listJoin(f.locations, ', ')}">—</span></span>
+                </div>
+
+                <!-- Membership detail per member's latest plan: sessions left / expires / next invoice. -->
+                <div class="d-flex flex-wrap align-items-center gap-3 px-3 pt-1" style="font-size:12px;"
+                     th:if="${!#lists.isEmpty(f.memberships)}">
+                    <span class="text-muted">Membership:</span>
+                    <span th:each="mem,it : ${f.memberships}" class="d-inline-flex align-items-center gap-1">
+                        <span th:if="${it.index > 0}" class="text-muted">•</span>
+                        <span th:text="${mem.unlimited} ? 'Unlimited' : ((${mem.sessionsLeft != null} ? ${mem.sessionsLeft} : '?') + ' left')">— left</span>
+                        <span class="text-muted" th:if="${mem.expires != null}">· expires
+                            <span th:text="${#temporals.format(mem.expires, 'MMM d, yyyy')}">—</span></span>
+                        <span class="text-muted" th:if="${mem.invoiceNumber != null}">· inv
+                            <span th:text="${mem.invoiceNumber}">—</span></span>
+                    </span>
                 </div>
 
                 <div class="table-responsive">
