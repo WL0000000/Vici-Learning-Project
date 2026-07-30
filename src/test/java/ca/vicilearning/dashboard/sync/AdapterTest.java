@@ -623,6 +623,29 @@ class AdapterTest {
         }
 
         @Test
+        void parsesRealNestedShape_unlimitedRecurringOnPlan_andCreatedAsPurchaseDate() throws Exception {
+            // Verbatim shape from Vici's live REST v2 (2026-07-30): is_unlimited / is_recurring are
+            // on the nested "membership" plan (not top level), and the purchase date is "created".
+            JsonNode json = mapper.readTree("""
+                    [{"id":"90","client_id":"1","rest":"6","count":"8","can_be_used":true,
+                      "is_expired":false,"invoice_number":"SI-2026000096",
+                      "created":"2026-01-10 09:00:00",
+                      "period_start":"2026-01-15","period_end":"2027-01-15",
+                      "membership":{"name":"One-on-One Virtual (8 x 1 hr)",
+                                    "is_unlimited":true,"is_recurring":true}}]
+                    """);
+
+            Membership m = adapter.toMemberships(json, Map.of(1L, studentWithId(1L))).get(0);
+
+            assertThat(m.getUnlimited()).isTrue();     // read from membership.is_unlimited
+            assertThat(m.getRecurring()).isTrue();     // read from membership.is_recurring
+            assertThat(m.getPurchaseDate()).isEqualTo(LocalDateTime.of(2026, 1, 10, 9, 0, 0)); // "created"
+            assertThat(m.getName()).isEqualTo("One-on-One Virtual (8 x 1 hr)");
+            assertThat(m.getRemainingCount()).isEqualTo(6);   // "rest", not "count"=8
+            assertThat(m.getInvoiceNumber()).isEqualTo("SI-2026000096");
+        }
+
+        @Test
         void newFieldsAreNull_whenUpstreamOmitsThem() throws Exception {
             JsonNode json = mapper.readTree("""
                     [{"id":"81","client_id":"1","rest":"5","membership":{"name":"Pack"}}]
