@@ -346,7 +346,9 @@ class AdapterTest {
         }
 
         @Test
-        void isConfirmZero_mapsToPending() throws Exception {
+        void isConfirmZero_mapsToCancelled() throws Exception {
+            // Vici has no approval workflow (Sara, 2026-07-30), so is_confirm=0 is a cancellation,
+            // not a pending booking — it must be excluded from active hours and counted as cancelled.
             JsonNode json = mapper.readTree("""
                     {"1":{"id":"1","client_id":"1","event_id":"3",
                           "start_date":"2026-07-20 11:00:00","is_confirm":"0"}}
@@ -355,7 +357,7 @@ class AdapterTest {
             List<Booking> bookings = adapter.toBookings(json,
                     Map.of(1L, studentWithId(1L)), Map.of(), Map.of(3L, serviceWithId(3L)));
 
-            assertThat(bookings.get(0).getStatus()).isEqualTo("pending");
+            assertThat(bookings.get(0).getStatus()).isEqualTo("cancelled");
         }
 
         @Test

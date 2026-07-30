@@ -89,6 +89,12 @@ public class BookingAdapter {
     // shapes use "is_confirmed" or a string "status". A set "cancel_date" means the booking was
     // cancelled, regardless of the confirm flag. (Confirmed against live admin API 2026-07-20:
     // the field is "is_confirm" — reading only "is_confirmed" defaulted every booking to confirmed.)
+    //
+    // Vici has NO booking-approval workflow and cancelled bookings STAY in the system (confirmed by
+    // Sara, 2026-07-30). So there is no "pending" state: an unconfirmed booking (is_confirm=0) is a
+    // cancellation. Earlier we mapped is_confirm=0 → "pending", which both counted it as active
+    // hours and hid it from the cancellation metric — wrong on both counts. Now it maps to
+    // "cancelled" (the cancel_date branch above still covers cancellations that carry a marker).
     private String resolveStatus(JsonNode node) {
         if (AdapterUtils.blankToNull(node.path("cancel_date").asText(null)) != null) {
             return "cancelled";
@@ -96,7 +102,7 @@ public class BookingAdapter {
         JsonNode confirm = node.has("is_confirm") ? node.path("is_confirm")
                 : node.has("is_confirmed") ? node.path("is_confirmed") : null;
         if (confirm != null) {
-            return AdapterUtils.parseBool(confirm) ? "confirmed" : "pending";
+            return AdapterUtils.parseBool(confirm) ? "confirmed" : "cancelled";
         }
         return node.path("status").asText("confirmed");
     }
