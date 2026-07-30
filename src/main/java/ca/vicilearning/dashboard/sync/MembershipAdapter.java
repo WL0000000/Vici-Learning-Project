@@ -36,12 +36,17 @@ public class MembershipAdapter {
         m.setName(AdapterUtils.blankToNull(resolveName(node)));
         m.setActive(resolveActive(node));
         m.setRemainingCount(resolveRemaining(node));
-        m.setUnlimited(resolveBool(node, "unlimited", "is_unlimited"));
-        m.setRecurring(resolveBool(node, "is_recurring", "recurring"));
+        // unlimited / recurring live on the nested "membership" plan in the real REST v2 shape
+        // (confirmed against Vici's live data 2026-07-30: membership.is_unlimited / .is_recurring),
+        // not at the top level — read nested first, fall back to top-level for other shapes.
+        m.setUnlimited(resolveMembershipBool(node, "is_unlimited", "unlimited"));
+        m.setRecurring(resolveMembershipBool(node, "is_recurring", "recurring"));
         m.setStartDate(AdapterUtils.parseDateTime(firstNonBlank(node, "period_start", "start_date", "date_start")));
         m.setEndDate(AdapterUtils.parseDateTime(firstNonBlank(node, "period_end", "end_date", "date_end")));
-        m.setPurchaseDate(AdapterUtils.parseDateTime(
-                firstNonBlank(node, "purchase_date", "date", "create_date", "created_date")));
+        // Purchase date: the real top-level field is "created" (confirmed 2026-07-30); keep the
+        // invoice datetime and older names as fallbacks.
+        m.setPurchaseDate(AdapterUtils.parseDateTime(firstNonBlank(node,
+                "created", "purchase_date", "date", "create_date", "created_date", "invoice_datetime")));
         m.setInvoiceNumber(AdapterUtils.blankToNull(
                 firstNonBlank(node, "invoice_number", "invoice", "invoice_no")));
         m.setSyncedAt(now);
@@ -88,6 +93,13 @@ public class MembershipAdapter {
             }
         }
         return null;
+    }
+
+    // Reads a boolean flag from the nested "membership" plan object first (the real REST v2 shape),
+    // then the top-level node as a fallback. null when neither carries it.
+    private Boolean resolveMembershipBool(JsonNode node, String... fields) {
+        Boolean nested = resolveBool(node.path("membership"), fields);
+        return (nested != null) ? nested : resolveBool(node, fields);
     }
 
     // A tri-state boolean read: the parsed flag if any of the fields is present, else null so the
