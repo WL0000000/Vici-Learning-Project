@@ -68,17 +68,31 @@ public class AppUserService implements UserDetailsService {
         return repo.save(user);
     }
 
-    /** True if the username (email) matches a Notion tutor record marked Senior Tutor */
+   /**
+     * True if the username (email) matches a Notion tutor record marked as a senior tutor.
+     * Matches loosely against a few known label variants ("Senior Tutor", "Sr. Tutor") since
+     * Sara's real Notion data uses "Sr. Tutor", not the full word — confirmed during in-person
+     * testing. Uses "contains" rather than exact match so small formatting differences (extra
+     * spaces, trailing punctuation) don't silently break the elevation check again.
+     */
     private boolean isSeniorTutor(String username) {
         if (username == null || username.isBlank()) return false;
         try {
             List<NotionTutor> tutors = notionService.getTutorRows();
             return tutors.stream().anyMatch(t ->
                     t.email() != null && t.email().equalsIgnoreCase(username.trim())
-                            && t.tutorRole() != null && t.tutorRole().equalsIgnoreCase("Senior Tutor"));
+                            && isSeniorTutorRole(t.tutorRole()));
         } catch (Exception e) {
+            // Notion being unreachable shouldn't block registration entirely, it should just
+            // fall through to the safer default (regular Tutor, pending approval).
             return false;
         }
+    }
+
+    private boolean isSeniorTutorRole(String tutorRole) {
+        if (tutorRole == null) return false;
+        String normalized = tutorRole.trim().toLowerCase();
+        return normalized.contains("senior") || normalized.contains("sr.") || normalized.startsWith("sr ");
     }
 
     @Override
