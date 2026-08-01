@@ -91,6 +91,7 @@ public class MockDataSeeder implements ApplicationRunner {
     private final TutorRepository      tutorRepo;
     private final ServiceRepository    serviceRepo;
     private final StudentRepository    studentRepo;
+    private final RosterStudentRepository rosterStudentRepo;
     private final BookingRepository    bookingRepo;
     private final InvoiceRepository    invoiceRepo;
     private final MembershipRepository membershipRepo;
@@ -99,6 +100,7 @@ public class MockDataSeeder implements ApplicationRunner {
     public MockDataSeeder(TutorRepository tutorRepo,
                           ServiceRepository serviceRepo,
                           StudentRepository studentRepo,
+                          RosterStudentRepository rosterStudentRepo,
                           BookingRepository bookingRepo,
                           InvoiceRepository invoiceRepo,
                           MembershipRepository membershipRepo,
@@ -106,6 +108,7 @@ public class MockDataSeeder implements ApplicationRunner {
         this.tutorRepo      = tutorRepo;
         this.serviceRepo    = serviceRepo;
         this.studentRepo    = studentRepo;
+        this.rosterStudentRepo = rosterStudentRepo;
         this.bookingRepo    = bookingRepo;
         this.invoiceRepo    = invoiceRepo;
         this.membershipRepo = membershipRepo;
@@ -140,6 +143,12 @@ public class MockDataSeeder implements ApplicationRunner {
 
         List<Student> students = buildStudents(now, rng);
         studentRepo.saveAll(students);
+
+        // The Brevo-sourced roster (the real students). Mirrors the seeded students so the family
+        // rollup lines up (same EXT_IDs + family accountIds), but with the full four-value status
+        // mix and ~15% missing email — matching real Brevo, where email is not a reliable key.
+        List<RosterStudent> roster = buildRosterStudents(students, now, rng);
+        rosterStudentRepo.saveAll(roster);
 
         List<Booking> bookings = buildBookings(students, tutors, services, now, rng);
         bookingRepo.saveAll(bookings);
@@ -228,6 +237,36 @@ public class MockDataSeeder implements ApplicationRunner {
 
         unassignSomeOnlyChildren(students, rng);
         return students;
+    }
+
+    /**
+     * The Brevo-sourced roster, mirroring the seeded students: same EXT_ID (unique key) and family
+     * {@code accountId} (so the family rollup joins across the two sides), but with the real
+     * four-value status mix and ~15% missing email (Brevo email is optional / not a join key).
+     */
+    private List<RosterStudent> buildRosterStudents(List<Student> students, LocalDateTime now, Random rng) {
+        List<RosterStudent> roster = new ArrayList<>();
+        for (Student s : students) {
+            RosterStudent r = new RosterStudent();
+            r.setExtId(s.getExtId());
+            r.setName(s.getName());
+            r.setEmail(rng.nextDouble() < 0.15 ? null : s.getEmail());
+            r.setPhone(s.getPhone());
+            r.setStatus(seededRosterStatus(rng));
+            r.setAccountId(s.getAccountId());
+            r.setSyncedAt(now);
+            roster.add(r);
+        }
+        return roster;
+    }
+
+    /** ~68% ACTIVE, 15% PAUSED, 9% DROPPED, 8% COMPLETED — a realistic four-value mix. */
+    private StudentStatus seededRosterStatus(Random rng) {
+        double d = rng.nextDouble();
+        if (d < 0.68) return StudentStatus.ACTIVE;
+        if (d < 0.83) return StudentStatus.PAUSED;
+        if (d < 0.92) return StudentStatus.DROPPED;
+        return StudentStatus.COMPLETED;
     }
 
     /**
