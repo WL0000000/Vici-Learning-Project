@@ -22,3 +22,7 @@ create table roster_students (
 alter table students drop constraint if exists students_status_check;
 alter table students add constraint students_status_check
     check (status in ('ACTIVE','PAUSED','DROPPED','COMPLETED'));
+
+-- Sync-log counters for the new Brevo roster step (default 0 so they apply to existing rows).
+alter table sync_logs add column roster_students_upserted integer default 0 not null;
+alter table sync_logs add column roster_students_removed  integer default 0 not null;
