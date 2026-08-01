@@ -155,16 +155,16 @@ public class StudentsController {
     }
 
     /**
-     * Set a student's ACTIVE/PAUSED enrolment status from the roster (ADMIN/STAFF — the whole
-     * {@code /students} area is gated to those roles in {@code SecurityConfig}). The service also
-     * writes the change back to Brevo. Redirects back to the students page the edit came from so the
+     * Set a roster student's status by EXT_ID (ADMIN/STAFF — the whole {@code /students} area is gated
+     * to those roles in {@code SecurityConfig}). A local override on the Brevo roster (see
+     * {@code StudentStatusService}). Redirects back to the students page the edit came from so the
      * current period/location/category/status filters are preserved.
      */
-    @PostMapping("/students/{id}/status")
-    public String updateStatus(@PathVariable Long id,
+    @PostMapping("/students/{extId}/status")
+    public String updateStatus(@PathVariable String extId,
                                @RequestParam String status,
                                @RequestHeader(value = "Referer", required = false) String referer) {
-        studentStatus.setStatus(id, status);
+        studentStatus.setStatus(extId, status);
         return "redirect:" + backToStudents(referer);
     }
 
