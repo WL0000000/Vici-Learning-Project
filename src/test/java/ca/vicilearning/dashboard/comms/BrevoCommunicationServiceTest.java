@@ -29,7 +29,7 @@ class BrevoCommunicationServiceTest {
     @BeforeEach
     void setUp() {
         RestClient client = RestClient.builder().baseUrl(wm.baseUrl()).build();
-        service = new BrevoCommunicationService(client, 2); // page size 2 → forces a second page
+        service = new BrevoCommunicationService(client, 2, "Student"); // page size 2 forces a 2nd page
     }
 
     @Test
@@ -86,6 +86,39 @@ class BrevoCommunicationServiceTest {
         wm.stubFor(get(urlPathEqualTo("/contacts")).willReturn(aResponse().withStatus(401)));
 
         assertThat(service.fetchEmailToExtIdMap()).isEmpty();
+    }
+
+    @Test
+    void fetchStudents_keepsOnlyStudentContactType_keyedByExtId_withRealShape() {
+        // Mirrors Vici's real Brevo (2026-07-30): CONTACT_TYPE/CONTACT_STATUS are lists, EXT_ID is an
+        // attribute, phone is SMS, name is STUDENT_NAME. A tutor and an EXT_ID-less contact drop out.
+        wm.stubFor(get(urlPathEqualTo("/contacts"))
+                .withQueryParam("offset", equalTo("0"))
+                .willReturn(okJson("""
+                        {"contacts":[
+                          {"email":"kid@x.com","attributes":{"EXT_ID":"EXT-1","CONTACT_TYPE":["Student"],
+                             "CONTACT_STATUS":["Active"],"STUDENT_NAME":"Ashe Collett","SMS":"+1555"}},
+                          {"email":"tutor@x.com","attributes":{"EXT_ID":"EXT-9","CONTACT_TYPE":["Tutor"],
+                             "CONTACT_STATUS":["Active"]}},
+                          {"email":"noext@x.com","attributes":{"CONTACT_TYPE":["Student"]}}
+                        ]}""")));
+
+        var students = service.fetchStudents();
+
+        assertThat(students).hasSize(1);
+        BrevoCommunicationService.BrevoStudent s = students.get(0);
+        assertThat(s.extId()).isEqualTo("EXT-1");
+        assertThat(s.name()).isEqualTo("Ashe Collett");
+        assertThat(s.email()).isEqualTo("kid@x.com");
+        assertThat(s.phone()).isEqualTo("+1555");
+        assertThat(s.status()).isEqualTo("Active");   // first element of the CONTACT_STATUS list
+    }
+
+    @Test
+    void fetchStudents_returnsEmpty_whenBrevoFails() {
+        wm.stubFor(get(urlPathEqualTo("/contacts")).willReturn(aResponse().withStatus(401)));
+
+        assertThat(service.fetchStudents()).isEmpty();
     }
 
     @Test
