@@ -6,6 +6,8 @@ import ca.vicilearning.dashboard.domain.Invoice;
 import ca.vicilearning.dashboard.domain.InvoiceRepository;
 import ca.vicilearning.dashboard.domain.Membership;
 import ca.vicilearning.dashboard.domain.MembershipRepository;
+import ca.vicilearning.dashboard.domain.RosterStudent;
+import ca.vicilearning.dashboard.domain.RosterStudentRepository;
 import ca.vicilearning.dashboard.domain.Service;
 import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
@@ -32,6 +34,7 @@ class DashboardMetricsServiceTest {
 
     @Mock BookingRepository bookingRepo;
     @Mock StudentRepository studentRepo;
+    @Mock RosterStudentRepository rosterStudentRepo;
     @Mock InvoiceRepository invoiceRepo;
     @Mock ServiceRepository serviceRepo;
     @Mock MembershipRepository membershipRepo;
@@ -47,8 +50,17 @@ class DashboardMetricsServiceTest {
     @BeforeEach
     void setUp() {
         service = new DashboardMetricsService(
-                bookingRepo, studentRepo, invoiceRepo, serviceRepo, membershipRepo,
+                bookingRepo, studentRepo, rosterStudentRepo, invoiceRepo, serviceRepo, membershipRepo,
                 LOW_THRESHOLD, LAPSE_THRESHOLD);
+    }
+
+    /** A roster student (the Brevo-sourced roster), keyed by EXT_ID, ACTIVE by default. */
+    private RosterStudent rosterStudent(String extId, String name, String accountId) {
+        RosterStudent r = new RosterStudent();
+        r.setExtId(extId);
+        r.setName(name);
+        r.setAccountId(accountId);
+        return r;
     }
 
     @Test
@@ -58,11 +70,17 @@ class DashboardMetricsServiceTest {
                 booking(1, null, "confirmed", now, 60),
                 booking(2, null, "confirmed", now, 120),
                 booking(3, null, "cancelled", now, 60)));
-        when(studentRepo.countByDeletedAtIsNull()).thenReturn(42L);
+        // "Active students" is the CURRENT (ACTIVE+PAUSED) count on the Brevo roster; DROPPED excluded.
+        RosterStudent active = rosterStudent("E1", "A", "f");
+        RosterStudent paused = rosterStudent("E2", "B", "f");
+        paused.setStatus(StudentStatus.PAUSED);
+        RosterStudent dropped = rosterStudent("E3", "C", "f");
+        dropped.setStatus(StudentStatus.DROPPED);
+        when(rosterStudentRepo.findByDeletedAtIsNull()).thenReturn(List.of(active, paused, dropped));
 
         DashboardMetricsService.Overview o = service.overview();
 
-        assertThat(o.activeStudents()).isEqualTo(42L);
+        assertThat(o.activeStudents()).isEqualTo(2L);   // ACTIVE + PAUSED current; DROPPED not counted
         assertThat(o.sessionsThisWeek()).isEqualTo(2);
         assertThat(o.hoursThisWeek()).isEqualTo(3.0);
         // Same stubbed list is used for the month query → one cancelled booking.
@@ -158,34 +176,28 @@ class DashboardMetricsServiceTest {
     }
 
     @Test
-    void studentRows_joinStudentsWithThisWeeksHours() {
-        Student alice = student(1L, "Alice");
-        Student bob = student(2L, "Bob");
-        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(bob, alice));
-        // Only Alice has a booking this week (a 2h session).
-        when(bookingRepo.findActiveWithRefsBetween(any(), any()))
-                .thenReturn(List.of(booking(1, alice, "confirmed", now, 120)));
+    void studentRows_listsRosterStudentsSortedByName() {
+        // The roster is the Brevo-sourced students, keyed by EXT_ID — identity/family/status, no hours.
+        when(rosterStudentRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                rosterStudent("E2", "Bob", "VICI-0002"),
+                rosterStudent("E1", "Alice", "VICI-0001")));
 
         List<DashboardMetricsService.StudentRow> rows = service.studentRows();
 
-        // Sorted by name → Alice first.
         assertThat(rows).extracting(DashboardMetricsService.StudentRow::name)
                 .containsExactly("Alice", "Bob");
-        assertThat(rows.get(0).hoursThisWeek()).isEqualTo(2.0);
-        assertThat(rows.get(0).sessionsThisWeek()).isEqualTo(1);
-        assertThat(rows.get(1).hoursThisWeek()).isEqualTo(0.0);
+        assertThat(rows.get(0).id()).isEqualTo("E1");         // id is the EXT_ID (the toggle key)
+        assertThat(rows.get(0).extId()).isEqualTo("E1");
         assertThat(rows.get(0).accountId()).isEqualTo("VICI-0001");
-        // Default status is ACTIVE and is carried on the row.
         assertThat(rows.get(0).status()).isEqualTo(StudentStatus.ACTIVE);
     }
 
     @Test
     void studentRows_statusFilter_returnsOnlyMatchingStatus() {
-        Student alice = student(1L, "Alice");          // ACTIVE by default
-        Student bob = student(2L, "Bob");
+        RosterStudent alice = rosterStudent("E1", "Alice", "f");   // ACTIVE by default
+        RosterStudent bob = rosterStudent("E2", "Bob", "f");
         bob.setStatus(StudentStatus.PAUSED);
-        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(alice, bob));
-        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of());
+        when(rosterStudentRepo.findByDeletedAtIsNull()).thenReturn(List.of(alice, bob));
 
         // Filtering to PAUSED drops Alice; null would return both.
         List<DashboardMetricsService.StudentRow> paused = service.studentRows(null, StudentStatus.PAUSED);
@@ -195,49 +207,52 @@ class DashboardMetricsServiceTest {
     }
 
     @Test
-    void familyGroups_groupsSiblingsBySharedAccountId_withCombinedHours() {
-        // Two siblings share VICI-0001; a lone student and an account-less student stand apart.
-        Student sam = studentWithAccount(1L, "Sam Tran", "VICI-0001");
-        Student sara = studentWithAccount(2L, "Sara Tran", "VICI-0001");
-        Student lone = studentWithAccount(3L, "Ivy Kim", "VICI-0002");
-        Student unlinked = studentWithAccount(4L, "No Account", null);
-        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(sam, sara, lone, unlinked));
-        // Sam: 1h this week, Sara: 2h this week → family total 3h over 2 sessions.
+    void familyGroups_groupsSiblingsFromRoster_withFamilyHoursFromSimplyBook() {
+        // Roster members: two siblings share VICI-0001 (a family); a lone roster student stands apart.
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(
+                rosterStudent("E1", "Sam Tran", "VICI-0001"),
+                rosterStudent("E2", "Sara Tran", "VICI-0001"),
+                rosterStudent("E3", "Ivy Kim", "VICI-0002")));
+        // SimplyBook accounts under VICI-0001 supply the family's hours (1h + 2h = 3h over 2 sessions).
+        Student acct1 = studentWithAccount(1L, "Tran Acct A", "VICI-0001");
+        Student acct2 = studentWithAccount(2L, "Tran Acct B", "VICI-0001");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(acct1, acct2));
         when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of(
-                booking(1, sam, "confirmed", now, 60),
-                booking(2, sara, "confirmed", now, 120)));
+                booking(1, acct1, "confirmed", now, 60),
+                booking(2, acct2, "confirmed", now, 120)));
 
         List<DashboardMetricsService.FamilyGroup> families = service.familyGroups();
 
-        // Only the shared account is a "family"; the lone and unlinked students are excluded.
+        // Only VICI-0001 has 2+ roster members; the lone Ivy is excluded.
         assertThat(families).hasSize(1);
         DashboardMetricsService.FamilyGroup tran = families.get(0);
         assertThat(tran.accountId()).isEqualTo("VICI-0001");
         assertThat(tran.size()).isEqualTo(2);
-        // Members sorted by name.
         assertThat(tran.members()).extracting(DashboardMetricsService.FamilyMember::name)
-                .containsExactly("Sam Tran", "Sara Tran");
+                .containsExactly("Sam Tran", "Sara Tran");   // roster members, sorted by name
         assertThat(tran.sessionsThisWeek()).isEqualTo(2);
-        assertThat(tran.hoursThisWeek()).isEqualTo(3.0);
+        assertThat(tran.hoursThisWeek()).isEqualTo(3.0);     // family total, from the SimplyBook side
     }
 
     @Test
-    void familyGroups_aggregatesDistinctCategoriesLocationsAndBalances() {
-        Student sam = studentWithAccount(1L, "Sam Tran", "VICI-0001");
-        Student sara = studentWithAccount(2L, "Sara Tran", "VICI-0001");
-        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(sam, sara));
+    void familyGroups_aggregatesCategoriesLocationsAndMembershipsFromSimplyBook() {
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(
+                rosterStudent("E1", "Sam Tran", "VICI-0001"),
+                rosterStudent("E2", "Sara Tran", "VICI-0001")));
+        Student acct1 = studentWithAccount(1L, "Tran Acct A", "VICI-0001");
+        Student acct2 = studentWithAccount(2L, "Tran Acct B", "VICI-0001");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(acct1, acct2));
         when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of());
-        // Category/location come from all the family's bookings; the duplicate collapses.
+        // Category/location come from the family's SimplyBook bookings; the duplicate collapses.
         when(bookingRepo.findActiveWithStudentAndService()).thenReturn(List.of(
-                svcBooking(1, sam, "One-on-One", "Virtual Tutoring"),
-                svcBooking(2, sara, "Study Club", "At Home"),
-                svcBooking(3, sam, "One-on-One", "Virtual Tutoring")));
+                svcBooking(1, acct1, "One-on-One", "Virtual Tutoring"),
+                svcBooking(2, acct2, "Study Club", "At Home"),
+                svcBooking(3, acct1, "One-on-One", "Virtual Tutoring")));
         when(membershipRepo.findByDeletedAtIsNull()).thenReturn(List.of(
-                membership(sam, 8), membership(sara, 3)));
+                membership(acct1, 8), membership(acct2, 3)));
 
         DashboardMetricsService.FamilyGroup fam = service.familyGroups().get(0);
 
-        // Distinct + sorted case-insensitively; each member's latest membership summarised.
         assertThat(fam.categories()).containsExactly("One-on-One", "Study Club");
         assertThat(fam.locations()).containsExactly("At Home", "Virtual Tutoring");
         assertThat(fam.memberships())
@@ -247,16 +262,18 @@ class DashboardMetricsServiceTest {
 
     @Test
     void familyGroups_summarisesUnlimitedExpiryAndInvoice() {
-        Student sam = studentWithAccount(1L, "Sam Tran", "VICI-0001");
-        Student sara = studentWithAccount(2L, "Sara Tran", "VICI-0001");
-        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(sam, sara));
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(
+                rosterStudent("E1", "Sam Tran", "VICI-0001"),
+                rosterStudent("E2", "Sara Tran", "VICI-0001")));
+        Student acct1 = studentWithAccount(1L, "Tran Acct A", "VICI-0001");
+        Student acct2 = studentWithAccount(2L, "Tran Acct B", "VICI-0001");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(acct1, acct2));
         when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of());
-        when(bookingRepo.findActiveWithStudentAndService()).thenReturn(List.of());
 
-        Membership counted = membership(sam, 5);
+        Membership counted = membership(acct1, 5);
         counted.setEndDate(LocalDateTime.of(2026, 8, 1, 0, 0));
         counted.setInvoiceNumber("SI-2026000096");
-        Membership unlimited = membership(sara, 0);   // remaining ignored once unlimited
+        Membership unlimited = membership(acct2, 0);   // remaining ignored once unlimited
         unlimited.setUnlimited(true);
         when(membershipRepo.findByDeletedAtIsNull()).thenReturn(List.of(counted, unlimited));
 
