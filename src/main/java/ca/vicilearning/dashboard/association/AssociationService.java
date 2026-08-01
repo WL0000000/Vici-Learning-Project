@@ -2,8 +2,8 @@ package ca.vicilearning.dashboard.association;
 
 import ca.vicilearning.dashboard.domain.FamilyAssociation;
 import ca.vicilearning.dashboard.domain.FamilyAssociationRepository;
-import ca.vicilearning.dashboard.domain.Student;
-import ca.vicilearning.dashboard.domain.StudentRepository;
+import ca.vicilearning.dashboard.domain.RosterStudent;
+import ca.vicilearning.dashboard.domain.RosterStudentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,32 +17,32 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * The Association Account feature (Sara's #1 ask, Meeting #3): the dashboard is the authoritative
- * family ↔ student map, since Brevo's family "Company" association doesn't export cleanly.
+ * The Association Account feature (Sara's #1 ask): the dashboard is the authoritative family ↔
+ * student map. Confirmed onsite (2026-07-30) that Brevo has <b>no usable family field</b> (only
+ * Segments), so the family assignment is entirely staff-owned here.
  *
- * <p>A student's <b>family</b> is its {@code accountId} (the {@code Surname_Account} key, shared by
- * siblings); its own unique id is {@code extId} (from Brevo). A student with no {@code accountId} is
- * <b>unassigned</b> and waits in a queue for staff to assign it. Each family also has a first-class
- * {@link FamilyAssociation} row (name, notes, Brevo company link), auto-created the first time the
- * family is seen — so grouping students by the key and attaching that row yields the families.
- *
- * <p>TODO (future): sync the Brevo company id onto the family; let staff merge/rename families.
+ * <p>Operates on the Brevo-sourced <b>{@link RosterStudent}</b> roster — each real student, keyed by
+ * its {@code EXT_ID}. A student's <b>family</b> is its {@code accountId} (the {@code Surname_Account}
+ * key, shared by siblings); a student with no {@code accountId} is <b>unassigned</b> and waits in a
+ * queue for staff to assign it. Each family also has a first-class {@link FamilyAssociation} row
+ * (name, notes), auto-created the first time the family is seen.
  */
 @Service
 public class AssociationService {
 
-    private final StudentRepository studentRepo;
+    private final RosterStudentRepository rosterStudentRepo;
     private final FamilyAssociationRepository familyRepo;
 
-    public AssociationService(StudentRepository studentRepo, FamilyAssociationRepository familyRepo) {
-        this.studentRepo = studentRepo;
+    public AssociationService(RosterStudentRepository rosterStudentRepo,
+                              FamilyAssociationRepository familyRepo) {
+        this.rosterStudentRepo = rosterStudentRepo;
         this.familyRepo = familyRepo;
     }
 
-    /** Students not yet assigned to a family (no Account_ID) — the assignment queue. */
+    /** Students not yet assigned to a family — the assignment queue. */
     public List<StudentView> unassignedStudents() {
-        return studentRepo.findByDeletedAtIsNullAndAccountIdIsNull().stream()
-                .sorted(Comparator.comparing(Student::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
+        return rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNull().stream()
+                .sorted(Comparator.comparing(RosterStudent::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .map(AssociationService::toView)
                 .toList();
     }
@@ -50,14 +50,13 @@ public class AssociationService {
     /**
      * Assigned students rolled up by family (Account_ID), families sorted by key, members by name.
      * Each family carries its {@link FamilyAssociation} name/notes; a family seen for the first time
-     * gets its row auto-created here (idempotent get-or-create), so existing seeded/synced families
-     * are backfilled on first view. Transactional because of that create.
+     * gets its row auto-created here (idempotent get-or-create). Transactional because of that create.
      */
     @Transactional
     public List<FamilyView> families() {
         Map<String, List<StudentView>> byAccount = new LinkedHashMap<>();
-        studentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().stream()
-                .sorted(Comparator.comparing(Student::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
+        rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().stream()
+                .sorted(Comparator.comparing(RosterStudent::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .forEach(s -> byAccount.computeIfAbsent(s.getAccountId().trim(), k -> new ArrayList<>())
                         .add(toView(s)));
 
@@ -83,19 +82,19 @@ public class AssociationService {
     }
 
     /**
-     * Assign a student to a family by setting its Account_ID, and ensure that family has a
+     * Assign a student (by EXT_ID) to a family by setting its Account_ID, and ensure that family has a
      * {@link FamilyAssociation} row (created if the key is new). Blank input is a no-op so an empty
      * form submission can't wipe an assignment.
      */
     @Transactional
-    public void assignToFamily(Long studentId, String accountId) {
-        if (accountId == null || accountId.isBlank()) {
+    public void assignToFamily(String extId, String accountId) {
+        if (extId == null || extId.isBlank() || accountId == null || accountId.isBlank()) {
             return;
         }
         String key = accountId.trim();
-        studentRepo.findById(studentId).ifPresent(s -> {
+        rosterStudentRepo.findById(extId).ifPresent(s -> {
             s.setAccountId(key);
-            studentRepo.save(s);
+            rosterStudentRepo.save(s);
         });
         getOrCreateFamily(key);
     }
@@ -132,8 +131,8 @@ public class AssociationService {
         return familyRepo.save(fam);
     }
 
-    private static StudentView toView(Student s) {
-        return new StudentView(s.getId(), s.getName(), s.getExtId(), s.getEmail(), s.getAccountId());
+    private static StudentView toView(RosterStudent s) {
+        return new StudentView(s.getExtId(), s.getName(), s.getEmail(), s.getAccountId());
     }
 
     // ── DTOs carried to the view (scalar-only, safe with open-in-view off) ────────
@@ -148,5 +147,6 @@ public class AssociationService {
         }
     }
 
-    public record StudentView(Long id, String name, String extId, String email, String accountId) {}
+    /** One roster student in the Association view. {@code extId} is its unique id (the assign key). */
+    public record StudentView(String extId, String name, String email, String accountId) {}
 }

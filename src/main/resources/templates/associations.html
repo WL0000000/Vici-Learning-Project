@@ -66,7 +66,7 @@
                             <td>
                                 <form th:action="@{/associations/assign}" method="post"
                                       class="d-flex gap-2 mb-0">
-                                    <input type="hidden" name="studentId" th:value="${s.id}"/>
+                                    <input type="hidden" name="extId" th:value="${s.extId}"/>
                                     <input type="text" name="accountId" class="form-control form-control-sm"
                                            list="family-keys" placeholder="Surname_Account" required/>
                                     <button type="submit" class="btn-vici btn-sm">Assign</button>

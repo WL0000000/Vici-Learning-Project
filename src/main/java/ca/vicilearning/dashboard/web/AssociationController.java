@@ -30,8 +30,8 @@ public class AssociationController {
     }
 
     @PostMapping("/associations/assign")
-    public String assign(@RequestParam Long studentId, @RequestParam String accountId) {
-        associations.assignToFamily(studentId, accountId);
+    public String assign(@RequestParam String extId, @RequestParam String accountId) {
+        associations.assignToFamily(extId, accountId);
         return "redirect:/associations";
     }
 
