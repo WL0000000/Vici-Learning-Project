@@ -1,8 +1,7 @@
 package ca.vicilearning.dashboard.student;
 
-import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
-import ca.vicilearning.dashboard.domain.Student;
-import ca.vicilearning.dashboard.domain.StudentRepository;
+import ca.vicilearning.dashboard.domain.RosterStudent;
+import ca.vicilearning.dashboard.domain.RosterStudentRepository;
 import ca.vicilearning.dashboard.domain.StudentStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,12 +9,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -25,71 +22,50 @@ import static org.mockito.Mockito.when;
 class StudentStatusServiceTest {
 
     @Mock
-    private StudentRepository studentRepo;
-
-    @Mock
-    private BrevoCommunicationService brevo;
+    private RosterStudentRepository rosterStudentRepo;
 
     @InjectMocks
     private StudentStatusService service;
 
     @Test
-    void setsStatusLocallyAndPushesToBrevo() {
-        Student s = new Student();
-        s.setStatus(StudentStatus.ACTIVE);
-        s.setEmail("kid@example.com");
-        when(studentRepo.findById(5L)).thenReturn(Optional.of(s));
+    void setsStatusOnKnownStudent() {
+        RosterStudent r = new RosterStudent();
+        r.setExtId("EXT-1");
+        r.setStatus(StudentStatus.ACTIVE);
+        when(rosterStudentRepo.findById("EXT-1")).thenReturn(Optional.of(r));
 
-        boolean updated = service.setStatus(5L, "PAUSED");
-
-        assertThat(updated).isTrue();
-        assertThat(s.getStatus()).isEqualTo(StudentStatus.PAUSED);
-        verify(studentRepo).save(s);
-        verify(brevo).updateContactAttributes("kid@example.com", Map.of("STUDENT_STATUS", "PAUSED"));
+        assertThat(service.setStatus("EXT-1", "PAUSED")).isTrue();
+        assertThat(r.getStatus()).isEqualTo(StudentStatus.PAUSED);
+        verify(rosterStudentRepo).save(r);
     }
 
     @Test
-    void acceptsLowercaseAndTrimsWhitespace() {
-        Student s = new Student();
-        s.setEmail("kid@example.com");
-        when(studentRepo.findById(1L)).thenReturn(Optional.of(s));
+    void acceptsTheFourValuesToleratingCase() {
+        RosterStudent r = new RosterStudent();
+        when(rosterStudentRepo.findById("EXT-2")).thenReturn(Optional.of(r));
 
-        assertThat(service.setStatus(1L, "  paused ")).isTrue();
-        assertThat(s.getStatus()).isEqualTo(StudentStatus.PAUSED);
-        verify(brevo).updateContactAttributes(eq("kid@example.com"), any());
-    }
-
-    @Test
-    void setsLocallyButSkipsBrevoWhenStudentHasNoEmail() {
-        Student s = new Student();
-        // no email → nothing to key the Brevo contact on
-        when(studentRepo.findById(2L)).thenReturn(Optional.of(s));
-
-        assertThat(service.setStatus(2L, "PAUSED")).isTrue();
-        assertThat(s.getStatus()).isEqualTo(StudentStatus.PAUSED);
-        verify(studentRepo).save(s);
-        verify(brevo, never()).updateContactAttributes(any(), any());
+        assertThat(service.setStatus("EXT-2", "Dropped")).isTrue();   // tolerant parse
+        assertThat(r.getStatus()).isEqualTo(StudentStatus.DROPPED);
     }
 
     @Test
     void noOpWhenStudentUnknown() {
-        when(studentRepo.findById(9L)).thenReturn(Optional.empty());
+        when(rosterStudentRepo.findById("X")).thenReturn(Optional.empty());
 
-        assertThat(service.setStatus(9L, "PAUSED")).isFalse();
-        verify(studentRepo, never()).save(any());
-        verify(brevo, never()).updateContactAttributes(any(), any());
+        assertThat(service.setStatus("X", "PAUSED")).isFalse();
+        verify(rosterStudentRepo, never()).save(any());
     }
 
     @Test
     void noOpForUnrecognizedStatus() {
-        // Guards against a malformed request 500ing or blanking the column — never touches DB/Brevo.
-        assertThat(service.setStatus(5L, "BOGUS")).isFalse();
-        verifyNoInteractions(studentRepo, brevo);
+        assertThat(service.setStatus("EXT-1", "BOGUS")).isFalse();
+        verifyNoInteractions(rosterStudentRepo);
     }
 
     @Test
-    void noOpForNullStatus() {
-        assertThat(service.setStatus(5L, null)).isFalse();
-        verifyNoInteractions(studentRepo, brevo);
+    void noOpForBlankIdOrNullStatus() {
+        assertThat(service.setStatus("", "PAUSED")).isFalse();
+        assertThat(service.setStatus("EXT-1", null)).isFalse();
+        verifyNoInteractions(rosterStudentRepo);
     }
 }

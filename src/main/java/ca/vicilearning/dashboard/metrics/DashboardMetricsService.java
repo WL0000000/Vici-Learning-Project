@@ -6,6 +6,8 @@ import ca.vicilearning.dashboard.domain.Invoice;
 import ca.vicilearning.dashboard.domain.InvoiceRepository;
 import ca.vicilearning.dashboard.domain.Membership;
 import ca.vicilearning.dashboard.domain.MembershipRepository;
+import ca.vicilearning.dashboard.domain.RosterStudent;
+import ca.vicilearning.dashboard.domain.RosterStudentRepository;
 import ca.vicilearning.dashboard.domain.ServiceRepository;
 import ca.vicilearning.dashboard.domain.Student;
 import ca.vicilearning.dashboard.domain.StudentRepository;
@@ -45,6 +47,7 @@ public class DashboardMetricsService {
 
     private final BookingRepository bookingRepo;
     private final StudentRepository studentRepo;
+    private final RosterStudentRepository rosterStudentRepo;
     private final InvoiceRepository invoiceRepo;
     private final ServiceRepository serviceRepo;
     private final MembershipRepository membershipRepo;
@@ -65,12 +68,14 @@ public class DashboardMetricsService {
     private static final int SEVERITY_MEMBERSHIP_LOW = 500;
 
     public DashboardMetricsService(BookingRepository bookingRepo, StudentRepository studentRepo,
+                                    RosterStudentRepository rosterStudentRepo,
                                     InvoiceRepository invoiceRepo, ServiceRepository serviceRepo,
                                     MembershipRepository membershipRepo,
                                     @Value("${metrics.membership-low-threshold:2}") int membershipLowThreshold,
                                     @Value("${metrics.lapse-threshold-days:21}") int lapseThresholdDays) {
         this.bookingRepo = bookingRepo;
         this.studentRepo = studentRepo;
+        this.rosterStudentRepo = rosterStudentRepo;
         this.invoiceRepo = invoiceRepo;
         this.serviceRepo = serviceRepo;
         this.membershipRepo = membershipRepo;
@@ -151,9 +156,12 @@ public class DashboardMetricsService {
         long cancellations = activeBetween(monthStart, monthStart.plusMonths(1)).stream()
                 .filter(b -> isCancelled(b) && matches(b, scope)).count();
 
-        long activeStudents = isAll(scope)
-                ? studentRepo.countByDeletedAtIsNull()
-                : studentIdsMatching(scope).size();
+        // "Active students" = current (ACTIVE/PAUSED) students on the Brevo roster — the real count,
+        // not the SimplyBook client list (which has duplicates/old accounts). Scope (a booking filter)
+        // doesn't apply to the roster, so it always reflects the whole roster.
+        long activeStudents = rosterStudentRepo.findByDeletedAtIsNull().stream()
+                .filter(r -> r.getStatus().isCurrent())
+                .count();
 
         return new Overview(activeStudents, sessions, round1(hours), (int) cancellations);
     }
@@ -325,25 +333,19 @@ public class DashboardMetricsService {
     }
 
     /**
-     * As {@link #studentRows(ServiceScope)} but additionally filtered by enrolment status: when
-     * {@code statusFilter} is non-null only students with that {@link StudentStatus} are returned
-     * (null = both). Backs the Students roster's ACTIVE/PAUSED filter (Meeting #4). The status is
-     * carried on each row so the view can badge it.
+     * The student roster, from the Brevo-sourced {@link RosterStudent} (the real students, keyed by
+     * EXT_ID) — identity, family and status. When {@code statusFilter} is non-null only students with
+     * that {@link StudentStatus} are returned (null = all). {@code scope} (a location/category booking
+     * filter) doesn't apply to the roster, since a booking can't be tied to an individual student.
+     * Per-student hours therefore aren't available here — they roll up to the family (see familyGroups).
      */
     public List<StudentRow> studentRows(ServiceScope scope, StudentStatus statusFilter) {
-        Map<Long, double[]> byStudent = hoursThisWeekByStudent(scope);
-        Set<Long> matching = isAll(scope) ? null : studentIdsMatching(scope);
-
-        return studentRepo.findByDeletedAtIsNull().stream()
-                .filter(s -> matching == null || matching.contains(s.getId()))
-                .filter(s -> statusFilter == null || s.getStatus() == statusFilter)
-                .sorted(Comparator.comparing(Student::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
-                .map(s -> {
-                    double[] cell = byStudent.getOrDefault(s.getId(), new double[]{0.0, 0.0});
-                    return new StudentRow(
-                            s.getId(), s.getName(), s.getAccountId(), s.getExtId(), s.getEmail(), s.getPhone(),
-                            (int) cell[1], round1(cell[0]), s.getStatus());
-                })
+        return rosterStudentRepo.findByDeletedAtIsNull().stream()
+                .filter(r -> statusFilter == null || r.getStatus() == statusFilter)
+                .sorted(Comparator.comparing(RosterStudent::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .map(r -> new StudentRow(
+                        r.getExtId(), r.getName(), r.getAccountId(), r.getExtId(),
+                        r.getEmail(), r.getPhone(), r.getStatus()))
                 .toList();
     }
 
@@ -367,58 +369,67 @@ public class DashboardMetricsService {
      * the Families rollup matches the page-wide location/category filter.
      */
     public List<FamilyGroup> familyGroups(ServiceScope scope) {
-        Map<Long, double[]> byStudent = hoursThisWeekByStudent(scope);
-        Set<Long> matching = isAll(scope) ? null : studentIdsMatching(scope);
+        // 1. Roster members grouped by family (Account_ID) — the real Brevo students, sorted by name.
+        Map<String, List<FamilyMember>> membersByAccount = new LinkedHashMap<>();
+        rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().stream()
+                .sorted(Comparator.comparing(RosterStudent::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .forEach(r -> membersByAccount.computeIfAbsent(r.getAccountId().trim(), k -> new ArrayList<>())
+                        .add(new FamilyMember(r.getExtId(), r.getName(), r.getEmail(), r.getPhone())));
 
-        // Per-student service categories/locations (from all bookings) and each student's latest
-        // membership balance, built once so the rollup below is O(students) rather than per-family.
-        Map<Long, Set<String>> categoriesByStudent = new LinkedHashMap<>();
-        Map<Long, Set<String>> locationsByStudent = new LinkedHashMap<>();
-        collectServiceAttrs(categoriesByStudent, locationsByStudent);
-        Map<Long, Membership> latestByStudent = latestMembershipByStudent(false);
+        // 2. SimplyBook side (this week's hours/sessions, service attrs, latest membership) aggregated
+        //    per family, joined on the SimplyBook account's Account_ID. A booking can't be tied to an
+        //    individual student, so hours/memberships/attrs are per FAMILY, not per member.
+        Map<Long, double[]> hoursByAccount = hoursThisWeekByStudent(scope);
+        Map<Long, Set<String>> catByAccount = new LinkedHashMap<>();
+        Map<Long, Set<String>> locByAccount = new LinkedHashMap<>();
+        collectServiceAttrs(catByAccount, locByAccount);
+        Map<Long, Membership> latestMembership = latestMembershipByStudent(false);
 
-        // Preserve insertion order per key so members stay sorted by the pre-sorted stream below.
-        Map<String, List<FamilyMember>> byAccount = new LinkedHashMap<>();
-        studentRepo.findByDeletedAtIsNull().stream()
-                .filter(s -> s.getAccountId() != null && !s.getAccountId().isBlank())
-                .sorted(Comparator.comparing(Student::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
-                .forEach(s -> {
-                    double[] cell = byStudent.getOrDefault(s.getId(), new double[]{0.0, 0.0});
-                    byAccount.computeIfAbsent(s.getAccountId(), k -> new ArrayList<>())
-                            .add(new FamilyMember(s.getId(), s.getName(), s.getExtId(), s.getEmail(), s.getPhone(),
-                                    (int) cell[1], round1(cell[0])));
-                });
+        Map<String, double[]> famHours = new LinkedHashMap<>();  // [hours, sessions]
+        Map<String, Set<String>> famCategories = new LinkedHashMap<>();
+        Map<String, Set<String>> famLocations = new LinkedHashMap<>();
+        Map<String, List<MembershipSummary>> famMemberships = new LinkedHashMap<>();
+        for (Student account : studentRepo.findByDeletedAtIsNull()) {
+            if (account.getAccountId() == null || account.getAccountId().isBlank()) {
+                continue;
+            }
+            String family = account.getAccountId().trim();
+            double[] cell = hoursByAccount.get(account.getId());
+            if (cell != null) {
+                double[] agg = famHours.computeIfAbsent(family, k -> new double[]{0.0, 0.0});
+                agg[0] += cell[0];
+                agg[1] += cell[1];
+            }
+            famCategories.computeIfAbsent(family, k -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))
+                    .addAll(catByAccount.getOrDefault(account.getId(), Set.of()));
+            famLocations.computeIfAbsent(family, k -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))
+                    .addAll(locByAccount.getOrDefault(account.getId(), Set.of()));
+            Membership mem = latestMembership.get(account.getId());
+            if (mem != null) {
+                famMemberships.computeIfAbsent(family, k -> new ArrayList<>()).add(toMembershipSummary(mem));
+            }
+        }
 
-        return byAccount.entrySet().stream()
+        // 3. One FamilyGroup per family with 2+ roster members (siblings), sorted by key. Hours reflect
+        //    the page-wide scope (they come from scope-filtered bookings); which families show does not.
+        return membersByAccount.entrySet().stream()
                 .filter(e -> e.getValue().size() >= 2)
-                .filter(e -> matching == null
-                        || e.getValue().stream().anyMatch(m -> matching.contains(m.id())))
                 .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
                 .map(e -> {
-                    List<FamilyMember> members = e.getValue();
-                    int sessions = members.stream().mapToInt(FamilyMember::sessionsThisWeek).sum();
-                    double hours = members.stream().mapToDouble(FamilyMember::hoursThisWeek).sum();
-
-                    // Union the compact distinct lists across the family's members (Meeting #3 rows).
-                    // Each member contributes their LATEST membership only (Meeting #4), summarised
-                    // as sessions-left / expires / next-invoice for the family-view display.
-                    Set<String> categories = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-                    Set<String> locations = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-                    List<MembershipSummary> memberships = new ArrayList<>();
-                    for (FamilyMember m : members) {
-                        categories.addAll(categoriesByStudent.getOrDefault(m.id(), Set.of()));
-                        locations.addAll(locationsByStudent.getOrDefault(m.id(), Set.of()));
-                        Membership mem = latestByStudent.get(m.id());
-                        if (mem != null) {
-                            memberships.add(new MembershipSummary(
-                                    isUnlimited(mem) ? null : mem.getRemainingCount(),
-                                    isUnlimited(mem), mem.getEndDate(), mem.getInvoiceNumber()));
-                        }
-                    }
-                    return new FamilyGroup(e.getKey(), members, sessions, round1(hours),
-                            List.copyOf(categories), List.copyOf(locations), memberships);
+                    String family = e.getKey();
+                    double[] h = famHours.getOrDefault(family, new double[]{0.0, 0.0});
+                    return new FamilyGroup(family, e.getValue(),
+                            (int) h[1], round1(h[0]),
+                            List.copyOf(famCategories.getOrDefault(family, Set.of())),
+                            List.copyOf(famLocations.getOrDefault(family, Set.of())),
+                            famMemberships.getOrDefault(family, List.of()));
                 })
                 .toList();
+    }
+
+    private MembershipSummary toMembershipSummary(Membership m) {
+        return new MembershipSummary(isUnlimited(m) ? null : m.getRemainingCount(),
+                isUnlimited(m), m.getEndDate(), m.getInvoiceNumber());
     }
 
     /** Fills {@code categories}/{@code locations} maps: studentId → distinct service attrs from bookings. */
@@ -725,8 +736,10 @@ public class DashboardMetricsService {
 
     public record TutorHours(String tutorName, double hours, int sessions) {}
 
-    public record StudentRow(Long id, String name, String accountId, String extId, String email, String phone,
-                             int sessionsThisWeek, double hoursThisWeek, StudentStatus status) {}
+    /** One roster student: {@code id} is the EXT_ID (the toggle/edit key), plus identity/family/status.
+     *  No per-student hours — a booking can't be tied to an individual student; hours are per family. */
+    public record StudentRow(String id, String name, String accountId, String extId, String email, String phone,
+                             StudentStatus status) {}
 
     /**
      * A family: the students (siblings) sharing one Account_ID, with this week's combined totals
@@ -749,8 +762,8 @@ public class DashboardMetricsService {
     public record MembershipSummary(Integer sessionsLeft, boolean unlimited,
                                     LocalDateTime expires, String invoiceNumber) {}
 
-    public record FamilyMember(Long id, String name, String extId, String email, String phone,
-                               int sessionsThisWeek, double hoursThisWeek) {}
+    /** A roster student in a family. No per-member hours — bookings roll up to the family total. */
+    public record FamilyMember(String extId, String name, String email, String phone) {}
 
     public record ActionItem(Long studentId, String studentName, String type, String reason,
                               LocalDate lastSession, int severity) {}

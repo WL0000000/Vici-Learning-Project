@@ -65,6 +65,12 @@ public class SyncLog {
     @ColumnDefault("0")
     private int statusesUpdated;
 
+    // Brevo-sourced roster (CONTACT_TYPE=Student) upserted / soft-deleted this run.
+    @ColumnDefault("0")
+    private int rosterStudentsUpserted;
+    @ColumnDefault("0")
+    private int rosterStudentsRemoved;
+
     @Column(columnDefinition = "text")
     private String errorMessage;
 
@@ -126,6 +132,12 @@ public class SyncLog {
 
     public int getStatusesUpdated() { return statusesUpdated; }
     public void setStatusesUpdated(int statusesUpdated) { this.statusesUpdated = statusesUpdated; }
+
+    public int getRosterStudentsUpserted() { return rosterStudentsUpserted; }
+    public void setRosterStudentsUpserted(int rosterStudentsUpserted) { this.rosterStudentsUpserted = rosterStudentsUpserted; }
+
+    public int getRosterStudentsRemoved() { return rosterStudentsRemoved; }
+    public void setRosterStudentsRemoved(int rosterStudentsRemoved) { this.rosterStudentsRemoved = rosterStudentsRemoved; }
 
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }

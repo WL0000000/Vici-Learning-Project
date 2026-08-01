@@ -41,6 +41,7 @@ public class SyncService {
     private final InvoiceAdapter          invoiceAdapter;
     private final MembershipAdapter       membershipAdapter;
     private final StudentRepository       studentRepo;
+    private final RosterStudentRepository rosterStudentRepo;
     private final TutorRepository         tutorRepo;
     private final ServiceRepository       serviceRepo;
     private final BookingRepository       bookingRepo;
@@ -68,6 +69,7 @@ public class SyncService {
                        InvoiceAdapter invoiceAdapter,
                        MembershipAdapter membershipAdapter,
                        StudentRepository studentRepo,
+                       RosterStudentRepository rosterStudentRepo,
                        TutorRepository tutorRepo,
                        ServiceRepository serviceRepo,
                        BookingRepository bookingRepo,
@@ -86,6 +88,7 @@ public class SyncService {
         this.invoiceAdapter  = invoiceAdapter;
         this.membershipAdapter = membershipAdapter;
         this.studentRepo     = studentRepo;
+        this.rosterStudentRepo = rosterStudentRepo;
         this.tutorRepo       = tutorRepo;
         this.serviceRepo     = serviceRepo;
         this.bookingRepo     = bookingRepo;
@@ -127,6 +130,10 @@ public class SyncService {
         runStep("tutors",   () -> syncTutors(entry),   failures);
         runStep("services", () -> syncServices(entry), failures);
         runStep("students", () -> syncStudents(entry), failures);
+        // The REAL student roster: pulled from Brevo (CONTACT_TYPE=Student), keyed by EXT_ID, with the
+        // true CONTACT_STATUS. Independent of SimplyBook (its own step), and it never matches by email
+        // (identity comes from the source record). This is what the roster + Association pages use.
+        runStep("rosterStudents", () -> syncRosterStudents(entry), failures);
         runStep("bookings", () -> syncBookings(entry), failures);
         // Runs after students so their rows exist; uses REST v2 (not JSON-RPC) for the
         // Account_ID custom field. Its own step so a REST outage can't fail booking sync.
@@ -329,6 +336,56 @@ public class SyncService {
      * Brevo returns nothing — no API key, an outage, or simply no contacts — so teammates without a
      * Brevo key still get green syncs for the SimplyBook data.
      */
+    /**
+     * Pulls the student roster from Brevo (CONTACT_TYPE=Student), keyed by EXT_ID, into
+     * {@link RosterStudent}: name, email/phone, and the true status (CONTACT_STATUS). Preserves a
+     * staff-assigned {@code accountId} (family) across runs — Brevo has no usable family field, so
+     * assignment is staff-owned. Soft-deletes roster students no longer in Brevo. Skipped cleanly when
+     * Brevo returns nothing (no key / no student contacts), so a Brevo issue never wipes the roster.
+     */
+    private void syncRosterStudents(SyncLog entry) {
+        List<BrevoCommunicationService.BrevoStudent> fetched = brevoService.fetchStudents();
+        if (fetched.isEmpty()) {
+            log.info("Brevo returned no students (no key or no CONTACT_TYPE=Student contacts); skipping roster sync");
+            entry.setRosterStudentsUpserted(0);
+            return;
+        }
+
+        // Carry over the staff-assigned family key so a re-sync never blanks it.
+        Map<String, String> knownAccountIds = rosterStudentRepo.findAll().stream()
+                .filter(r -> r.getAccountId() != null)
+                .collect(Collectors.toMap(RosterStudent::getExtId, RosterStudent::getAccountId));
+
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        List<RosterStudent> upserted = new ArrayList<>();
+        for (BrevoCommunicationService.BrevoStudent bs : fetched) {
+            RosterStudent r = rosterStudentRepo.findById(bs.extId()).orElseGet(RosterStudent::new);
+            r.setExtId(bs.extId());
+            r.setName(bs.name());
+            r.setEmail(bs.email());
+            r.setPhone(bs.phone());
+            StudentStatus status = StudentStatus.fromBrevo(bs.status());
+            if (status != null) {
+                r.setStatus(status); // else keep default/existing (unrecognized upstream value)
+            }
+            String knownAccount = knownAccountIds.get(bs.extId());
+            if (knownAccount != null) {
+                r.setAccountId(knownAccount);
+            }
+            r.setSyncedAt(now);
+            r.setDeletedAt(null); // present again if previously soft-deleted
+            upserted.add(r);
+        }
+        rosterStudentRepo.saveAll(upserted);
+
+        int removed = reconcileDeletions(
+                rosterStudentRepo.findAll(), upserted,
+                RosterStudent::getExtId, RosterStudent::getDeletedAt, RosterStudent::setDeletedAt,
+                rosterStudentRepo);
+        entry.setRosterStudentsUpserted(upserted.size());
+        entry.setRosterStudentsRemoved(removed);
+    }
+
     private void syncExtIds(SyncLog entry) {
         Map<String, String> emailToExtId = brevoService.fetchEmailToExtIdMap();
         if (emailToExtId == null || emailToExtId.isEmpty()) {
@@ -532,13 +589,13 @@ public class SyncService {
      *
      * @return the number of rows newly marked deleted by this call
      */
-    private <T> int reconcileDeletions(List<T> existing,
+    private <T, ID> int reconcileDeletions(List<T> existing,
                                        List<T> fetched,
-                                       Function<T, Long> idFn,
+                                       Function<T, ID> idFn,
                                        Function<T, LocalDateTime> getDeletedAt,
                                        BiConsumer<T, LocalDateTime> setDeletedAt,
-                                       JpaRepository<T, Long> repo) {
-        Set<Long> liveIds = fetched.stream().map(idFn).collect(Collectors.toSet());
+                                       JpaRepository<T, ID> repo) {
+        Set<ID> liveIds = fetched.stream().map(idFn).collect(Collectors.toSet());
         List<T> newlyRemoved = existing.stream()
                 .filter(row -> !liveIds.contains(idFn.apply(row)))
                 .filter(row -> getDeletedAt.apply(row) == null)

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -45,7 +46,16 @@ public class BrevoCommunicationService {
         // does NOT return the top-level ext_id in the contact body, but a custom attribute IS
         // returned — so this is where a readable EXT_ID must live. The attribute name must match
         // Vici's real Brevo (confirm against their account); change this @JsonProperty if it differs.
-        @JsonProperty("EXT_ID") String extIdAttribute
+        @JsonProperty("EXT_ID") String extIdAttribute,
+        // Roster fields (confirmed on Vici's live Brevo, 2026-07-30). CONTACT_TYPE marks who is a
+        // student; CONTACT_STATUS is the REAL Active/Paused/Dropped/Completed (not STUDENT_STATUS).
+        // Both are list-typed category attributes, so read them as JsonNode and take the first value.
+        @JsonProperty("CONTACT_TYPE") JsonNode contactType,
+        @JsonProperty("CONTACT_STATUS") JsonNode contactStatus,
+        @JsonProperty("STUDENT_NAME") String studentName,
+        @JsonProperty("FIRSTNAME") String firstName,
+        @JsonProperty("LASTNAME") String lastName,
+        @JsonProperty("SMS") String sms
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -91,13 +101,23 @@ public class BrevoCommunicationService {
      */
     public record CompanyLink(String name, List<Long> contactIds) {}
 
+    /**
+     * A Brevo contact reduced to the roster fields: the unique {@code extId}, display {@code name},
+     * optional {@code email}/{@code phone} (often missing), and the raw {@code status} string from
+     * CONTACT_STATUS. The sync maps {@code status} to {@link ca.vicilearning.dashboard.domain.StudentStatus}.
+     */
+    public record BrevoStudent(String extId, String name, String email, String phone, String status) {}
+
     private final RestClient brevoRestClient;
     private final int contactsPageSize;
+    private final String studentContactType;
 
     public BrevoCommunicationService(RestClient brevoRestClient,
-            @Value("${brevo.contacts-page-size:1000}") int contactsPageSize) {
+            @Value("${brevo.contacts-page-size:1000}") int contactsPageSize,
+            @Value("${brevo.student-contact-type:Student}") String studentContactType) {
         this.brevoRestClient = brevoRestClient;
         this.contactsPageSize = contactsPageSize;
+        this.studentContactType = studentContactType;
     }
 
     /**
@@ -128,6 +148,62 @@ public class BrevoCommunicationService {
             log.error("Failed fetching Brevo contacts (paginated).", e);
         }
         return all;
+    }
+
+    /**
+     * The Brevo-sourced student roster: every contact whose {@code CONTACT_TYPE} is the configured
+     * student value ({@code brevo.student-contact-type}, default "Student"), reduced to
+     * {@link BrevoStudent}. Keyed by EXT_ID (attribute, falling back to the top-level ext_id);
+     * contacts without an EXT_ID are skipped (they can't be keyed). Empty on an API failure so the
+     * sync treats it as "skip" rather than wiping the roster.
+     */
+    public List<BrevoStudent> fetchStudents() {
+        List<BrevoStudent> students = new ArrayList<>();
+        for (BrevoContactNode contact : fetchAllContacts()) {
+            BrevoAttributesNode attrs = contact.attributes();
+            if (attrs == null) {
+                continue;
+            }
+            if (!studentContactType.equalsIgnoreCase(firstValue(attrs.contactType()))) {
+                continue; // not a student contact
+            }
+            String extId = (attrs.extIdAttribute() != null && !attrs.extIdAttribute().isBlank())
+                    ? attrs.extIdAttribute() : contact.extId();
+            if (extId == null || extId.isBlank()) {
+                continue; // no unique key
+            }
+            students.add(new BrevoStudent(
+                    extId.trim(),
+                    resolveStudentName(attrs, contact.email()),
+                    contact.email(),
+                    attrs.sms(),
+                    firstValue(attrs.contactStatus())));
+        }
+        return students;
+    }
+
+    /** First value of a Brevo category attribute (list → first element; scalar → itself); null if empty. */
+    private static String firstValue(JsonNode node) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return null;
+        }
+        if (node.isArray()) {
+            return node.isEmpty() ? null : node.get(0).asText(null);
+        }
+        return node.asText(null);
+    }
+
+    /** STUDENT_NAME, else FIRSTNAME + LASTNAME, else the email, else "(unnamed)". */
+    private static String resolveStudentName(BrevoAttributesNode attrs, String email) {
+        if (attrs.studentName() != null && !attrs.studentName().isBlank()) {
+            return attrs.studentName().trim();
+        }
+        String full = ((attrs.firstName() == null ? "" : attrs.firstName()) + " "
+                + (attrs.lastName() == null ? "" : attrs.lastName())).trim();
+        if (!full.isBlank()) {
+            return full;
+        }
+        return (email != null && !email.isBlank()) ? email : "(unnamed)";
     }
 
     /**

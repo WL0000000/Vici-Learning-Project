@@ -76,10 +76,10 @@ class StudentsControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void adminCanUpdateStatus() throws Exception {
-        mockMvc.perform(post("/students/5/status").param("status", "PAUSED").with(csrf()))
+        mockMvc.perform(post("/students/EXT-5/status").param("status", "PAUSED").with(csrf()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/students"));
-        verify(studentStatus).setStatus(5L, "PAUSED");
+        verify(studentStatus).setStatus("EXT-5", "PAUSED");
     }
 
     @Test
@@ -88,7 +88,7 @@ class StudentsControllerTest {
         // Exercises the family membership block end-to-end, incl. #temporals.format on the expiry —
         // which the empty-metrics tests never render, so a template error there would ship unseen.
         stubEmptyMetrics();
-        FamilyMember member = new FamilyMember(1L, "Sam Tran", "EXT-1", "s@x.com", "555", 2, 3.0);
+        FamilyMember member = new FamilyMember("EXT-1", "Sam Tran", "s@x.com", "555");
         MembershipSummary summary =
                 new MembershipSummary(5, false, LocalDateTime.of(2026, 8, 1, 0, 0), "SI-2026000096");
         FamilyGroup fam = new FamilyGroup("VICI-0001", List.of(member), 2, 3.0,
@@ -104,10 +104,10 @@ class StudentsControllerTest {
     @Test
     @WithMockUser(roles = "STAFF")
     void staffCanUpdateStatus() throws Exception {
-        mockMvc.perform(post("/students/7/status").param("status", "ACTIVE").with(csrf()))
+        mockMvc.perform(post("/students/EXT-7/status").param("status", "ACTIVE").with(csrf()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/students"));
-        verify(studentStatus).setStatus(7L, "ACTIVE");
+        verify(studentStatus).setStatus("EXT-7", "ACTIVE");
     }
 
     @Test
