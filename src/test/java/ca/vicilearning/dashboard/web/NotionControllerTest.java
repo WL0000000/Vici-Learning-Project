@@ -38,6 +38,17 @@ class NotionControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void tutorsPageDegradesGracefully_onNonHttpFailure() throws Exception {
+        // A network error or bad/missing config throws something other than an HTTP error. The page
+        // must still render an empty state rather than 500.
+        when(notionService.getTutorRows()).thenThrow(new IllegalStateException("Set NOTION_TOKEN"));
+        mockMvc.perform(get("/api/notion/tutors"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("notion-tutors"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void rawTutorsReturnsJsonString() throws Exception {
         // service just returns a raw json string, not a real object, kind of a weird endpoint tbh
         when(notionService.getTutors()).thenReturn("{\"results\":[]}");

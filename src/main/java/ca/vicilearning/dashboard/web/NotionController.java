@@ -2,6 +2,8 @@ package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.notion.NotionTutor;
 import ca.vicilearning.dashboard.notion.NotionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -23,6 +25,8 @@ import java.util.Map;
 @RequestMapping("/api/notion")
 public class NotionController {
 
+    private static final Logger log = LoggerFactory.getLogger(NotionController.class);
+
     private final NotionService notionService;
 
     public NotionController(NotionService notionService) {
@@ -37,14 +41,15 @@ public class NotionController {
         try {
             allTutors = notionService.getTutorRows();
         } catch (RestClientResponseException e) {
-            model.addAttribute("tutors", List.of());
-            model.addAttribute("totalTutorCount", 0);
-            model.addAttribute("activeTutorCount", 0);
-            model.addAttribute("inactiveTutorCount", 0);
-            model.addAttribute("query", q);
-            model.addAttribute("sort", sort);
-            model.addAttribute("errorMessage", "Notion could not load tutors: " + e.getResponseBodyAsString());
-            return "notion-tutors";
+            log.warn("Notion tutors load failed with HTTP {}", e.getStatusCode());
+            return emptyTutorsView(model, q, sort,
+                    "Notion could not load tutors: " + e.getResponseBodyAsString());
+        } catch (Exception e) {
+            // Network failure, a missing/bad token or data-source id, or an unexpected response shape.
+            // Degrade to an empty state with a message rather than returning a 500 for the page.
+            log.warn("Notion tutors are unavailable: {}", e.getMessage());
+            return emptyTutorsView(model, q, sort,
+                    "Notion is currently unavailable. Check the integration connection and try again.");
         }
 
         List<NotionTutor> tutors = allTutors.stream()
@@ -58,6 +63,18 @@ public class NotionController {
         model.addAttribute("inactiveTutorCount", countByStatus(allTutors, "Inactive"));
         model.addAttribute("query", q);
         model.addAttribute("sort", sort);
+        return "notion-tutors";
+    }
+
+    /** Render the tutors page in an empty, non-error state with a message (used when Notion is down). */
+    private String emptyTutorsView(Model model, String q, String sort, String message) {
+        model.addAttribute("tutors", List.of());
+        model.addAttribute("totalTutorCount", 0);
+        model.addAttribute("activeTutorCount", 0);
+        model.addAttribute("inactiveTutorCount", 0);
+        model.addAttribute("query", q);
+        model.addAttribute("sort", sort);
+        model.addAttribute("errorMessage", message);
         return "notion-tutors";
     }
 
