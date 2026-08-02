@@ -78,11 +78,9 @@
 
             <div class="col-3">
                 <div class="stat-card" style="border-left-color: #2f8a6a;">
-                    <div class="stat-label">Emails Sent</div>
-                    <!-- TODO no email tracking exists yet, this is still a placeholder
-                         will need to hook this up once brevo comms logging is in place -->
-                    <div class="stat-val">—</div>
-                    <div class="stat-sub">not tracked yet</div>
+                    <div class="stat-label">Hours This Week</div>
+                    <div class="stat-val" th:text="${overview.hoursThisWeek}">0</div>
+                    <div class="stat-sub">from session durations</div>
                 </div>
             </div>
 
