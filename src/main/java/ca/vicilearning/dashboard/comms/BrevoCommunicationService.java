@@ -226,61 +226,6 @@ public class BrevoCommunicationService {
     }
 
     /**
-     * Pulls contacts once and maps each contact's email (lower-cased) to its Brevo EXT_ID — the
-     * per-student external id the sync stamps onto local students (matched by email). Returns an
-     * empty map on any failure (e.g. no API key), so callers can treat that as "skip".
-     *
-     * @return Lookup map linking lower-cased contact email to EXT_ID.
-     */
-    public Map<String, String> fetchEmailToExtIdMap() {
-        Map<String, String> lookupMap = new HashMap<>();
-        for (BrevoContactNode contact : fetchAllContacts()) {
-            if (contact.email() == null) {
-                continue;
-            }
-            // Prefer the EXT_ID custom attribute — Brevo doesn't return the top-level ext_id in the
-            // contact body (confirmed by a live probe 2026-07-20), so reading only ext_id yielded an
-            // empty map against real data. Fall back to top-level ext_id for any account that does
-            // surface it (and so the existing pagination test still passes).
-            String ext = (contact.attributes() != null) ? contact.attributes().extIdAttribute() : null;
-            if (ext == null || ext.isBlank()) {
-                ext = contact.extId();
-            }
-            if (ext != null && !ext.isBlank()) {
-                lookupMap.put(contact.email().trim().toLowerCase(), ext.trim());
-            }
-        }
-        return lookupMap;
-    }
-
-    /**
-     * Maps each contact's email (lower-cased) to its raw Brevo {@code STUDENT_STATUS} string — the
-     * enrolment status the {@link ca.vicilearning.dashboard.sync.SyncService} parses to
-     * {@code ACTIVE}/{@code PAUSED} and stamps onto local students (matched by email). Contacts with
-     * no status are omitted, so a sync only overrides a local status when Brevo specifies one. Empty
-     * on any failure (e.g. no API key), so the caller skips cleanly.
-     *
-     * <p><b>Assumption to verify against real data (Meeting #4 field-shape check):</b> this reads
-     * {@code STUDENT_STATUS} as a <em>per-contact</em> attribute matched by email, consistent with the
-     * one-student = one-Brevo-contact identity model. If Vici's Brevo instead stores it as a parallel
-     * list on a family/parent contact (like {@code STUDENT_NAMES}/{@code ACTIVITY_STATUS}), the match
-     * key would move to account-id + name — swap the mapping here.
-     */
-    public Map<String, String> fetchEmailToStatusMap() {
-        Map<String, String> lookupMap = new HashMap<>();
-        for (BrevoContactNode contact : fetchAllContacts()) {
-            if (contact.email() == null || contact.attributes() == null) {
-                continue;
-            }
-            String status = contact.attributes().studentStatus();
-            if (status != null && !status.isBlank()) {
-                lookupMap.put(contact.email().trim().toLowerCase(), status.trim());
-            }
-        }
-        return lookupMap;
-    }
-
-    /**
      * Pulls cumulative contact nodes and organizes them into a multi-tiered dictionary
      * structured as: Map<ViciAccountId, Map<LowercaseStudentName, ActivityStatus>>
      */
