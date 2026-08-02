@@ -138,12 +138,6 @@ public class SyncService {
         // Runs after students so their rows exist; uses REST v2 (not JSON-RPC) for the
         // Account_ID custom field. Its own step so a REST outage can't fail booking sync.
         runStep("accountIds", () -> syncAccountIds(entry), failures);
-        // Matches local students to Brevo contacts (by email) to stamp the EXT_ID per-student id.
-        // Own step so a Brevo outage/missing key can't fail the SimplyBook data above.
-        runStep("extIds", () -> syncExtIds(entry), failures);
-        // Stamps each student's ACTIVE/PAUSED status from Brevo (its source of truth), matched by
-        // email. Own step so a Brevo issue can't fail the SimplyBook data; skips when Brevo is empty.
-        runStep("statuses", () -> syncStudentStatuses(entry), failures);
         // Assigns still-unassigned students to a family from the Brevo Company association (the link
         // the CSV export omits). Runs after accountIds/extIds so SimplyBook-linked students are
         // already out of the unassigned backlog; own step so a Brevo issue can't fail the rest.
@@ -384,72 +378,6 @@ public class SyncService {
                 rosterStudentRepo);
         entry.setRosterStudentsUpserted(upserted.size());
         entry.setRosterStudentsRemoved(removed);
-    }
-
-    private void syncExtIds(SyncLog entry) {
-        Map<String, String> emailToExtId = brevoService.fetchEmailToExtIdMap();
-        if (emailToExtId == null || emailToExtId.isEmpty()) {
-            log.info("Brevo returned no contacts (no key configured?); skipping EXT_ID sync");
-            entry.setExtIdsLinked(0);
-            return;
-        }
-
-        int linked = 0;
-        for (Student student : studentRepo.findByDeletedAtIsNullAndExtIdIsNull()) {
-            if (student.getEmail() == null || student.getEmail().isBlank()) {
-                continue;
-            }
-            String extId = emailToExtId.get(student.getEmail().trim().toLowerCase());
-            if (extId != null && !extId.isBlank()) {
-                student.setExtId(extId);
-                studentRepo.save(student);
-                linked++;
-            }
-        }
-        entry.setExtIdsLinked(linked);
-    }
-
-    /**
-     * Stamps each student's ACTIVE/PAUSED enrolment status from Brevo (its source of truth),
-     * matched by email. Unlike {@link #syncExtIds} this is not backlog-only: Brevo is authoritative,
-     * so a status change there (e.g. a family put on pause) propagates on the next sync — but only
-     * when Brevo specifies a recognized value, so students Brevo doesn't cover keep their existing
-     * status (a locally-set default that {@link #syncStudents} preserves across upserts). Skipped
-     * cleanly (not failed) when Brevo returns nothing — no key, an outage, or no contacts.
-     */
-    private void syncStudentStatuses(SyncLog entry) {
-        Map<String, String> emailToStatus = brevoService.fetchEmailToStatusMap();
-        if (emailToStatus == null || emailToStatus.isEmpty()) {
-            log.info("Brevo returned no contact statuses (no key configured?); skipping status sync");
-            entry.setStatusesUpdated(0);
-            return;
-        }
-
-        int updated = 0;
-        for (Student student : studentRepo.findByDeletedAtIsNull()) {
-            if (student.getEmail() == null || student.getEmail().isBlank()) {
-                continue;
-            }
-            StudentStatus status = parseStatus(emailToStatus.get(student.getEmail().trim().toLowerCase()));
-            if (status != null && status != student.getStatus()) {
-                student.setStatus(status);
-                studentRepo.save(student);
-                updated++;
-            }
-        }
-        entry.setStatusesUpdated(updated);
-    }
-
-    /** Tolerant parse of a Brevo STUDENT_STATUS string; null when blank or unrecognized (leave as-is). */
-    private static StudentStatus parseStatus(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return null;
-        }
-        return switch (raw.trim().toUpperCase()) {
-            case "ACTIVE" -> StudentStatus.ACTIVE;
-            case "PAUSED" -> StudentStatus.PAUSED;
-            default -> null;
-        };
     }
 
     /**
