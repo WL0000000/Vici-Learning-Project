@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.web;
 
+import ca.vicilearning.dashboard.association.AssociationService;
 import ca.vicilearning.dashboard.domain.StudentStatus;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
@@ -15,7 +16,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Read-only page that renders live (synced or seeded) data: overview metrics, computed
@@ -31,10 +34,13 @@ public class StudentsController {
 
     private final DashboardMetricsService metrics;
     private final StudentStatusService studentStatus;
+    private final AssociationService associations;
 
-    public StudentsController(DashboardMetricsService metrics, StudentStatusService studentStatus) {
+    public StudentsController(DashboardMetricsService metrics, StudentStatusService studentStatus,
+                              AssociationService associations) {
         this.metrics = metrics;
         this.studentStatus = studentStatus;
+        this.associations = associations;
     }
 
     // Default look-back/look-ahead per bucket granularity, chosen so each chart shows a
@@ -147,6 +153,14 @@ public class StudentsController {
                 case YEAR -> "this year";
             });
         }
+
+        // Friendly family names (Account_ID → staff-set family name) so the roster shows "Gray Family"
+        // rather than the raw key, and can link through to the Association page. Falls back to the key.
+        Map<String, String> familyNames = new LinkedHashMap<>();
+        for (AssociationService.FamilyView f : associations.families()) {
+            familyNames.put(f.accountId(), f.displayName());
+        }
+        model.addAttribute("familyNames", familyNames);
 
         model.addAttribute("students", metrics.studentRows(scope, statusFilter));
         model.addAttribute("families", metrics.familyGroups(scope));

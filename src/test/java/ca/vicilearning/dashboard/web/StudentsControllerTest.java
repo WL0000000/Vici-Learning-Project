@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.web;
 
+import ca.vicilearning.dashboard.association.AssociationService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyGroup;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyMember;
@@ -42,6 +43,9 @@ class StudentsControllerTest {
 
     @MockitoBean
     private StudentStatusService studentStatus;
+
+    @MockitoBean
+    private AssociationService associations;
 
     @Test
     @WithMockUser(roles = "ADMIN")

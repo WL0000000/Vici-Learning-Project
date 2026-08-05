@@ -275,8 +275,16 @@
                                 <span class="text-muted" th:if="${s.extId == null}">—</span>
                             </td>
                             <td sec:authorize="hasAnyRole('ADMIN','STAFF')">
-                                <span class="status-pill pill-confirmed"
-                                      th:if="${s.accountId != null}" th:text="${s.accountId}">VICI-0000</span>
+                                <!-- Friendly family name (falls back to the raw key), linking through to
+                                     the Association page where the family map is owned. -->
+                                <a th:if="${s.accountId != null}" th:href="@{/associations}"
+                                   class="text-decoration-none" title="Manage this family on the Association page">
+                                    <span class="status-pill pill-confirmed"
+                                          th:text="${familyNames.get(s.accountId)} ?: ${s.accountId}">Family</span>
+                                </a>
+                                <span class="text-muted" style="font-size:11px; display:block;"
+                                      th:if="${s.accountId != null and familyNames.get(s.accountId) != null and familyNames.get(s.accountId) != s.accountId}"
+                                      th:text="${s.accountId}">Gray_Account</span>
                                 <span class="text-muted" th:if="${s.accountId == null}">— not linked —</span>
                             </td>
                             <td class="text-muted" sec:authorize="hasAnyRole('ADMIN','STAFF')" th:text="${s.email != null ? s.email : '—'}">—</td>

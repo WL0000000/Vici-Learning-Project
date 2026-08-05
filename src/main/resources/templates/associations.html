@@ -98,6 +98,8 @@
                         <!-- When a friendly name is set, still show the raw Account_ID key beside it. -->
                         <span class="text-muted small" th:if="${fam.name}" th:text="${fam.accountId}">Surname_Account</span>
                         <span class="vici-count-badge" th:text="${fam.size()} + ' student(s)'">0</span>
+                        <!-- Cross-link to this family's students (and their hours) on the roster. -->
+                        <a th:href="@{/students(family=${fam.accountId})}" class="small ms-auto">View on students →</a>
                     </div>
                     <div class="text-muted small mb-1" th:if="${fam.notes}" th:text="${fam.notes}"></div>
                     <ul class="list-unstyled mb-0">
