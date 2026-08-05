@@ -163,6 +163,28 @@
             </div>
         </div>
 
+        <!-- ── Empty families: rows with no members left (safe to delete) ──────── -->
+        <div class="vici-panel mt-3" th:if="${!#lists.isEmpty(emptyFamilies)}">
+            <div style="padding:14px 18px;">
+                <h2 class="h6 mb-1">Empty families</h2>
+                <p class="text-muted small mb-3">
+                    Family records with no members left — after moves, unassignments or merges.
+                    Deleting one only removes the empty record; it can never orphan a student.
+                </p>
+                <ul class="list-unstyled mb-0">
+                    <li th:each="fam : ${emptyFamilies}" class="d-flex align-items-center gap-2 mb-1">
+                        <strong th:text="${fam.displayName()}">Family</strong>
+                        <span class="text-muted small" th:if="${fam.name}" th:text="${fam.accountId}"></span>
+                        <form th:action="@{/associations/family/delete}" method="post" class="mb-0">
+                            <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
+                            <button type="submit" class="btn btn-link btn-sm p-0 text-danger"
+                                    style="font-size:12px; text-decoration:none;">Delete</button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
     </main>
 </div>
 

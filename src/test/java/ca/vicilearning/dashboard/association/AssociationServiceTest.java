@@ -192,6 +192,44 @@ class AssociationServiceTest {
         verify(familyRepo, never()).delete(any());
     }
 
+    // ── #2d: delete an empty family (guarded) ────────────────────────────────────
+
+    @Test
+    void delete_removesAFamilyWithNoMembers() {
+        RosterStudent other = roster("EXT-1", "Lee_Account");
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(other));
+        FamilyAssociation empty = family("Gray_Account");
+        when(familyRepo.findById("Gray_Account")).thenReturn(Optional.of(empty));
+
+        service.deleteFamily("Gray_Account");
+
+        verify(familyRepo).delete(empty);
+    }
+
+    @Test
+    void delete_refusesWhenTheFamilyStillHasMembers() {
+        RosterStudent member = roster("EXT-1", "Gray_Account");
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(member));
+
+        service.deleteFamily("Gray_Account");
+
+        // Guard trips before any lookup/delete — a delete must never orphan a student.
+        verify(familyRepo, never()).delete(any());
+    }
+
+    @Test
+    void emptyFamilies_listsOnlyRowsWithNoMembers() {
+        RosterStudent grayMember = roster("EXT-1", "Gray_Account");
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(grayMember));
+        when(familyRepo.findAll()).thenReturn(List.of(family("Gray_Account"), family("Ghost_Account")));
+
+        List<AssociationService.FamilyView> empties = service.emptyFamilies();
+
+        // Gray has a member (excluded); Ghost has none (included).
+        assertThat(empties).extracting(AssociationService.FamilyView::accountId)
+                .containsExactly("Ghost_Account");
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────
 
     /** No families exist yet — both lookups the resolver consults return empty. */

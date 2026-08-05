@@ -14,6 +14,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -79,6 +80,41 @@ public class AssociationService {
     /** Distinct existing family keys, for populating the assignment dropdown. */
     public List<String> existingFamilyKeys() {
         return families().stream().map(FamilyView::accountId).toList();
+    }
+
+    /**
+     * Family rows that have no assigned members left — typically left behind after their students were
+     * moved, unassigned, or merged away. These don't appear in {@link #families()} (which is grouped
+     * from assigned students), so they're surfaced separately for staff to delete.
+     */
+    public List<FamilyView> emptyFamilies() {
+        Set<String> withMembers = rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().stream()
+                .map(r -> r.getAccountId().trim().toLowerCase())
+                .collect(Collectors.toSet());
+        return familyRepo.findAll().stream()
+                .filter(f -> !isBlank(f.getAccountId()))
+                .filter(f -> !withMembers.contains(f.getAccountId().trim().toLowerCase()))
+                .sorted(Comparator.comparing(FamilyAssociation::getAccountId, String.CASE_INSENSITIVE_ORDER))
+                .map(f -> new FamilyView(f.getAccountId(), f.getName(), f.getNotes(), List.of()))
+                .toList();
+    }
+
+    /**
+     * Delete a family row, but only when it has no assigned members — a delete can never orphan a
+     * student. No-op for a blank/unknown key or a family that still has members.
+     */
+    @Transactional
+    public void deleteFamily(String accountId) {
+        if (isBlank(accountId)) {
+            return;
+        }
+        String key = accountId.trim();
+        boolean hasMembers = rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().stream()
+                .anyMatch(r -> key.equalsIgnoreCase(r.getAccountId().trim()));
+        if (hasMembers) {
+            return;
+        }
+        familyRepo.findById(key).ifPresent(familyRepo::delete);
     }
 
     /**
