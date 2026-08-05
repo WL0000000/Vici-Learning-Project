@@ -58,7 +58,7 @@ class AssociationControllerTest {
         mockMvc.perform(get("/associations"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("associations"))
-                .andExpect(content().string(containsString("Move to family")))
+                .andExpect(content().string(containsString("To family")))     // the per-member Move form
                 .andExpect(content().string(containsString("Unassign")))
                 .andExpect(content().string(containsString("Rename key")))
                 .andExpect(content().string(containsString("Merge")))

@@ -145,7 +145,7 @@ class StudentsControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    void rosterShowsFriendlyFamilyName_andFamilyFilterControl() throws Exception {
+    void rosterShowsFriendlyFamilyName() throws Exception {
         stubEmptyMetrics();
         StudentRow row = new StudentRow(
                 "E1", "Kid", "Gray_Account", "E1", "s@x.com", "555", StudentStatus.ACTIVE, 2.0, 1, true);
@@ -156,8 +156,27 @@ class StudentsControllerTest {
 
         mockMvc.perform(get("/students"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Gray Family")))        // friendly name, not the raw key
-                .andExpect(content().string(containsString("id=\"familyFilter\"")));  // the filter dropdown
+                .andExpect(content().string(containsString("Gray Family")));  // friendly name, not the raw key
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void familyFilterChipShows_andNarrowsRoster_whenArrivingViaFamilyParam() throws Exception {
+        stubEmptyMetrics();
+        StudentRow gray = new StudentRow(
+                "E1", "Kid", "Gray_Account", "E1", "s@x.com", "555", StudentStatus.ACTIVE, 2.0, 1, true);
+        StudentRow other = new StudentRow(
+                "E2", "Someone Else", "Lee_Account", "E2", "l@x.com", "555", StudentStatus.ACTIVE, 1.0, 1, true);
+        when(metrics.studentRows(null, null)).thenReturn(List.of(gray, other));
+        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "Gray_Account");
+        when(associations.families()).thenReturn(List.of(
+                new AssociationService.FamilyView("Gray_Account", "Gray Family", null, List.of(m))));
+
+        mockMvc.perform(get("/students").param("family", "Gray_Account"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Showing")))          // the chip
+                .andExpect(content().string(containsString("Kid")))              // in-family student kept
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Someone Else"))));  // other filtered out
     }
 
     private void stubEmptyMetrics() {
