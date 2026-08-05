@@ -463,6 +463,29 @@ class DashboardMetricsServiceTest {
     }
 
     @Test
+    void actionRequired_collapsesDuplicateSimplyBookRecords_usingRosterNames() {
+        // Two SimplyBook client records for ONE family (a real-data duplicate + a dead "(OLD)"), lapsed.
+        Student dupA = student(1L, "Amanda Dumont");
+        Student dupB = student(2L, "Amanda Dumont (OLD)");
+        dupA.setAccountId("Dumont_Account");
+        dupB.setAccountId("Dumont_Account");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(dupA, dupB));
+        when(bookingRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                booking(1, dupA, "confirmed", now.minusDays(40), 60),
+                booking(2, dupB, "confirmed", now.minusDays(40), 60)));
+        // The roster knows the real family: a single student, "Amanda Dumont".
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull())
+                .thenReturn(List.of(rosterStudent("E1", "Amanda Dumont", "Dumont_Account")));
+
+        List<DashboardMetricsService.ActionItem> items = service.actionRequired();
+
+        // The duplicate records collapse to one item, labelled from the roster (no "(OLD)").
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).studentName()).isEqualTo("Amanda Dumont");
+        assertThat(items.get(0).type()).isEqualTo("NO_BOOKING");
+    }
+
+    @Test
     void actionRequired_returnsEmpty_whenNoStudentsNeedAttention() {
         Student healthyStudent = student(1L, "All Good");
         when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(healthyStudent));

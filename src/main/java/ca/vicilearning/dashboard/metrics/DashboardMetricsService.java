@@ -619,21 +619,27 @@ public class DashboardMetricsService {
         }
 
         List<ActionItem> items = new ArrayList<>();
+        // Resolve display identity from the roster (the real students): duplicate/dead SimplyBook client
+        // records for one family collapse to their roster identity, instead of surfacing a raw client
+        // name like "Amanda Dumont" twice or a dead "Angie (OLD)". Falls back to the client name when
+        // the account isn't linked to any roster student (e.g. Account_ID not set upstream yet).
+        Map<String, String> familyDisplayByAccount = rosterDisplayByAccount();
 
         for (Student s : studentRepo.findByDeletedAtIsNull()) {
+            String name = resolveActionName(s, familyDisplayByAccount);
             LocalDateTime last = lastBookingByStudent.get(s.getId());
             long daysSince = last == null ? Long.MAX_VALUE
                     : ChronoUnit.DAYS.between(last.toLocalDate(), today());
 
             if (daysSince >= lapseThresholdDays) {
-                items.add(new ActionItem(s.getId(), s.getName(), "NO_BOOKING",
+                items.add(new ActionItem(s.getId(), name, "NO_BOOKING",
                         last == null ? "No bookings on record" : "No booking in " + daysSince + " days",
                         last == null ? null : last.toLocalDate(), (int) Math.min(daysSince, Integer.MAX_VALUE)));
             }
 
             int cancels = cancellationsThisMonth.getOrDefault(s.getId(), 0);
             if (cancels >= 3) {
-                items.add(new ActionItem(s.getId(), s.getName(), "CANCELLATIONS",
+                items.add(new ActionItem(s.getId(), name, "CANCELLATIONS",
                         cancels + " cancellations this month", null, cancels));
             }
 
@@ -641,18 +647,63 @@ public class DashboardMetricsService {
             Integer balance = latestBalanceByStudent.get(s.getId());
             if (balance != null) {
                 if (balance <= 0) {
-                    items.add(new ActionItem(s.getId(), s.getName(), "MEMBERSHIP_EMPTY",
+                    items.add(new ActionItem(s.getId(), name, "MEMBERSHIP_EMPTY",
                             "Membership empty — 0 sessions left (can't book)", null,
                             SEVERITY_MEMBERSHIP_EMPTY));
                 } else if (balance <= membershipLowThreshold) {
-                    items.add(new ActionItem(s.getId(), s.getName(), "MEMBERSHIP_LOW",
+                    items.add(new ActionItem(s.getId(), name, "MEMBERSHIP_LOW",
                             "Membership low — " + balance + (balance == 1 ? " session" : " sessions") + " left",
                             null, SEVERITY_MEMBERSHIP_LOW));
                 }
             }
         }
 
-        return items.stream()
+        return dedupe(items);
+    }
+
+    /** Account_ID → the family's display name, built from its roster members' names (sorted, "&"-joined). */
+    private Map<String, String> rosterDisplayByAccount() {
+        Map<String, List<String>> namesByAccount = new LinkedHashMap<>();
+        for (RosterStudent r : rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()) {
+            namesByAccount.computeIfAbsent(familyKey(r.getAccountId()), k -> new ArrayList<>()).add(r.getName());
+        }
+        Map<String, String> display = new LinkedHashMap<>();
+        namesByAccount.forEach((account, names) -> {
+            names.sort(String.CASE_INSENSITIVE_ORDER);
+            display.put(account, String.join(" & ", names));
+        });
+        return display;
+    }
+
+    /** A SimplyBook client's action-item label: its family's roster name if linked, else the client name. */
+    private String resolveActionName(Student s, Map<String, String> familyDisplayByAccount) {
+        String account = familyKey(s.getAccountId());
+        if (account != null) {
+            String family = familyDisplayByAccount.get(account);
+            if (family != null && !family.isBlank()) {
+                return family;
+            }
+        }
+        return s.getName();
+    }
+
+    /**
+     * Collapse action items that denote the same issue for the same identity — two SimplyBook client
+     * records for one family both flagged NO_BOOKING become one item (highest severity kept). Distinct
+     * unpaid invoices for one family are preserved (their key includes the invoice reason). Sorted
+     * worst-first by severity.
+     */
+    private List<ActionItem> dedupe(List<ActionItem> items) {
+        Map<String, ActionItem> byKey = new LinkedHashMap<>();
+        for (ActionItem it : items) {
+            String key = it.studentName() + "|" + it.type()
+                    + ("INVOICE_UNPAID".equals(it.type()) ? "|" + it.reason() : "");
+            ActionItem current = byKey.get(key);
+            if (current == null || it.severity() > current.severity()) {
+                byKey.put(key, it);
+            }
+        }
+        return byKey.values().stream()
                 .sorted(Comparator.comparingInt(ActionItem::severity).reversed())
                 .toList();
     }
