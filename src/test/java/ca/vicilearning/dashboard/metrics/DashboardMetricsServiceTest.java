@@ -349,6 +349,20 @@ class DashboardMetricsServiceTest {
                 .doesNotContain("MEMBERSHIP_EMPTY", "MEMBERSHIP_LOW");
     }
 
+    @Test
+    void serviceLocationsAndCategories_deriveFromServiceNameWhenStructuredFieldsBlank() {
+        // A service with NO structured category/location, but a name that encodes both.
+        Service svc = new Service();
+        svc.setId(1L);
+        svc.setName("One-on-One Virtual (8 x 1 hr)");
+        Booking b = booking(1, student(1L, "Kid"), "confirmed", now, 60);
+        b.setService(svc);
+        when(bookingRepo.findActiveWithStudentAndService()).thenReturn(List.of(b));
+
+        assertThat(service.serviceLocations()).containsExactly("Virtual Tutoring");
+        assertThat(service.serviceCategories()).containsExactly("Private 1:1");
+    }
+
     private Booking svcBooking(long id, Student student, String category, String location) {
         Booking b = booking(id, student, "confirmed", now, 60);
         Service svc = new Service();

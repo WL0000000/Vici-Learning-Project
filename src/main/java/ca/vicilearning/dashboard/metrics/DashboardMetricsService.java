@@ -122,12 +122,44 @@ public class DashboardMetricsService {
     // dropdowns.
     private String bookingCategory(Booking b) {
         if (b.getCategory() != null && !b.getCategory().isBlank()) return b.getCategory();
-        return (b.getService() != null) ? b.getService().getCategory() : null;
+        var s = b.getService();
+        if (s != null && s.getCategory() != null && !s.getCategory().isBlank()) return s.getCategory();
+        // Fallback: SimplyBook often carries no structured category; the service NAME encodes it
+        // (Sara's notes: services are named "…1:1…", "…Study Club…", "…Assessment…").
+        return deriveCategoryFromName(s != null ? s.getName() : null);
     }
 
     private String bookingLocation(Booking b) {
         if (b.getLocation() != null && !b.getLocation().isBlank()) return b.getLocation();
-        return (b.getService() != null) ? b.getService().getLocation() : null;
+        var s = b.getService();
+        if (s != null && s.getLocation() != null && !s.getLocation().isBlank()) return s.getLocation();
+        // Fallback: the service NAME encodes the location ("Virtual", "At Home", "Learning Centre",
+        // "Study Club") when SimplyBook returns no structured location field.
+        return deriveLocationFromName(s != null ? s.getName() : null);
+    }
+
+    /** Location inferred from a service name, or null if nothing recognizable. One of the four real
+     *  SimplyBook locations (Meeting #4). "Virtual" wins first, then home, then the two centre variants. */
+    private static String deriveLocationFromName(String name) {
+        if (name == null) return null;
+        String n = name.toLowerCase();
+        if (n.contains("virtual")) return "Virtual Tutoring";
+        if (n.contains("at home") || n.contains("at-home")) return "At Home";
+        if (n.contains("study club") || n.contains("club")) return "VICI Learning Centre (Study Clubs)";
+        if (n.contains("centre") || n.contains("center")) return "VICI Learning Centre";
+        return null;
+    }
+
+    /** Category inferred from a service name, or null if nothing recognizable. One of the three real
+     *  SimplyBook categories (Meeting #4): Assessment, Study Club, or Private 1:1. */
+    private static String deriveCategoryFromName(String name) {
+        if (name == null) return null;
+        String n = name.toLowerCase();
+        if (n.contains("assessment")) return "Assessment";
+        if (n.contains("club")) return "Study Club";
+        if (n.contains("1:1") || n.contains("one-on-one") || n.contains("one on one")
+                || n.contains("private") || n.contains("101")) return "Private 1:1";
+        return null;
     }
 
     // ── Public metrics ─────────────────────────────────────────────────────────
