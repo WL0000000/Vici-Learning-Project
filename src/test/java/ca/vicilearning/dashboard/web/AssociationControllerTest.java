@@ -3,6 +3,10 @@ package ca.vicilearning.dashboard.web;
 import ca.vicilearning.dashboard.association.AssociationService;
 import ca.vicilearning.dashboard.association.AssociationService.FamilyView;
 import ca.vicilearning.dashboard.association.AssociationService.StudentView;
+import ca.vicilearning.dashboard.domain.StudentStatus;
+import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
+
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -40,8 +44,13 @@ class AssociationControllerTest {
     @MockitoBean
     private AssociationService associations;
 
+    @MockitoBean
+    private DashboardMetricsService metrics;
+
     private void stubOneFamilyOneEmpty() {
-        StudentView member = new StudentView("EXT-1", "Sam Tran", "s@x.com", "Gray_Account");
+        when(metrics.familyActivityByAccount(null)).thenReturn(Map.of());
+        StudentView member = new StudentView("EXT-1", "Sam Tran", "s@x.com", "555",
+                StudentStatus.ACTIVE, "Gray_Account");
         FamilyView family = new FamilyView("Gray_Account", "Gray Family", "VIP", List.of(member));
         when(associations.families()).thenReturn(List.of(family));
         when(associations.unassignedStudents()).thenReturn(List.of());

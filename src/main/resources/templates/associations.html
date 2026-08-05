@@ -140,24 +140,46 @@
 
                 <div th:unless="${#lists.isEmpty(families)}" class="assoc-scroll">
                     <div class="assoc-card" th:each="fam : ${families}" data-row
+                         th:with="act=${familyActivity.get(fam.accountId)}"
                          th:attr="data-search=${#strings.toLowerCase(fam.displayName() + ' ' + fam.accountId + ' ' + #strings.listJoin(fam.members.![name], ' ') + ' ' + #strings.listJoin(fam.members.![extId], ' '))}">
 
-                        <!-- Card header: family name + count + quick links -->
+                        <!-- Card header: family name + count + this week's activity + quick links -->
                         <div class="assoc-card-head">
                             <strong th:text="${fam.displayName()}">Family</strong>
                             <span class="text-muted small" th:if="${fam.name}" th:text="${fam.accountId}">Surname_Account</span>
                             <span class="vici-count-badge" th:text="${fam.size()} + ' student(s)'">0</span>
+                            <span class="text-muted small" th:if="${act != null}"
+                                  th:text="${act.hoursThisWeek} + ' h · ' + ${act.sessionsThisWeek} + ' sess this week'">0 h</span>
                             <div class="ms-auto d-flex align-items-center gap-3">
                                 <a th:href="@{/students(family=${fam.accountId})}" class="small">View on students →</a>
                                 <button type="button" class="btn-vici-outline btn-sm" data-manage>Manage</button>
                             </div>
                         </div>
 
-                        <!-- Members: name + EXT_ID, with a compact Move / Unassign per student -->
+                        <!-- Family rollup: category / location / sessions-left. Family-level (a booking
+                             can't be tied to one kid), so it applies to the whole family. -->
+                        <div class="d-flex flex-wrap gap-4 mt-1" style="font-size:12px;" th:if="${act != null}">
+                            <span><span class="text-muted">Category:</span>
+                                <span th:text="${#lists.isEmpty(act.categories)} ? '—' : ${#strings.listJoin(act.categories, ', ')}">—</span></span>
+                            <span><span class="text-muted">Location:</span>
+                                <span th:text="${#lists.isEmpty(act.locations)} ? '—' : ${#strings.listJoin(act.locations, ', ')}">—</span></span>
+                            <span th:if="${!#lists.isEmpty(act.memberships)}"><span class="text-muted">Sessions left:</span>
+                                <span th:each="mem,it : ${act.memberships}">
+                                    <span th:if="${it.index > 0}">· </span>
+                                    <span th:text="${mem.unlimited} ? '∞' : (${mem.sessionsLeft != null} ? ${mem.sessionsLeft} : '—')">0</span>
+                                </span></span>
+                        </div>
+
+                        <!-- Members: each kid with status + contact, and a compact Move / Unassign -->
                         <ul class="assoc-members">
                             <li th:each="m : ${fam.members}" class="assoc-member">
-                                <span th:text="${m.name}">Student</span>
+                                <span style="font-weight:600;" th:text="${m.name}">Student</span>
+                                <span class="status-pill" th:if="${m.status != null}"
+                                      th:classappend="${m.status.name() == 'ACTIVE'} ? 'pill-confirmed' : (${m.status.name() == 'PAUSED'} ? 'pill-pending' : 'pill-cancelled')"
+                                      th:text="${#strings.capitalize(#strings.toLowerCase(m.status))}">Active</span>
                                 <span class="text-muted small" th:if="${m.extId}" th:text="'EXT_ID ' + ${m.extId}"></span>
+                                <span class="text-muted small" th:if="${m.email}" th:text="${m.email}"></span>
+                                <span class="text-muted small" th:if="${m.phone}" th:text="${m.phone}"></span>
                                 <div class="ms-auto d-flex align-items-center gap-3">
                                     <details class="assoc-move">
                                         <summary>Move</summary>

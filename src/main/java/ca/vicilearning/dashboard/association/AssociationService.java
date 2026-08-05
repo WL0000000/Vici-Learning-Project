@@ -4,6 +4,7 @@ import ca.vicilearning.dashboard.domain.FamilyAssociation;
 import ca.vicilearning.dashboard.domain.FamilyAssociationRepository;
 import ca.vicilearning.dashboard.domain.RosterStudent;
 import ca.vicilearning.dashboard.domain.RosterStudentRepository;
+import ca.vicilearning.dashboard.domain.StudentStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -301,7 +302,8 @@ public class AssociationService {
     }
 
     private static StudentView toView(RosterStudent s) {
-        return new StudentView(s.getExtId(), s.getName(), s.getEmail(), s.getAccountId());
+        return new StudentView(s.getExtId(), s.getName(), s.getEmail(), s.getPhone(),
+                s.getStatus(), s.getAccountId());
     }
 
     // ── DTOs carried to the view (scalar-only, safe with open-in-view off) ────────
@@ -316,6 +318,8 @@ public class AssociationService {
         }
     }
 
-    /** One roster student in the Association view. {@code extId} is its unique id (the assign key). */
-    public record StudentView(String extId, String name, String email, String accountId) {}
+    /** One roster student in the Association view. {@code extId} is its unique id (the assign key);
+     *  carries the kid's {@code status} and contact info for the family drill-down. */
+    public record StudentView(String extId, String name, String email, String phone,
+                              StudentStatus status, String accountId) {}
 }

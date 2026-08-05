@@ -127,7 +127,7 @@ class StudentsControllerTest {
         StudentRow row = new StudentRow(
                 "E1", "Kid", "Gray_Account", "E1", "s@x.com", "555", StudentStatus.ACTIVE, 2.0, 1, true);
         when(metrics.studentRows(null, null)).thenReturn(List.of(row));
-        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "Gray_Account");
+        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "555", ca.vicilearning.dashboard.domain.StudentStatus.ACTIVE, "Gray_Account");
         when(associations.families()).thenReturn(List.of(
                 new AssociationService.FamilyView("Gray_Account", "Gray Family", null, List.of(m))));
 
@@ -145,7 +145,7 @@ class StudentsControllerTest {
         StudentRow other = new StudentRow(
                 "E2", "Someone Else", "Lee_Account", "E2", "l@x.com", "555", StudentStatus.ACTIVE, 1.0, 1, true);
         when(metrics.studentRows(null, null)).thenReturn(List.of(gray, other));
-        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "Gray_Account");
+        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "555", ca.vicilearning.dashboard.domain.StudentStatus.ACTIVE, "Gray_Account");
         when(associations.families()).thenReturn(List.of(
                 new AssociationService.FamilyView("Gray_Account", "Gray Family", null, List.of(m))));
 
