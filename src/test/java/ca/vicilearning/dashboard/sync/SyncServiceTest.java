@@ -30,6 +30,7 @@ class SyncServiceTest {
     @Mock InvoiceAdapter     invoiceAdapter;
     @Mock MembershipAdapter  membershipAdapter;
     @Mock StudentRepository  studentRepo;
+    @Mock RosterStudentRepository rosterStudentRepo;
     @Mock TutorRepository    tutorRepo;
     @Mock ServiceRepository  serviceRepo;
     @Mock BookingRepository  bookingRepo;
@@ -97,6 +98,25 @@ class SyncServiceTest {
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getErrorMessage()).isNull();
+    }
+
+    @Test
+    void rosterFamilyLinks_assignsUnassignedRosterStudentFromBrevoCompanyByContactId() {
+        // One unassigned roster student, keyed to Brevo contact id 101.
+        RosterStudent r = new RosterStudent();
+        r.setExtId("E1");
+        r.setBrevoContactId(101L);
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNull()).thenReturn(List.of(r));
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of());
+        // A Brevo Company "Gray" linking contact 101 → its family is Gray.
+        when(brevoService.fetchCompanies()).thenReturn(List.of(
+                new BrevoCommunicationService.CompanyLink("Gray", List.of(101L))));
+
+        syncService.sync();
+
+        // Matched by contact id (not email) and stamped with the canonical family key.
+        assertThat(r.getAccountId()).isEqualTo("Gray_Account");
+        verify(rosterStudentRepo).saveAll(anyList());
     }
 
     @Test
