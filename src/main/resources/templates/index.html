@@ -99,7 +99,8 @@
                     </div>
 
                     <!-- wired up: NO_BOOKING (21+ days) and CANCELLATIONS from booking history,
-                         MEMBERSHIP_EMPTY/LOW from prepaid-session balances (Meeting #3 credit model). -->
+                         MEMBERSHIP_EMPTY/LOW from prepaid-session balances (Meeting #3 credit model),
+                         INVOICE_UNPAID from unpaid invoices (cash-flow follow-ups). -->
                     <div th:each="item : ${actionItems}" class="flagged-row">
                         <div class="flex-grow-1">
                             <div class="d-flex align-items-center gap-2">
@@ -113,10 +114,11 @@
                                  th:text="'Last session: ' + ${#temporals.format(item.lastSession, 'MMM d')}">—</div>
                             <div class="flag-meta" th:if="${item.type == 'CANCELLATIONS'}">Pattern flag</div>
                             <div class="flag-meta" th:if="${item.type == 'MEMBERSHIP_EMPTY' or item.type == 'MEMBERSHIP_LOW'}">Prepaid balance</div>
+                            <div class="flag-meta" th:if="${item.type == 'INVOICE_UNPAID'}">Unpaid invoice</div>
                         </div>
                         <button class="btn-vici-outline"
                                 th:text="${item.type == 'NO_BOOKING'} ? 'Reach out'
-                                       : (${item.type == 'MEMBERSHIP_EMPTY' or item.type == 'MEMBERSHIP_LOW'} ? 'Request payment' : 'Review')">—</button>
+                                       : (${item.type == 'MEMBERSHIP_EMPTY' or item.type == 'MEMBERSHIP_LOW' or item.type == 'INVOICE_UNPAID'} ? 'Request payment' : 'Review')">—</button>
                     </div>
                     <div th:if="${#lists.isEmpty(actionItems)}" class="text-center text-muted" style="padding:24px;">
                         Nothing needs attention right now.

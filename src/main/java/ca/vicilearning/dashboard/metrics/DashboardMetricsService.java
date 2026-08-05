@@ -65,6 +65,7 @@ public class DashboardMetricsService {
     // Action-item severities (sort key, higher = shown first). Membership problems rank high
     // because a family at/near 0 literally can't book more sessions.
     private static final int SEVERITY_MEMBERSHIP_EMPTY = 1000;
+    private static final int SEVERITY_INVOICE_UNPAID = 700;
     private static final int SEVERITY_MEMBERSHIP_LOW = 500;
 
     public DashboardMetricsService(BookingRepository bookingRepo, StudentRepository studentRepo,
@@ -658,7 +659,30 @@ public class DashboardMetricsService {
             }
         }
 
+        // Unpaid invoices → cash-flow action items (each distinct invoice kept, oldest ranks the same).
+        // Labelled by the same roster family identity as the other items.
+        for (Invoice inv : unpaidInvoices()) {
+            Student s = inv.getStudent();
+            String name = (s != null) ? resolveActionName(s, familyDisplayByAccount) : "Unlinked client";
+            Long sid = (s != null) ? s.getId() : null;
+            String amount = formatInvoiceAmount(inv);
+            String number = (inv.getNumber() == null) ? "" : inv.getNumber().trim();
+            items.add(new ActionItem(sid, name, "INVOICE_UNPAID",
+                    ("Unpaid invoice " + number).trim() + (amount.isEmpty() ? "" : " — " + amount),
+                    inv.getIssuedAt() != null ? inv.getIssuedAt().toLocalDate() : null,
+                    SEVERITY_INVOICE_UNPAID));
+        }
+
         return dedupe(items);
+    }
+
+    /** "12.00 CAD" (amount + currency), amount alone when no currency, or "" when the amount is unknown. */
+    private static String formatInvoiceAmount(Invoice inv) {
+        if (inv.getAmount() == null) {
+            return "";
+        }
+        String currency = inv.getCurrency();
+        return inv.getAmount() + ((currency == null || currency.isBlank()) ? "" : " " + currency);
     }
 
     /** Account_ID → the family's display name, built from its roster members' names (sorted, "&"-joined). */

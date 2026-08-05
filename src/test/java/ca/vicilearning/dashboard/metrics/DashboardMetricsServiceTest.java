@@ -525,6 +525,23 @@ class DashboardMetricsServiceTest {
     }
 
     @Test
+    void actionRequired_flagsUnpaidInvoices_excludingPaid() {
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of());
+        when(bookingRepo.findByDeletedAtIsNull()).thenReturn(List.of());
+        Student jane = student(1L, "Jane Doe");
+        when(invoiceRepo.findActiveWithStudent()).thenReturn(List.of(
+                invoice(1L, jane, "pending", "75.00", now.minusDays(5)),
+                invoice(2L, jane, "paid", "50.00", now.minusDays(5))));
+
+        List<DashboardMetricsService.ActionItem> items = service.actionRequired();
+
+        // Only the unpaid invoice becomes an action item.
+        assertThat(items).extracting(DashboardMetricsService.ActionItem::type)
+                .containsExactly("INVOICE_UNPAID");
+        assertThat(items.get(0).reason()).contains("75.00");
+    }
+
+    @Test
     void pendingInvoices_excludesPaid_andSortsOldestIssuedFirst() {
         Student jane = student(1L, "Jane Doe");
         when(invoiceRepo.findActiveWithStudent()).thenReturn(List.of(
