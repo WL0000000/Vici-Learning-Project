@@ -5,6 +5,8 @@ import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyGroup;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyMember;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.MembershipSummary;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
+import ca.vicilearning.dashboard.metrics.DashboardMetricsService.StudentRow;
+import ca.vicilearning.dashboard.domain.StudentStatus;
 import ca.vicilearning.dashboard.student.StudentStatusService;
 import org.junit.jupiter.api.Test;
 
@@ -117,6 +119,24 @@ class StudentsControllerTest {
         mockMvc.perform(post("/students/5/status").param("status", "PAUSED").with(csrf()))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(studentStatus);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void rosterShowsPerStudentHours_andTagsSiblingTotalsAsFamilyLevel() throws Exception {
+        stubEmptyMetrics();
+        // A solo family's hours are the student's (perStudent=true); a sibling's are the family total.
+        StudentRow solo = new StudentRow(
+                "E1", "Solo Kid", "Gray_Account", "E1", "s@x.com", "555", StudentStatus.ACTIVE, 2.0, 1, true);
+        StudentRow sibling = new StudentRow(
+                "E2", "Sib One", "Lee_Account", "E2", "l@x.com", "555", StudentStatus.ACTIVE, 3.0, 2, false);
+        when(metrics.studentRows(null, null)).thenReturn(List.of(solo, sibling));
+
+        mockMvc.perform(get("/students"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("2.0 h")))
+                // The sibling row carries the "family total shared across siblings" indicator.
+                .andExpect(content().string(containsString("shared across siblings")));
     }
 
     private void stubEmptyMetrics() {
