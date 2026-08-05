@@ -1,7 +1,9 @@
 package ca.vicilearning.dashboard.student;
 
+import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
 import ca.vicilearning.dashboard.domain.RosterStudentRepository;
 import ca.vicilearning.dashboard.domain.StudentStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -9,19 +11,26 @@ import org.springframework.stereotype.Service;
  * status on the Brevo-sourced roster ({@code RosterStudent}, keyed by EXT_ID). Display/filtering
  * lives in {@code DashboardMetricsService}; this class only mutates.
  *
- * <p><b>Phase 1: local override.</b> The status source of truth is Brevo's {@code CONTACT_STATUS}
- * (a list-typed attribute), pulled by the roster sync — so an edit here is overwritten on the next
- * sync for a student Brevo tracks. A proper authoritative write-back (PUT the CONTACT_STATUS
- * category, keyed by EXT_ID) is a follow-up: it needs the list-attribute write format verified
- * against Vici's Brevo (blocked while the API keys are revoked). Until then this is a local override.
+ * <p><b>Always a local override; optionally a Brevo write-back.</b> Setting the status updates the
+ * local roster. When {@code brevo.status-writeback-enabled} is true it <i>also</i> writes the value
+ * back to Brevo's {@code CONTACT_STATUS} attribute (keyed by EXT_ID) so the override survives the next
+ * roster sync. The flag defaults <b>off</b> on purpose: the write-back is only safe once the Brevo
+ * <i>read</i> (which field, which student) is verified against Vici's live account — writing on a
+ * misread would corrupt her CRM. Flip the flag after that verification.
  */
 @Service
 public class StudentStatusService {
 
     private final RosterStudentRepository rosterStudentRepo;
+    private final BrevoCommunicationService brevoService;
+    private final boolean writeBackEnabled;
 
-    public StudentStatusService(RosterStudentRepository rosterStudentRepo) {
+    public StudentStatusService(RosterStudentRepository rosterStudentRepo,
+                                BrevoCommunicationService brevoService,
+                                @Value("${brevo.status-writeback-enabled:false}") boolean writeBackEnabled) {
         this.rosterStudentRepo = rosterStudentRepo;
+        this.brevoService = brevoService;
+        this.writeBackEnabled = writeBackEnabled;
     }
 
     /**
@@ -40,6 +49,10 @@ public class StudentStatusService {
                 .map(r -> {
                     r.setStatus(parsed);
                     rosterStudentRepo.save(r);
+                    if (writeBackEnabled) {
+                        // Authoritative write-back so the override survives the next roster sync.
+                        brevoService.updateContactStatusByExtId(extId, parsed.brevoValue());
+                    }
                     return true;
                 })
                 .orElse(false);

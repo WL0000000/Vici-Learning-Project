@@ -463,6 +463,29 @@ class DashboardMetricsServiceTest {
     }
 
     @Test
+    void actionRequired_collapsesDuplicateSimplyBookRecords_usingRosterNames() {
+        // Two SimplyBook client records for ONE family (a real-data duplicate + a dead "(OLD)"), lapsed.
+        Student dupA = student(1L, "Amanda Dumont");
+        Student dupB = student(2L, "Amanda Dumont (OLD)");
+        dupA.setAccountId("Dumont_Account");
+        dupB.setAccountId("Dumont_Account");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(dupA, dupB));
+        when(bookingRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                booking(1, dupA, "confirmed", now.minusDays(40), 60),
+                booking(2, dupB, "confirmed", now.minusDays(40), 60)));
+        // The roster knows the real family: a single student, "Amanda Dumont".
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull())
+                .thenReturn(List.of(rosterStudent("E1", "Amanda Dumont", "Dumont_Account")));
+
+        List<DashboardMetricsService.ActionItem> items = service.actionRequired();
+
+        // The duplicate records collapse to one item, labelled from the roster (no "(OLD)").
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).studentName()).isEqualTo("Amanda Dumont");
+        assertThat(items.get(0).type()).isEqualTo("NO_BOOKING");
+    }
+
+    @Test
     void actionRequired_returnsEmpty_whenNoStudentsNeedAttention() {
         Student healthyStudent = student(1L, "All Good");
         when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(healthyStudent));
@@ -499,6 +522,23 @@ class DashboardMetricsServiceTest {
                 .containsExactlyInAnyOrder("MEMBERSHIP_EMPTY", "MEMBERSHIP_LOW");
         // Empty ("can't book") sorts above low.
         assertThat(items.get(0).type()).isEqualTo("MEMBERSHIP_EMPTY");
+    }
+
+    @Test
+    void actionRequired_flagsUnpaidInvoices_excludingPaid() {
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of());
+        when(bookingRepo.findByDeletedAtIsNull()).thenReturn(List.of());
+        Student jane = student(1L, "Jane Doe");
+        when(invoiceRepo.findActiveWithStudent()).thenReturn(List.of(
+                invoice(1L, jane, "pending", "75.00", now.minusDays(5)),
+                invoice(2L, jane, "paid", "50.00", now.minusDays(5))));
+
+        List<DashboardMetricsService.ActionItem> items = service.actionRequired();
+
+        // Only the unpaid invoice becomes an action item.
+        assertThat(items).extracting(DashboardMetricsService.ActionItem::type)
+                .containsExactly("INVOICE_UNPAID");
+        assertThat(items.get(0).reason()).contains("75.00");
     }
 
     @Test
