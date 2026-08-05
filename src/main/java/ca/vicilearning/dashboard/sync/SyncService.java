@@ -134,6 +134,10 @@ public class SyncService {
         // true CONTACT_STATUS. Independent of SimplyBook (its own step), and it never matches by email
         // (identity comes from the source record). This is what the roster + Association pages use.
         runStep("rosterStudents", () -> syncRosterStudents(entry), failures);
+        // Bootstrap each roster student's family from the Brevo Company association (matched by contact
+        // id, backlog-only). Runs right after the roster pull so contact ids are fresh; own step so a
+        // Brevo Companies issue can't fail the roster or anything else.
+        runStep("rosterFamilyLinks", this::syncRosterFamilyLinks, failures);
         runStep("bookings", () -> syncBookings(entry), failures);
         // Runs after students so their rows exist; uses REST v2 (not JSON-RPC) for the
         // Account_ID custom field. Its own step so a REST outage can't fail booking sync.
@@ -358,6 +362,7 @@ public class SyncService {
             r.setName(bs.name());
             r.setEmail(bs.email());
             r.setPhone(bs.phone());
+            r.setBrevoContactId(bs.contactId());
             StudentStatus status = StudentStatus.fromBrevo(bs.status());
             if (status != null) {
                 r.setStatus(status); // else keep default/existing (unrecognized upstream value)
@@ -378,6 +383,68 @@ public class SyncService {
                 rosterStudentRepo);
         entry.setRosterStudentsUpserted(upserted.size());
         entry.setRosterStudentsRemoved(removed);
+    }
+
+    /**
+     * Bootstraps a roster student's <b>family</b> from the Brevo <b>Company</b> association — Sara's
+     * model (from her meeting notes): a family is a Brevo Company under Associations, named after the
+     * family, whose {@code linkedContactsIds} are its student contacts. We match those linked contact
+     * ids to roster students by their stored Brevo <b>contact id</b> (never email), and stamp the
+     * family (the company name, normalized). This is what turns a fresh roster from "all unassigned"
+     * into "mostly assigned" without staff re-keying every student.
+     *
+     * <p><b>Backlog-only, never overwrites:</b> only students with no {@code accountId} are eligible,
+     * so a staff assignment always wins. Skipped cleanly (not failed) when Brevo returns no companies
+     * (none created, or Sara keeps families as Segments instead) so it can't fail the rest of the sync.
+     * Uses the same normalize-both-sides matcher as the manual assign, so a company {@code "Gray"}
+     * folds into an existing {@code "Gray_Account"} family.
+     */
+    void syncRosterFamilyLinks() {
+        List<BrevoCommunicationService.CompanyLink> companies = brevoService.fetchCompanies();
+        if (companies == null || companies.isEmpty()) {
+            log.info("Brevo returned no companies; skipping roster family bootstrap");
+            return;
+        }
+
+        // Unassigned roster students, keyed by their Brevo contact id (the company's link key).
+        Map<Long, RosterStudent> unassignedByContactId = new java.util.HashMap<>();
+        for (RosterStudent r : rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNull()) {
+            if (r.getBrevoContactId() != null) {
+                unassignedByContactId.put(r.getBrevoContactId(), r);
+            }
+        }
+        if (unassignedByContactId.isEmpty()) {
+            return;
+        }
+
+        // Reuse an existing family's exact spelling when a company name matches (normalize both sides).
+        Map<String, String> existingByCompareKey = new java.util.HashMap<>();
+        for (RosterStudent r : rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()) {
+            existingByCompareKey.putIfAbsent(
+                    AccountIdNormalizer.compareKey(r.getAccountId().trim()), r.getAccountId().trim());
+        }
+
+        List<RosterStudent> linked = new ArrayList<>();
+        for (BrevoCommunicationService.CompanyLink company : companies) {
+            String compareKey = AccountIdNormalizer.compareKey(company.name());
+            if (compareKey.isEmpty() || company.contactIds() == null) {
+                continue;
+            }
+            String familyKey = existingByCompareKey.getOrDefault(
+                    compareKey, AccountIdNormalizer.canonical(company.name()));
+            for (Long contactId : company.contactIds()) {
+                RosterStudent r = unassignedByContactId.remove(contactId);
+                if (r != null) {
+                    r.setAccountId(familyKey);
+                    linked.add(r);
+                }
+            }
+            existingByCompareKey.putIfAbsent(compareKey, familyKey);
+        }
+        if (!linked.isEmpty()) {
+            rosterStudentRepo.saveAll(linked);
+        }
+        log.info("Roster family bootstrap: linked {} students to families from Brevo Companies", linked.size());
     }
 
     /**

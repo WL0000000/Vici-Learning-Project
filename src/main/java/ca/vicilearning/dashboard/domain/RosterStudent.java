@@ -47,6 +47,10 @@ public class RosterStudent {
     // unassigned (awaits staff assignment). Matches Student.accountId so families join across systems.
     private String accountId;
 
+    // Brevo numeric contact id, kept so a family (a Brevo Company) can be matched to its student
+    // contacts by id (never email). Used to bootstrap the family for still-unassigned students.
+    private Long brevoContactId;
+
     @Column(nullable = false)
     private LocalDateTime syncedAt;
 
@@ -70,6 +74,9 @@ public class RosterStudent {
 
     public String getAccountId() { return accountId; }
     public void setAccountId(String accountId) { this.accountId = accountId; }
+
+    public Long getBrevoContactId() { return brevoContactId; }
+    public void setBrevoContactId(Long brevoContactId) { this.brevoContactId = brevoContactId; }
 
     public LocalDateTime getSyncedAt() { return syncedAt; }
     public void setSyncedAt(LocalDateTime syncedAt) { this.syncedAt = syncedAt; }

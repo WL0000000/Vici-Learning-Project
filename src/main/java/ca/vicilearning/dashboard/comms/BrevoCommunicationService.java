@@ -103,10 +103,13 @@ public class BrevoCommunicationService {
 
     /**
      * A Brevo contact reduced to the roster fields: the unique {@code extId}, display {@code name},
-     * optional {@code email}/{@code phone} (often missing), and the raw {@code status} string from
-     * CONTACT_STATUS. The sync maps {@code status} to {@link ca.vicilearning.dashboard.domain.StudentStatus}.
+     * optional {@code email}/{@code phone} (often missing), the raw {@code status} string from
+     * CONTACT_STATUS, and the Brevo numeric {@code contactId} (the key a family Company's
+     * linkedContactsIds reference). The sync maps {@code status} to
+     * {@link ca.vicilearning.dashboard.domain.StudentStatus}.
      */
-    public record BrevoStudent(String extId, String name, String email, String phone, String status) {}
+    public record BrevoStudent(String extId, String name, String email, String phone, String status,
+                               Long contactId) {}
 
     private final RestClient brevoRestClient;
     private final int contactsPageSize;
@@ -177,7 +180,8 @@ public class BrevoCommunicationService {
                     resolveStudentName(attrs, contact.email()),
                     contact.email(),
                     attrs.sms(),
-                    firstValue(attrs.contactStatus())));
+                    firstValue(attrs.contactStatus()),
+                    contact.id()));
         }
         return students;
     }
