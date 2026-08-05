@@ -83,15 +83,21 @@ public class AssociationService {
 
     /**
      * Assign a student (by EXT_ID) to a family by setting its Account_ID, and ensure that family has a
-     * {@link FamilyAssociation} row (created if the key is new). Blank input is a no-op so an empty
-     * form submission can't wipe an assignment.
+     * {@link FamilyAssociation} row (created if the key is new). The staff-typed key is normalized so a
+     * spelling like {@code "Gray"} folds into an existing {@code "Gray_Account"} family instead of
+     * forking a second one (see {@link #resolveFamilyKey}). Also handles a <b>move</b>: assigning an
+     * already-assigned student simply repoints it. Blank input is a no-op so an empty form submission
+     * can't wipe an assignment.
      */
     @Transactional
     public void assignToFamily(String extId, String accountId) {
-        if (extId == null || extId.isBlank() || accountId == null || accountId.isBlank()) {
+        if (isBlank(extId) || isBlank(accountId)) {
             return;
         }
-        String key = accountId.trim();
+        String key = resolveFamilyKey(accountId);
+        if (key == null) {
+            return;
+        }
         rosterStudentRepo.findById(extId).ifPresent(s -> {
             s.setAccountId(key);
             rosterStudentRepo.save(s);
@@ -114,6 +120,46 @@ public class AssociationService {
         fam.setNotes(blankToNull(notes));
         fam.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
         familyRepo.save(fam);
+    }
+
+    /**
+     * Resolve a staff-typed family key to the canonical stored key: if it denotes an <b>existing</b>
+     * family (same {@link AccountIdNormalizer#compareKey}), reuse that family's exact spelling so
+     * {@code "Gray"} / {@code "gray"} / {@code "Gray_Account"} all land on the one family; otherwise
+     * mint a fresh {@link AccountIdNormalizer#canonical} key ({@code "Smith"} → {@code "Smith_Account"}).
+     * Null/blank yields null. Mirrors the Brevo family-link sync's matching so manual and automatic
+     * assignment agree on one key per family — the fix for typo-forked duplicate families.
+     */
+    private String resolveFamilyKey(String raw) {
+        String compareKey = AccountIdNormalizer.compareKey(raw);
+        if (compareKey.isEmpty()) {
+            return null;
+        }
+        return existingKeysByCompareKey().getOrDefault(compareKey, AccountIdNormalizer.canonical(raw));
+    }
+
+    /**
+     * compareKey → the exact stored family key currently in use, across both assigned roster students
+     * and existing {@link FamilyAssociation} rows (so an emptied-but-not-yet-deleted family still
+     * anchors its spelling). First spelling seen wins for a given compareKey.
+     */
+    private Map<String, String> existingKeysByCompareKey() {
+        Map<String, String> byCompareKey = new LinkedHashMap<>();
+        rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().forEach(r -> {
+            String key = r.getAccountId().trim();
+            byCompareKey.putIfAbsent(AccountIdNormalizer.compareKey(key), key);
+        });
+        familyRepo.findAll().forEach(f -> {
+            if (!isBlank(f.getAccountId())) {
+                String key = f.getAccountId().trim();
+                byCompareKey.putIfAbsent(AccountIdNormalizer.compareKey(key), key);
+            }
+        });
+        return byCompareKey;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     private static String blankToNull(String s) {
