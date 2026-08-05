@@ -10,11 +10,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.mockito.ArgumentCaptor;
+
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -110,6 +113,53 @@ class AssociationServiceTest {
     void unassign_blankIdIsANoOp() {
         service.unassign("  ");
         verify(rosterStudentRepo, never()).save(any());
+    }
+
+    // ── #2b: rename a family key ─────────────────────────────────────────────────
+
+    @Test
+    void rename_repointsEveryMemberAndMigratesMetadata() {
+        RosterStudent m1 = roster("EXT-1", "Gray_Account");
+        RosterStudent m2 = roster("EXT-2", "Gray_Account");
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(m1, m2));
+        when(familyRepo.findAll()).thenReturn(List.of());
+        FamilyAssociation oldFam = family("Gray_Account");
+        oldFam.setName("Gray Family");
+        oldFam.setNotes("VIP");
+        when(familyRepo.findById("Gray_Account")).thenReturn(Optional.of(oldFam));
+        when(familyRepo.findById("Grey_Account")).thenReturn(Optional.empty());
+        when(familyRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.renameFamily("Gray_Account", "Grey");
+
+        // Every member now points at the new key…
+        assertThat(m1.getAccountId()).isEqualTo("Grey_Account");
+        assertThat(m2.getAccountId()).isEqualTo("Grey_Account");
+        verify(rosterStudentRepo).saveAll(any());
+        // …the name/notes are carried onto the new family row…
+        ArgumentCaptor<FamilyAssociation> saved = ArgumentCaptor.forClass(FamilyAssociation.class);
+        verify(familyRepo, atLeastOnce()).save(saved.capture());
+        assertThat(saved.getAllValues()).anySatisfy(f -> {
+            assertThat(f.getAccountId()).isEqualTo("Grey_Account");
+            assertThat(f.getName()).isEqualTo("Gray Family");
+            assertThat(f.getNotes()).isEqualTo("VIP");
+        });
+        // …and the old row is removed.
+        verify(familyRepo).delete(oldFam);
+    }
+
+    @Test
+    void rename_toTheSameFamilyIsANoOp() {
+        RosterStudent m = roster("EXT-1", "Gray_Account");
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(m));
+        when(familyRepo.findAll()).thenReturn(List.of());
+
+        // "gray" resolves back to the existing "Gray_Account" — same family, nothing to do.
+        service.renameFamily("Gray_Account", "gray");
+
+        assertThat(m.getAccountId()).isEqualTo("Gray_Account");
+        verify(rosterStudentRepo, never()).saveAll(any());
+        verify(familyRepo, never()).delete(any());
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────

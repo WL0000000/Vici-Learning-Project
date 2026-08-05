@@ -135,6 +135,17 @@
                                style="max-width:320px;" th:value="${fam.notes}" placeholder="Notes"/>
                         <button type="submit" class="btn-vici-outline btn-sm">Save</button>
                     </form>
+
+                    <!-- Rename the underlying Account_ID key (repoints every member). Renaming to an
+                         existing family's key merges into it. -->
+                    <form th:action="@{/associations/rename}" method="post"
+                          class="d-flex flex-wrap align-items-center gap-2 mt-1">
+                        <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
+                        <input type="text" name="newAccountId" class="form-control form-control-sm"
+                               style="max-width:220px;" list="family-keys"
+                               placeholder="Rename key (e.g. Grey_Account)"/>
+                        <button type="submit" class="btn-vici-outline btn-sm">Rename key</button>
+                    </form>
                 </div>
             </div>
         </div>

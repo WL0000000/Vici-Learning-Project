@@ -140,6 +140,26 @@ public class AssociationService {
     }
 
     /**
+     * Rename a family to a new Account_ID spelling: repoints every assigned member from the old key to
+     * the resolved new key and moves the family's name/notes onto the new key's row, deleting the old
+     * one. If the new spelling resolves to an <b>existing different</b> family, this becomes a merge
+     * into it (that family keeps its own name/notes). No-op when either key is blank or they resolve to
+     * the same family.
+     */
+    @Transactional
+    public void renameFamily(String oldAccountId, String newAccountId) {
+        if (isBlank(oldAccountId) || isBlank(newAccountId)) {
+            return;
+        }
+        String oldKey = oldAccountId.trim();
+        String newKey = resolveFamilyKey(newAccountId);
+        if (newKey == null || newKey.equals(oldKey)) {
+            return;
+        }
+        repointFamily(oldKey, newKey);
+    }
+
+    /**
      * Resolve a staff-typed family key to the canonical stored key: if it denotes an <b>existing</b>
      * family (same {@link AccountIdNormalizer#compareKey}), reuse that family's exact spelling so
      * {@code "Gray"} / {@code "gray"} / {@code "Gray_Account"} all land on the one family; otherwise
@@ -192,6 +212,37 @@ public class AssociationService {
         fam.setAccountId(accountId);
         fam.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
         return familyRepo.save(fam);
+    }
+
+    /**
+     * Move every assigned member (and the family metadata) from {@code oldKey} to {@code newKey}, then
+     * delete the old family row. Members are matched case-insensitively on their stored key. The old
+     * name/notes are carried onto the new row only where it doesn't already have its own, so merging
+     * into an existing family never clobbers that family's details. Shared by rename and merge.
+     */
+    private void repointFamily(String oldKey, String newKey) {
+        List<RosterStudent> members = rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().stream()
+                .filter(r -> oldKey.equalsIgnoreCase(r.getAccountId().trim()))
+                .toList();
+        members.forEach(r -> r.setAccountId(newKey));
+        if (!members.isEmpty()) {
+            rosterStudentRepo.saveAll(members);
+        }
+
+        FamilyAssociation oldFam = familyRepo.findById(oldKey).orElse(null);
+        if (oldFam == null) {
+            return;
+        }
+        FamilyAssociation newFam = getOrCreateFamily(newKey);
+        if (isBlank(newFam.getName())) {
+            newFam.setName(oldFam.getName());
+        }
+        if (isBlank(newFam.getNotes())) {
+            newFam.setNotes(oldFam.getNotes());
+        }
+        newFam.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        familyRepo.save(newFam);
+        familyRepo.delete(oldFam);
     }
 
     private static StudentView toView(RosterStudent s) {

@@ -48,4 +48,10 @@ public class AssociationController {
         associations.unassign(extId);
         return "redirect:/associations";
     }
+
+    @PostMapping("/associations/rename")
+    public String rename(@RequestParam String accountId, @RequestParam String newAccountId) {
+        associations.renameFamily(accountId, newAccountId);
+        return "redirect:/associations";
+    }
 }
