@@ -7,6 +7,31 @@
     <title>Association Accounts · Vici Learning</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link th:href="@{/css/main.css}" rel="stylesheet">
+    <style>
+        .assoc-tabs .nav-link { cursor:pointer; color:var(--vici-muted,#6b7280); font-weight:600; }
+        .assoc-tabs .nav-link.active { color:var(--vici-navy,#15315c); }
+        .assoc-tab-count { font-size:11px; background:#eef1f5; color:#4b5563; border-radius:10px;
+            padding:1px 8px; margin-left:6px; }
+        .assoc-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px;
+            flex-wrap:wrap; margin-bottom:12px; }
+        .assoc-search { max-width:260px; }
+        .assoc-scroll { max-height:60vh; overflow:auto; padding-right:4px; }
+        .assoc-card { border:1px solid #e6e9ef; border-radius:10px; padding:12px 14px; margin-bottom:10px;
+            background:#fff; }
+        .assoc-card-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .assoc-members { list-style:none; margin:10px 0 0; padding:0; }
+        .assoc-member { display:flex; align-items:center; gap:10px; padding:6px 0;
+            border-top:1px dashed #eef1f5; font-size:13px; flex-wrap:wrap; }
+        .assoc-manage { display:none; margin-top:12px; padding-top:12px; border-top:1px solid #eef1f5; }
+        .assoc-manage.open { display:block; }
+        .assoc-move summary { cursor:pointer; font-size:12px; color:var(--vici-navy,#15315c);
+            list-style:none; }
+        .assoc-move summary::-webkit-details-marker { display:none; }
+        .assoc-link-danger { background:none; border:none; padding:0; font-size:12px; color:#c0492f;
+            cursor:pointer; }
+        .assoc-form-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px; }
+        .assoc-form-row > label { font-size:11px; color:var(--vici-muted,#6b7280); min-width:78px; }
+    </style>
 </head>
 <body>
 
@@ -18,177 +43,281 @@
 
     <main class="vici-main">
 
-        <!-- ── Summary cards ───────────────────────────────────────────────────── -->
-        <div class="row g-3 mb-3">
-            <div class="col-6 col-md-3">
-                <div class="stat-card" style="border-left-color: #15315c;">
-                    <div class="stat-label">Families</div>
-                    <div class="stat-val" th:text="${#lists.size(families)}">0</div>
-                    <div class="stat-sub">distinct Account_IDs</div>
-                </div>
-            </div>
-            <div class="col-6 col-md-3">
-                <div class="stat-card" style="border-left-color: #c0492f;">
-                    <div class="stat-label">Unassigned Students</div>
-                    <div class="stat-val" th:text="${#lists.size(unassigned)}">0</div>
-                    <div class="stat-sub">awaiting a family</div>
-                </div>
-            </div>
-        </div>
+        <!-- Shared datalist for the assign / move / rename family pickers (kept top-level so it works
+             from any tab). -->
+        <datalist id="family-keys">
+            <option th:each="k : ${familyKeys}" th:value="${k}"></option>
+        </datalist>
 
-        <!-- ── Unassigned queue: assign each to a family ───────────────────────── -->
-        <div class="vici-panel mb-3">
+        <!-- ── Tabs: one section at a time, so nothing stacks into a long scroll ── -->
+        <ul class="nav nav-tabs assoc-tabs mb-3" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active" type="button" data-tab="unassigned">
+                    Unassigned <span class="assoc-tab-count" th:text="${#lists.size(unassigned)}">0</span>
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" type="button" data-tab="families">
+                    Families <span class="assoc-tab-count" th:text="${#lists.size(families)}">0</span>
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" type="button" data-tab="empty">
+                    Empty <span class="assoc-tab-count" th:text="${#lists.size(emptyFamilies)}">0</span>
+                </button>
+            </li>
+        </ul>
+
+        <!-- ── Unassigned students ─────────────────────────────────────────────── -->
+        <div class="vici-panel" data-panel="unassigned">
             <div style="padding:14px 18px;">
-                <h2 class="h6 mb-1">Unassigned students</h2>
-                <p class="text-muted small mb-3">
-                    New students synced from Brevo with no family yet. Assign each to a family
-                    (Account_ID). Pick an existing one or type a new <code>Surname_Account</code> key.
-                </p>
+                <div class="assoc-toolbar">
+                    <div>
+                        <h2 class="h6 mb-1">Unassigned students</h2>
+                        <p class="text-muted small mb-0">
+                            New students synced from Brevo with no family yet. Assign each to a family.
+                        </p>
+                    </div>
+                    <input type="search" class="form-control form-control-sm assoc-search"
+                           data-search-input="unassigned" placeholder="Search name or EXT_ID">
+                </div>
 
                 <p th:if="${#lists.isEmpty(unassigned)}" class="vici-empty mb-0">
                     Nothing to assign. Every student belongs to a family. 🎉
                 </p>
 
-                <table th:unless="${#lists.isEmpty(unassigned)}" class="table table-sm align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Student</th>
-                            <th>EXT_ID</th>
-                            <th>Email</th>
-                            <th style="width:320px;">Assign to family</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr th:each="s : ${unassigned}">
-                            <td th:text="${s.name}">Student</td>
-                            <td><span class="text-muted small" th:text="${s.extId} ?: '—'">—</span></td>
-                            <td><span class="small" th:text="${s.email}">—</span></td>
-                            <td>
-                                <form th:action="@{/associations/assign}" method="post"
-                                      class="d-flex gap-2 mb-0">
-                                    <input type="hidden" name="extId" th:value="${s.extId}"/>
-                                    <input type="text" name="accountId" class="form-control form-control-sm"
-                                           list="family-keys" placeholder="Surname_Account" required/>
-                                    <button type="submit" class="btn-vici btn-sm">Assign</button>
-                                </form>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <!-- Shared datalist powers the "don't scroll all the way down" dropdown (Meeting #3). -->
-                <datalist id="family-keys">
-                    <option th:each="k : ${familyKeys}" th:value="${k}"></option>
-                </datalist>
-            </div>
-        </div>
-
-        <!-- ── Families rollup ─────────────────────────────────────────────────── -->
-        <div class="vici-panel">
-            <div style="padding:14px 18px;">
-                <h2 class="h6 mb-3">Families</h2>
-
-                <p th:if="${#lists.isEmpty(families)}" class="vici-empty mb-0">
-                    No families yet. Assign some students above.
-                </p>
-
-                <div th:each="fam : ${families}" class="mb-3">
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <strong th:text="${fam.displayName()}">Family</strong>
-                        <!-- When a friendly name is set, still show the raw Account_ID key beside it. -->
-                        <span class="text-muted small" th:if="${fam.name}" th:text="${fam.accountId}">Surname_Account</span>
-                        <span class="vici-count-badge" th:text="${fam.size()} + ' student(s)'">0</span>
-                        <!-- Cross-link to this family's students (and their hours) on the roster. -->
-                        <a th:href="@{/students(family=${fam.accountId})}" class="small ms-auto">View on students →</a>
-                    </div>
-                    <div class="text-muted small mb-1" th:if="${fam.notes}" th:text="${fam.notes}"></div>
-                    <ul class="list-unstyled mb-0">
-                        <li th:each="m : ${fam.members}"
-                            class="d-flex flex-wrap align-items-center gap-2 mb-1">
-                            <span th:text="${m.name}">Student</span>
-                            <span class="text-muted small" th:if="${m.extId}"
-                                  th:text="'· EXT_ID ' + ${m.extId}"></span>
-                            <!-- Move a mis-assigned student to another family (reuses the assign
-                                 endpoint, which repoints an already-assigned student). -->
-                            <form th:action="@{/associations/assign}" method="post"
-                                  class="d-flex gap-1 mb-0 ms-2">
-                                <input type="hidden" name="extId" th:value="${m.extId}"/>
-                                <input type="text" name="accountId" class="form-control form-control-sm"
-                                       style="max-width:180px;" list="family-keys"
-                                       placeholder="Move to family…"/>
-                                <button type="submit" class="btn-vici-outline btn-sm">Move</button>
-                            </form>
-                            <!-- Return the student to the unassigned queue (clears its family). -->
-                            <form th:action="@{/associations/unassign}" method="post" class="mb-0">
-                                <input type="hidden" name="extId" th:value="${m.extId}"/>
-                                <button type="submit" class="btn btn-link btn-sm p-0 text-danger"
-                                        style="font-size:12px; text-decoration:none;">Unassign</button>
-                            </form>
-                        </li>
-                    </ul>
-
-                    <!-- Staff-editable family name + notes (Meeting #3). -->
-                    <form th:action="@{/associations/family}" method="post"
-                          class="d-flex flex-wrap align-items-center gap-2 mt-2">
-                        <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
-                        <input type="text" name="name" class="form-control form-control-sm"
-                               style="max-width:220px;" th:value="${fam.name}" placeholder="Family name"/>
-                        <input type="text" name="notes" class="form-control form-control-sm"
-                               style="max-width:320px;" th:value="${fam.notes}" placeholder="Notes"/>
-                        <button type="submit" class="btn-vici-outline btn-sm">Save</button>
-                    </form>
-
-                    <!-- Rename the underlying Account_ID key (repoints every member). Renaming to an
-                         existing family's key merges into it. -->
-                    <form th:action="@{/associations/rename}" method="post"
-                          class="d-flex flex-wrap align-items-center gap-2 mt-1">
-                        <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
-                        <input type="text" name="newAccountId" class="form-control form-control-sm"
-                               style="max-width:220px;" list="family-keys"
-                               placeholder="Rename key (e.g. Grey_Account)"/>
-                        <button type="submit" class="btn-vici-outline btn-sm">Rename key</button>
-                    </form>
-
-                    <!-- Merge this family into another existing one (fixes a typo-forked duplicate). -->
-                    <form th:action="@{/associations/merge}" method="post"
-                          class="d-flex flex-wrap align-items-center gap-2 mt-1"
-                          th:if="${#lists.size(familyKeys) > 1}">
-                        <input type="hidden" name="fromAccountId" th:value="${fam.accountId}"/>
-                        <select name="intoAccountId" class="form-select form-select-sm" style="max-width:220px;">
-                            <option value="" selected disabled>Merge into…</option>
-                            <option th:each="k : ${familyKeys}" th:if="${k != fam.accountId}"
-                                    th:value="${k}" th:text="${k}"></option>
-                        </select>
-                        <button type="submit" class="btn-vici-outline btn-sm">Merge</button>
-                    </form>
+                <div th:unless="${#lists.isEmpty(unassigned)}" class="assoc-scroll">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>EXT_ID</th>
+                                <th>Email</th>
+                                <th style="width:320px;">Assign to family</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="s : ${unassigned}" data-row
+                                th:attr="data-search=${#strings.toLowerCase((s.name ?: '') + ' ' + (s.extId ?: '') + ' ' + (s.email ?: ''))}">
+                                <td th:text="${s.name}">Student</td>
+                                <td><span class="text-muted small" th:text="${s.extId} ?: '—'">—</span></td>
+                                <td><span class="small" th:text="${s.email}">—</span></td>
+                                <td>
+                                    <form th:action="@{/associations/assign}" method="post" class="d-flex gap-2 mb-0">
+                                        <input type="hidden" name="extId" th:value="${s.extId}"/>
+                                        <input type="text" name="accountId" class="form-control form-control-sm"
+                                               list="family-keys" placeholder="Surname_Account" required/>
+                                        <button type="submit" class="btn-vici btn-sm">Assign</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p data-empty="unassigned" class="text-muted small mt-2" style="display:none;">
+                        No students match your search.
+                    </p>
                 </div>
             </div>
         </div>
 
-        <!-- ── Empty families: rows with no members left (safe to delete) ──────── -->
-        <div class="vici-panel mt-3" th:if="${!#lists.isEmpty(emptyFamilies)}">
+        <!-- ── Families ────────────────────────────────────────────────────────── -->
+        <div class="vici-panel" data-panel="families" hidden>
             <div style="padding:14px 18px;">
-                <h2 class="h6 mb-1">Empty families</h2>
-                <p class="text-muted small mb-3">
-                    Family records with no members left, after moves, unassignments, or merges.
-                    Deleting one only removes the empty record; it can never orphan a student.
+                <div class="assoc-toolbar">
+                    <div>
+                        <h2 class="h6 mb-1">Families</h2>
+                        <p class="text-muted small mb-0">
+                            Students grouped by family. Click <strong>Manage</strong> to rename or merge a family.
+                        </p>
+                    </div>
+                    <input type="search" class="form-control form-control-sm assoc-search"
+                           data-search-input="families" placeholder="Search family, student, or ID">
+                </div>
+
+                <p th:if="${#lists.isEmpty(families)}" class="vici-empty mb-0">
+                    No families yet. Assign some students in the Unassigned tab.
                 </p>
-                <ul class="list-unstyled mb-0">
-                    <li th:each="fam : ${emptyFamilies}" class="d-flex align-items-center gap-2 mb-1">
-                        <strong th:text="${fam.displayName()}">Family</strong>
-                        <span class="text-muted small" th:if="${fam.name}" th:text="${fam.accountId}"></span>
-                        <form th:action="@{/associations/family/delete}" method="post" class="mb-0">
-                            <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
-                            <button type="submit" class="btn btn-link btn-sm p-0 text-danger"
-                                    style="font-size:12px; text-decoration:none;">Delete</button>
-                        </form>
-                    </li>
-                </ul>
+
+                <div th:unless="${#lists.isEmpty(families)}" class="assoc-scroll">
+                    <div class="assoc-card" th:each="fam : ${families}" data-row
+                         th:attr="data-search=${#strings.toLowerCase(fam.displayName() + ' ' + fam.accountId + ' ' + #strings.listJoin(fam.members.![name], ' ') + ' ' + #strings.listJoin(fam.members.![extId], ' '))}">
+
+                        <!-- Card header: family name + count + quick links -->
+                        <div class="assoc-card-head">
+                            <strong th:text="${fam.displayName()}">Family</strong>
+                            <span class="text-muted small" th:if="${fam.name}" th:text="${fam.accountId}">Surname_Account</span>
+                            <span class="vici-count-badge" th:text="${fam.size()} + ' student(s)'">0</span>
+                            <div class="ms-auto d-flex align-items-center gap-3">
+                                <a th:href="@{/students(family=${fam.accountId})}" class="small">View on students →</a>
+                                <button type="button" class="btn-vici-outline btn-sm" data-manage>Manage</button>
+                            </div>
+                        </div>
+
+                        <!-- Members: name + EXT_ID, with a compact Move / Unassign per student -->
+                        <ul class="assoc-members">
+                            <li th:each="m : ${fam.members}" class="assoc-member">
+                                <span th:text="${m.name}">Student</span>
+                                <span class="text-muted small" th:if="${m.extId}" th:text="'EXT_ID ' + ${m.extId}"></span>
+                                <div class="ms-auto d-flex align-items-center gap-3">
+                                    <details class="assoc-move">
+                                        <summary>Move</summary>
+                                        <form th:action="@{/associations/assign}" method="post" class="d-flex gap-1 mt-1">
+                                            <input type="hidden" name="extId" th:value="${m.extId}"/>
+                                            <input type="text" name="accountId" class="form-control form-control-sm"
+                                                   style="max-width:170px;" list="family-keys" placeholder="To family…" required/>
+                                            <button type="submit" class="btn-vici-outline btn-sm">Go</button>
+                                        </form>
+                                    </details>
+                                    <form th:action="@{/associations/unassign}" method="post" class="mb-0">
+                                        <input type="hidden" name="extId" th:value="${m.extId}"/>
+                                        <button type="submit" class="assoc-link-danger">Unassign</button>
+                                    </form>
+                                </div>
+                            </li>
+                        </ul>
+
+                        <!-- Management (hidden until Manage is clicked): name/notes, rename, merge -->
+                        <div class="assoc-manage">
+                            <form th:action="@{/associations/family}" method="post" class="assoc-form-row">
+                                <label>Name &amp; notes</label>
+                                <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
+                                <input type="text" name="name" class="form-control form-control-sm"
+                                       style="max-width:200px;" th:value="${fam.name}" placeholder="Family name"/>
+                                <input type="text" name="notes" class="form-control form-control-sm"
+                                       style="max-width:280px;" th:value="${fam.notes}" placeholder="Notes"/>
+                                <button type="submit" class="btn-vici-outline btn-sm">Save</button>
+                            </form>
+
+                            <form th:action="@{/associations/rename}" method="post" class="assoc-form-row">
+                                <label>Rename key</label>
+                                <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
+                                <input type="text" name="newAccountId" class="form-control form-control-sm"
+                                       style="max-width:200px;" list="family-keys" placeholder="e.g. Grey_Account"/>
+                                <button type="submit" class="btn-vici-outline btn-sm">Rename</button>
+                            </form>
+
+                            <form th:action="@{/associations/merge}" method="post" class="assoc-form-row"
+                                  th:if="${#lists.size(familyKeys) > 1}">
+                                <label>Merge into</label>
+                                <input type="hidden" name="fromAccountId" th:value="${fam.accountId}"/>
+                                <select name="intoAccountId" class="form-select form-select-sm" style="max-width:200px;">
+                                    <option value="" selected disabled>Choose a family…</option>
+                                    <option th:each="k : ${familyKeys}" th:if="${k != fam.accountId}"
+                                            th:value="${k}" th:text="${k}"></option>
+                                </select>
+                                <button type="submit" class="btn-vici-outline btn-sm">Merge</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <p data-empty="families" class="text-muted small mt-2" style="display:none;">
+                        No families match your search.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Empty families ──────────────────────────────────────────────────── -->
+        <div class="vici-panel" data-panel="empty" hidden>
+            <div style="padding:14px 18px;">
+                <div class="assoc-toolbar">
+                    <div>
+                        <h2 class="h6 mb-1">Empty families</h2>
+                        <p class="text-muted small mb-0">
+                            Family records with no members left, after moves, unassignments, or merges.
+                            Deleting one only removes the empty record; it can never orphan a student.
+                        </p>
+                    </div>
+                    <input type="search" class="form-control form-control-sm assoc-search"
+                           data-search-input="empty" placeholder="Search family or ID">
+                </div>
+
+                <p th:if="${#lists.isEmpty(emptyFamilies)}" class="vici-empty mb-0">
+                    No empty families. Nothing to clean up.
+                </p>
+
+                <div th:unless="${#lists.isEmpty(emptyFamilies)}" class="assoc-scroll">
+                    <ul class="list-unstyled mb-0">
+                        <li th:each="fam : ${emptyFamilies}" data-row class="d-flex align-items-center gap-2 mb-1"
+                            th:attr="data-search=${#strings.toLowerCase(fam.displayName() + ' ' + fam.accountId)}">
+                            <strong th:text="${fam.displayName()}">Family</strong>
+                            <span class="text-muted small" th:if="${fam.name}" th:text="${fam.accountId}"></span>
+                            <form th:action="@{/associations/family/delete}" method="post" class="mb-0">
+                                <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
+                                <button type="submit" class="assoc-link-danger">Delete</button>
+                            </form>
+                        </li>
+                    </ul>
+                    <p data-empty="empty" class="text-muted small mt-2" style="display:none;">
+                        No empty families match your search.
+                    </p>
+                </div>
             </div>
         </div>
 
     </main>
 </div>
+
+<script>
+(function () {
+    // ── Tabs: show one panel at a time; remember the active tab across the POST-redirect reload ──
+    const tabs = Array.from(document.querySelectorAll('[data-tab]'));
+    const panels = Array.from(document.querySelectorAll('[data-panel]'));
+    function activate(key) {
+        tabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-tab') === key));
+        panels.forEach(p => { p.hidden = p.getAttribute('data-panel') !== key; });
+        try { sessionStorage.setItem('assocTab', key); } catch (e) {}
+    }
+    tabs.forEach(t => t.addEventListener('click', () => activate(t.getAttribute('data-tab'))));
+    let initial = 'unassigned';
+    try {
+        const saved = sessionStorage.getItem('assocTab');
+        if (saved && document.querySelector('[data-tab="' + saved + '"]')) initial = saved;
+    } catch (e) {}
+    activate(initial);
+
+    // ── Search: filter the rows/cards inside each tab by name + IDs (client-side, instant) ──
+    document.querySelectorAll('[data-search-input]').forEach(function (input) {
+        const key = input.getAttribute('data-search-input');
+        const panel = document.querySelector('[data-panel="' + key + '"]');
+        if (!panel) return;
+        const rows = panel.querySelectorAll('[data-row]');
+        const emptyMsg = panel.querySelector('[data-empty]');
+        input.addEventListener('input', function () {
+            const q = input.value.trim().toLowerCase();
+            let shown = 0;
+            rows.forEach(function (r) {
+                const hay = r.getAttribute('data-search') || '';
+                const match = !q || hay.indexOf(q) !== -1;
+                r.style.display = match ? '' : 'none';
+                if (match) shown++;
+            });
+            if (emptyMsg) emptyMsg.style.display = (shown === 0 && q) ? '' : 'none';
+        });
+    });
+
+    // ── Manage toggle: reveal the rename/merge/name-notes forms for one family ──
+    document.querySelectorAll('[data-manage]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const card = btn.closest('[data-row]');
+            const mng = card.querySelector('.assoc-manage');
+            if (!mng) return;
+            const open = mng.classList.toggle('open');
+            btn.textContent = open ? 'Close' : 'Manage';
+        });
+    });
+
+    // ── Loading: on any action submit, spin + disable the button so staff see it's working ──
+    document.addEventListener('submit', function (e) {
+        const btn = e.target.querySelector('button[type="submit"], button:not([type])');
+        if (btn && !btn.disabled) {
+            btn.style.minWidth = btn.offsetWidth + 'px';
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+        }
+    }, true);
+})();
+</script>
 
 </body>
 </html>
