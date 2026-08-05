@@ -143,6 +143,23 @@ class StudentsControllerTest {
                 .andExpect(content().string(containsString("shared across siblings")));
     }
 
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void rosterShowsFriendlyFamilyName_andFamilyFilterControl() throws Exception {
+        stubEmptyMetrics();
+        StudentRow row = new StudentRow(
+                "E1", "Kid", "Gray_Account", "E1", "s@x.com", "555", StudentStatus.ACTIVE, 2.0, 1, true);
+        when(metrics.studentRows(null, null)).thenReturn(List.of(row));
+        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "Gray_Account");
+        when(associations.families()).thenReturn(List.of(
+                new AssociationService.FamilyView("Gray_Account", "Gray Family", null, List.of(m))));
+
+        mockMvc.perform(get("/students"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Gray Family")))        // friendly name, not the raw key
+                .andExpect(content().string(containsString("id=\"familyFilter\"")));  // the filter dropdown
+    }
+
     private void stubEmptyMetrics() {
         when(metrics.overview(null)).thenReturn(new DashboardMetricsService.Overview(0L, 0, 0.0, 0));
         when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2, null)).thenReturn(Collections.emptyList());
