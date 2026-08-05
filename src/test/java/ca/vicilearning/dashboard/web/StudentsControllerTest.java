@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.web;
 
+import ca.vicilearning.dashboard.association.AssociationService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyGroup;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyMember;
@@ -42,6 +43,9 @@ class StudentsControllerTest {
 
     @MockitoBean
     private StudentStatusService studentStatus;
+
+    @MockitoBean
+    private AssociationService associations;
 
     @Test
     @WithMockUser(roles = "ADMIN")
@@ -137,6 +141,23 @@ class StudentsControllerTest {
                 .andExpect(content().string(containsString("2.0 h")))
                 // The sibling row carries the "family total shared across siblings" indicator.
                 .andExpect(content().string(containsString("shared across siblings")));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void rosterShowsFriendlyFamilyName_andFamilyFilterControl() throws Exception {
+        stubEmptyMetrics();
+        StudentRow row = new StudentRow(
+                "E1", "Kid", "Gray_Account", "E1", "s@x.com", "555", StudentStatus.ACTIVE, 2.0, 1, true);
+        when(metrics.studentRows(null, null)).thenReturn(List.of(row));
+        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "Gray_Account");
+        when(associations.families()).thenReturn(List.of(
+                new AssociationService.FamilyView("Gray_Account", "Gray Family", null, List.of(m))));
+
+        mockMvc.perform(get("/students"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Gray Family")))        // friendly name, not the raw key
+                .andExpect(content().string(containsString("id=\"familyFilter\"")));  // the filter dropdown
     }
 
     private void stubEmptyMetrics() {

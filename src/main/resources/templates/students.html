@@ -219,10 +219,22 @@
                     <p class="vici-summary-sub">The Brevo roster — each student by EXT_ID, family (Account_ID) and status · this week's hours are per-student for solo families, family-level (tagged) for siblings<span
                         th:if="${filterLabel != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${filterLabel}"></span></span></p>
                 </div>
-                <span class="vici-count-badge" th:text="${#lists.size(students)}">0</span>
+                <span class="vici-count-badge" id="rosterCount" th:text="${#lists.size(students)}">0</span>
             </summary>
+            <!-- Client-side family filter: narrows the roster to one family. Auto-applies from the
+                 ?family= query param so the "View on students" cross-link from the Association page
+                 lands pre-filtered. Options are the friendly family names. -->
+            <div class="d-flex align-items-center gap-2" style="padding:10px 16px 0;">
+                <label for="familyFilter" class="text-muted" style="font-size:12px;">Family</label>
+                <select id="familyFilter" class="form-select form-select-sm" style="width:auto;">
+                    <option value="">All families</option>
+                    <option th:each="e : ${familyNames}" th:value="${e.key}" th:text="${e.value}"></option>
+                </select>
+                <span id="familyFilterClear" class="text-muted"
+                      style="font-size:12px; cursor:pointer; display:none;">Clear</span>
+            </div>
             <div class="table-responsive" style="max-height:440px; overflow:auto;">
-                <table class="table sessions-table mb-0">
+                <table id="rosterTable" class="table sessions-table mb-0">
                     <thead>
                         <tr>
                             <th>Name</th>
@@ -236,7 +248,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr th:each="s : ${students}">
+                        <tr th:each="s : ${students}" th:attr="data-account=${s.accountId}">
                             <td style="font-weight:600;" th:text="${s.name}">—</td>
                             <td>
                                 <span class="status-pill"
@@ -275,8 +287,16 @@
                                 <span class="text-muted" th:if="${s.extId == null}">—</span>
                             </td>
                             <td sec:authorize="hasAnyRole('ADMIN','STAFF')">
-                                <span class="status-pill pill-confirmed"
-                                      th:if="${s.accountId != null}" th:text="${s.accountId}">VICI-0000</span>
+                                <!-- Friendly family name (falls back to the raw key), linking through to
+                                     the Association page where the family map is owned. -->
+                                <a th:if="${s.accountId != null}" th:href="@{/associations}"
+                                   class="text-decoration-none" title="Manage this family on the Association page">
+                                    <span class="status-pill pill-confirmed"
+                                          th:text="${familyNames.get(s.accountId)} ?: ${s.accountId}">Family</span>
+                                </a>
+                                <span class="text-muted" style="font-size:11px; display:block;"
+                                      th:if="${s.accountId != null and familyNames.get(s.accountId) != null and familyNames.get(s.accountId) != s.accountId}"
+                                      th:text="${s.accountId}">Gray_Account</span>
                                 <span class="text-muted" th:if="${s.accountId == null}">— not linked —</span>
                             </td>
                             <td class="text-muted" sec:authorize="hasAnyRole('ADMIN','STAFF')" th:text="${s.email != null ? s.email : '—'}">—</td>
@@ -424,6 +444,35 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+// Family filter for the roster: show only rows whose data-account matches the selection.
+// Reads ?family= on load so the Association page's "View on students" link lands pre-filtered.
+(function () {
+    const select = document.getElementById('familyFilter');
+    const clear = document.getElementById('familyFilterClear');
+    const table = document.getElementById('rosterTable');
+    const badge = document.getElementById('rosterCount');
+    if (!select || !table || !table.tBodies.length) return;
+
+    function apply(value) {
+        let shown = 0;
+        Array.from(table.tBodies[0].rows).forEach(function (tr) {
+            const match = !value || tr.getAttribute('data-account') === value;
+            tr.style.display = match ? '' : 'none';
+            if (match) shown++;
+        });
+        if (badge) badge.textContent = shown;
+        clear.style.display = value ? '' : 'none';
+    }
+
+    select.addEventListener('change', function () { apply(select.value); });
+    clear.addEventListener('click', function () { select.value = ''; apply(''); });
+
+    const fam = new URLSearchParams(window.location.search).get('family');
+    if (fam) select.value = fam;   // ignored if it isn't a listed option
+    apply(select.value);
+})();
+</script>
 <script th:inline="javascript">
 /*<![CDATA[*/
 (function () {
