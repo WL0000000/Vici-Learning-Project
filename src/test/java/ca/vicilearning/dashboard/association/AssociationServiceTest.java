@@ -162,6 +162,36 @@ class AssociationServiceTest {
         verify(familyRepo, never()).delete(any());
     }
 
+    // ── #2c: merge one family into another ───────────────────────────────────────
+
+    @Test
+    void merge_movesSourceMembersIntoTargetAndDeletesSource() {
+        RosterStudent fromMember = roster("EXT-1", "Gray_Account");
+        RosterStudent targetMember = roster("EXT-2", "Grayy_Account");
+        when(familyRepo.findById("Grayy_Account")).thenReturn(Optional.of(family("Grayy_Account")));
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull())
+                .thenReturn(List.of(fromMember, targetMember));
+        FamilyAssociation fromFam = family("Gray_Account");
+        when(familyRepo.findById("Gray_Account")).thenReturn(Optional.of(fromFam));
+        when(familyRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.mergeFamilies("Gray_Account", "Grayy_Account");
+
+        assertThat(fromMember.getAccountId()).isEqualTo("Grayy_Account"); // moved
+        assertThat(targetMember.getAccountId()).isEqualTo("Grayy_Account"); // untouched
+        verify(familyRepo).delete(fromFam);
+    }
+
+    @Test
+    void merge_noOpWhenTargetDoesNotExist() {
+        when(familyRepo.findById("Ghost_Account")).thenReturn(Optional.empty());
+
+        service.mergeFamilies("Gray_Account", "Ghost_Account");
+
+        verify(rosterStudentRepo, never()).saveAll(any());
+        verify(familyRepo, never()).delete(any());
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────
 
     /** No families exist yet — both lookups the resolver consults return empty. */

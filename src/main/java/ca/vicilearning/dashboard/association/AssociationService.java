@@ -160,6 +160,25 @@ public class AssociationService {
     }
 
     /**
+     * Merge one family into another: repoints every member of {@code fromAccountId} onto the existing
+     * {@code intoAccountId} family and deletes the emptied source row. The target keeps its own
+     * name/notes. The remedy for two families that should be one (e.g. a historical typo-fork). No-op
+     * when either key is blank, they are the same family, or the target family doesn't exist.
+     */
+    @Transactional
+    public void mergeFamilies(String fromAccountId, String intoAccountId) {
+        if (isBlank(fromAccountId) || isBlank(intoAccountId)) {
+            return;
+        }
+        String fromKey = fromAccountId.trim();
+        String intoKey = intoAccountId.trim();
+        if (fromKey.equalsIgnoreCase(intoKey) || familyRepo.findById(intoKey).isEmpty()) {
+            return;
+        }
+        repointFamily(fromKey, intoKey);
+    }
+
+    /**
      * Resolve a staff-typed family key to the canonical stored key: if it denotes an <b>existing</b>
      * family (same {@link AccountIdNormalizer#compareKey}), reuse that family's exact spelling so
      * {@code "Gray"} / {@code "gray"} / {@code "Gray_Account"} all land on the one family; otherwise

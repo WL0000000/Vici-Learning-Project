@@ -54,4 +54,10 @@ public class AssociationController {
         associations.renameFamily(accountId, newAccountId);
         return "redirect:/associations";
     }
+
+    @PostMapping("/associations/merge")
+    public String merge(@RequestParam String fromAccountId, @RequestParam String intoAccountId) {
+        associations.mergeFamilies(fromAccountId, intoAccountId);
+        return "redirect:/associations";
+    }
 }

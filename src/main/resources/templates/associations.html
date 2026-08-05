@@ -146,6 +146,19 @@
                                placeholder="Rename key (e.g. Grey_Account)"/>
                         <button type="submit" class="btn-vici-outline btn-sm">Rename key</button>
                     </form>
+
+                    <!-- Merge this family into another existing one (fixes a typo-forked duplicate). -->
+                    <form th:action="@{/associations/merge}" method="post"
+                          class="d-flex flex-wrap align-items-center gap-2 mt-1"
+                          th:if="${#lists.size(familyKeys) > 1}">
+                        <input type="hidden" name="fromAccountId" th:value="${fam.accountId}"/>
+                        <select name="intoAccountId" class="form-select form-select-sm" style="max-width:220px;">
+                            <option value="" selected disabled>Merge into…</option>
+                            <option th:each="k : ${familyKeys}" th:if="${k != fam.accountId}"
+                                    th:value="${k}" th:text="${k}"></option>
+                        </select>
+                        <button type="submit" class="btn-vici-outline btn-sm">Merge</button>
+                    </form>
                 </div>
             </div>
         </div>
