@@ -279,6 +279,24 @@ class DashboardMetricsServiceTest {
     }
 
     @Test
+    void familyActivityByAccount_includesSingleStudentFamilies_unlikeFamilyGroups() {
+        // A lone family (one SimplyBook account) with a 2h booking. familyGroups drops it (needs 2+
+        // roster members), but the Association drill-down needs its rollup.
+        Student acct = studentWithAccount(1L, "Solo Acct", "Solo_Account");
+        when(studentRepo.findByDeletedAtIsNull()).thenReturn(List.of(acct));
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of(
+                booking(1, acct, "confirmed", now, 120)));
+        when(bookingRepo.findActiveWithStudentAndService()).thenReturn(List.of());
+        when(membershipRepo.findByDeletedAtIsNull()).thenReturn(List.of());
+
+        var activity = service.familyActivityByAccount(null);
+
+        assertThat(activity).containsKey("Solo_Account");
+        assertThat(activity.get("Solo_Account").hoursThisWeek()).isEqualTo(2.0);
+        assertThat(activity.get("Solo_Account").sessionsThisWeek()).isEqualTo(1);
+    }
+
+    @Test
     void familyGroups_aggregatesCategoriesLocationsAndMembershipsFromSimplyBook() {
         when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull()).thenReturn(List.of(
                 rosterStudent("E1", "Sam Tran", "VICI-0001"),

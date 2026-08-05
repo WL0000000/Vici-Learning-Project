@@ -441,9 +441,32 @@ public class DashboardMetricsService {
                 .forEach(r -> membersByAccount.computeIfAbsent(r.getAccountId().trim(), k -> new ArrayList<>())
                         .add(new FamilyMember(r.getExtId(), r.getName(), r.getEmail(), r.getPhone())));
 
-        // 2. SimplyBook side (this week's hours/sessions, service attrs, latest membership) aggregated
-        //    per family, joined on the SimplyBook account's Account_ID. A booking can't be tied to an
-        //    individual student, so hours/memberships/attrs are per FAMILY, not per member.
+        // 2. SimplyBook-side rollup per family (this week's hours/sessions, service attrs, memberships).
+        Map<String, FamilyActivity> activity = familyActivityByAccount(scope);
+
+        // 3. One FamilyGroup per family with 2+ roster members (siblings), sorted by key. Hours reflect
+        //    the page-wide scope (they come from scope-filtered bookings); which families show does not.
+        return membersByAccount.entrySet().stream()
+                .filter(e -> e.getValue().size() >= 2)
+                .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
+                .map(e -> {
+                    String family = e.getKey();
+                    FamilyActivity a = activity.getOrDefault(family, FamilyActivity.EMPTY);
+                    return new FamilyGroup(family, e.getValue(),
+                            a.sessionsThisWeek(), a.hoursThisWeek(),
+                            a.categories(), a.locations(), a.memberships());
+                })
+                .toList();
+    }
+
+    /**
+     * SimplyBook-side activity rolled up per family (Account_ID), for <b>all</b> families (no 2+
+     * filter): this week's hours/sessions (honouring {@code scope}), the distinct service
+     * categories/locations seen, and each member's latest membership. Joined on the SimplyBook
+     * account's Account_ID — a booking can't be tied to an individual student, so this is family-level.
+     * Backs the Association page's family drill-down.
+     */
+    public Map<String, FamilyActivity> familyActivityByAccount(ServiceScope scope) {
         Map<Long, double[]> hoursByAccount = hoursThisWeekByStudent(scope);
         Map<Long, Set<String>> catByAccount = new LinkedHashMap<>();
         Map<Long, Set<String>> locByAccount = new LinkedHashMap<>();
@@ -475,21 +498,20 @@ public class DashboardMetricsService {
             }
         }
 
-        // 3. One FamilyGroup per family with 2+ roster members (siblings), sorted by key. Hours reflect
-        //    the page-wide scope (they come from scope-filtered bookings); which families show does not.
-        return membersByAccount.entrySet().stream()
-                .filter(e -> e.getValue().size() >= 2)
-                .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
-                .map(e -> {
-                    String family = e.getKey();
-                    double[] h = famHours.getOrDefault(family, new double[]{0.0, 0.0});
-                    return new FamilyGroup(family, e.getValue(),
-                            (int) h[1], round1(h[0]),
-                            List.copyOf(famCategories.getOrDefault(family, Set.of())),
-                            List.copyOf(famLocations.getOrDefault(family, Set.of())),
-                            famMemberships.getOrDefault(family, List.of()));
-                })
-                .toList();
+        Set<String> keys = new HashSet<>();
+        keys.addAll(famHours.keySet());
+        keys.addAll(famCategories.keySet());
+        keys.addAll(famLocations.keySet());
+        keys.addAll(famMemberships.keySet());
+        Map<String, FamilyActivity> out = new LinkedHashMap<>();
+        for (String family : keys) {
+            double[] h = famHours.getOrDefault(family, new double[]{0.0, 0.0});
+            out.put(family, new FamilyActivity(round1(h[0]), (int) h[1],
+                    List.copyOf(famCategories.getOrDefault(family, Set.of())),
+                    List.copyOf(famLocations.getOrDefault(family, Set.of())),
+                    famMemberships.getOrDefault(family, List.of())));
+        }
+        return out;
     }
 
     private MembershipSummary toMembershipSummary(Membership m) {
@@ -926,6 +948,17 @@ public class DashboardMetricsService {
                               List<String> categories, List<String> locations,
                               List<MembershipSummary> memberships) {
         public int size() { return members.size(); }
+    }
+
+    /**
+     * The SimplyBook-side rollup for one family, independent of its roster members: this week's
+     * hours/sessions, the distinct service categories/locations, and each member's latest membership.
+     * Keyed by Account_ID in {@link #familyActivityByAccount}; backs the Association drill-down.
+     */
+    public record FamilyActivity(double hoursThisWeek, int sessionsThisWeek,
+                                 List<String> categories, List<String> locations,
+                                 List<MembershipSummary> memberships) {
+        public static final FamilyActivity EMPTY = new FamilyActivity(0.0, 0, List.of(), List.of(), List.of());
     }
 
     /**
