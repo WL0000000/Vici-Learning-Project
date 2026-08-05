@@ -2,16 +2,12 @@ package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.association.AssociationService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
-import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyGroup;
-import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyMember;
-import ca.vicilearning.dashboard.metrics.DashboardMetricsService.MembershipSummary;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.StudentRow;
 import ca.vicilearning.dashboard.domain.StudentStatus;
 import ca.vicilearning.dashboard.student.StudentStatusService;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -86,25 +82,6 @@ class StudentsControllerTest {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/students"));
         verify(studentStatus).setStatus("EXT-5", "PAUSED");
-    }
-
-    @Test
-    @WithMockUser(roles = "ADMIN")
-    void familiesPanelRendersMembershipSummary() throws Exception {
-        // Exercises the family membership block end-to-end, incl. #temporals.format on the expiry —
-        // which the empty-metrics tests never render, so a template error there would ship unseen.
-        stubEmptyMetrics();
-        FamilyMember member = new FamilyMember("EXT-1", "Sam Tran", "s@x.com", "555");
-        MembershipSummary summary =
-                new MembershipSummary(5, false, LocalDateTime.of(2026, 8, 1, 0, 0), "SI-2026000096");
-        FamilyGroup fam = new FamilyGroup("VICI-0001", List.of(member), 2, 3.0,
-                List.of(), List.of(), List.of(summary));
-        when(metrics.familyGroups(null)).thenReturn(List.of(fam));
-
-        mockMvc.perform(get("/students"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("SI-2026000096")))
-                .andExpect(content().string(containsString("Aug 1, 2026")));  // #temporals.format worked
     }
 
     @Test
@@ -184,7 +161,6 @@ class StudentsControllerTest {
         when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2, null)).thenReturn(Collections.emptyList());
         when(metrics.studentRows(null, null)).thenReturn(Collections.emptyList());
         when(metrics.upcoming(10, null)).thenReturn(Collections.emptyList());
-        when(metrics.familyGroups(null)).thenReturn(Collections.emptyList());
         when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false, null)).thenReturn(Collections.emptyList());
     }
 }

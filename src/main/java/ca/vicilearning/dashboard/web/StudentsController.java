@@ -173,7 +173,6 @@ public class StudentsController {
             model.addAttribute("selectedFamilyName", familyNames.getOrDefault(familyFilter, familyFilter));
         }
         model.addAttribute("students", rows);
-        model.addAttribute("families", metrics.familyGroups(scope));
         model.addAttribute("upcoming", metrics.upcoming(10, scope));
         return "students";
     }
