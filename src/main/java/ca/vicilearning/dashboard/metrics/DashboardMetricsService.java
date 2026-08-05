@@ -335,17 +335,49 @@ public class DashboardMetricsService {
     /**
      * The student roster, from the Brevo-sourced {@link RosterStudent} (the real students, keyed by
      * EXT_ID) — identity, family and status. When {@code statusFilter} is non-null only students with
-     * that {@link StudentStatus} are returned (null = all). {@code scope} (a location/category booking
-     * filter) doesn't apply to the roster, since a booking can't be tied to an individual student.
-     * Per-student hours therefore aren't available here — they roll up to the family (see familyGroups).
+     * that {@link StudentStatus} are returned (null = all).
+     *
+     * <p><b>Per-student weekly hours, where they can be derived.</b> A booking can't be tied to an
+     * individual student, so activity data only resolves to the <b>family</b> (Account_ID). But when a
+     * family has <b>exactly one</b> roster student, every booking on that family is unambiguously that
+     * student's — so we attribute the family's weekly hours to them ({@code hoursPerStudent == true}).
+     * For a family with 2+ siblings the total can't be split, so the row still carries the family total
+     * but flags it as shared ({@code hoursPerStudent == false}); an unassigned student has no
+     * derivable hours (nulls). The hours honour the page-wide {@code scope} (location/category).
      */
     public List<StudentRow> studentRows(ServiceScope scope, StudentStatus statusFilter) {
-        return rosterStudentRepo.findByDeletedAtIsNull().stream()
+        List<RosterStudent> roster = rosterStudentRepo.findByDeletedAtIsNull();
+
+        // Roster students per family: a family of exactly one means its bookings are unambiguously that
+        // one student's; 2+ siblings share the family total (a booking can't say which sibling).
+        Map<String, Integer> rosterPerFamily = new LinkedHashMap<>();
+        for (RosterStudent r : roster) {
+            String fam = familyKey(r.getAccountId());
+            if (fam != null) {
+                rosterPerFamily.merge(fam, 1, Integer::sum);
+            }
+        }
+        Map<String, double[]> familyHours = hoursThisWeekByFamily(scope);
+
+        return roster.stream()
                 .filter(r -> statusFilter == null || r.getStatus() == statusFilter)
                 .sorted(Comparator.comparing(RosterStudent::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
-                .map(r -> new StudentRow(
-                        r.getExtId(), r.getName(), r.getAccountId(), r.getExtId(),
-                        r.getEmail(), r.getPhone(), r.getStatus()))
+                .map(r -> {
+                    String fam = familyKey(r.getAccountId());
+                    Double hours = null;
+                    Integer sessions = null;
+                    boolean perStudent = false;
+                    if (fam != null) {
+                        double[] cell = familyHours.getOrDefault(fam, new double[]{0.0, 0.0});
+                        hours = round1(cell[0]);
+                        sessions = (int) cell[1];
+                        perStudent = rosterPerFamily.getOrDefault(fam, 0) == 1;
+                    }
+                    return new StudentRow(
+                            r.getExtId(), r.getName(), r.getAccountId(), r.getExtId(),
+                            r.getEmail(), r.getPhone(), r.getStatus(),
+                            hours, sessions, perStudent);
+                })
                 .toList();
     }
 
@@ -511,6 +543,35 @@ public class DashboardMetricsService {
             cell[1] += 1;
         }
         return byStudent;
+    }
+
+    /**
+     * This week's booked [hours, sessions] per <b>family</b> (Account_ID), cancellations excluded and
+     * optionally restricted to a {@link ServiceScope}. Bookings resolve to a family via the SimplyBook
+     * account's Account_ID — the finest granularity activity data reaches, since a booking can't be
+     * tied to an individual student. Used to attribute per-student hours for single-student families.
+     */
+    private Map<String, double[]> hoursThisWeekByFamily(ServiceScope scope) {
+        LocalDate weekStart = weekStart(today());
+        Map<String, double[]> byFamily = new LinkedHashMap<>(); // [hours, sessions]
+        for (Booking b : activeBetween(weekStart, weekStart.plusWeeks(1))) {
+            if (!isCounted(b) || !matches(b, scope) || b.getStudent() == null) {
+                continue;
+            }
+            String fam = familyKey(b.getStudent().getAccountId());
+            if (fam == null) {
+                continue;
+            }
+            double[] cell = byFamily.computeIfAbsent(fam, k -> new double[]{0.0, 0.0});
+            cell[0] += hoursOf(b);
+            cell[1] += 1;
+        }
+        return byFamily;
+    }
+
+    /** Trimmed family key, or null for a blank/absent Account_ID (matches the family-rollup join). */
+    private static String familyKey(String accountId) {
+        return (accountId == null || accountId.isBlank()) ? null : accountId.trim();
     }
 
     /** True when {@code scope} means "everything" (no filter). */
@@ -736,10 +797,16 @@ public class DashboardMetricsService {
 
     public record TutorHours(String tutorName, double hours, int sessions) {}
 
-    /** One roster student: {@code id} is the EXT_ID (the toggle/edit key), plus identity/family/status.
-     *  No per-student hours — a booking can't be tied to an individual student; hours are per family. */
+    /**
+     * One roster student: {@code id} is the EXT_ID (the toggle/edit key), plus identity/family/status.
+     * {@code weeklyHours}/{@code weeklySessions} are this week's booked totals for the student's family
+     * (null when unassigned). {@code hoursPerStudent} is true only when the family has a single roster
+     * student, so those totals are unambiguously this student's; false means the total is shared across
+     * siblings (a booking can't say which). See {@link #studentRows(ServiceScope, StudentStatus)}.
+     */
     public record StudentRow(String id, String name, String accountId, String extId, String email, String phone,
-                             StudentStatus status) {}
+                             StudentStatus status,
+                             Double weeklyHours, Integer weeklySessions, boolean hoursPerStudent) {}
 
     /**
      * A family: the students (siblings) sharing one Account_ID, with this week's combined totals

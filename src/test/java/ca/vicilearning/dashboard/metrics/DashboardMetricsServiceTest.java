@@ -193,6 +193,50 @@ class DashboardMetricsServiceTest {
     }
 
     @Test
+    void studentRows_derivesPerStudentHoursForSoloFamily_familyTotalForSiblings() {
+        // Solo family VICI-1 (one roster student) vs sibling family VICI-2 (two roster students).
+        when(rosterStudentRepo.findByDeletedAtIsNull()).thenReturn(List.of(
+                rosterStudent("E1", "Solo Kid", "VICI-1"),
+                rosterStudent("E2", "Sib One", "VICI-2"),
+                rosterStudent("E3", "Sib Two", "VICI-2")));
+        // This week: 2h on the solo family's account, 3h on the sibling family's account.
+        Student acct1 = studentWithAccount(1L, "Acct1", "VICI-1");
+        Student acct2 = studentWithAccount(2L, "Acct2", "VICI-2");
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of(
+                booking(1, acct1, "confirmed", now, 120),
+                booking(2, acct2, "confirmed", now, 180)));
+
+        List<DashboardMetricsService.StudentRow> rows = service.studentRows();
+
+        DashboardMetricsService.StudentRow solo = row(rows, "Solo Kid");
+        assertThat(solo.hoursPerStudent()).isTrue();          // unambiguous — one student in the family
+        assertThat(solo.weeklyHours()).isEqualTo(2.0);
+        assertThat(solo.weeklySessions()).isEqualTo(1);
+
+        DashboardMetricsService.StudentRow sibling = row(rows, "Sib One");
+        assertThat(sibling.hoursPerStudent()).isFalse();      // shared — can't split between siblings
+        assertThat(sibling.weeklyHours()).isEqualTo(3.0);     // the family total
+    }
+
+    @Test
+    void studentRows_unassignedStudentHasNoDerivableHours() {
+        when(rosterStudentRepo.findByDeletedAtIsNull())
+                .thenReturn(List.of(rosterStudent("E1", "No Family", null)));
+        when(bookingRepo.findActiveWithRefsBetween(any(), any())).thenReturn(List.of());
+
+        DashboardMetricsService.StudentRow r = service.studentRows().get(0);
+
+        assertThat(r.weeklyHours()).isNull();
+        assertThat(r.weeklySessions()).isNull();
+        assertThat(r.hoursPerStudent()).isFalse();
+    }
+
+    private static DashboardMetricsService.StudentRow row(
+            List<DashboardMetricsService.StudentRow> rows, String name) {
+        return rows.stream().filter(r -> name.equals(r.name())).findFirst().orElseThrow();
+    }
+
+    @Test
     void studentRows_statusFilter_returnsOnlyMatchingStatus() {
         RosterStudent alice = rosterStudent("E1", "Alice", "f");   // ACTIVE by default
         RosterStudent bob = rosterStudent("E2", "Bob", "f");
