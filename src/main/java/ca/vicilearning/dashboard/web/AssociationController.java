@@ -1,6 +1,7 @@
 package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.association.AssociationService;
+import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,16 +10,19 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * Association Account page (Meeting #3, Sara's #1 feature): shows families (students grouped by
- * their assigned Account_ID) and the queue of unassigned students, and lets staff assign a
- * student to a family. Reads/writes only the local DB.
+ * their assigned Account_ID) and the queue of unassigned students, lets staff assign/move/rename/merge
+ * families, and drills into each family to see its individual kids + the family's activity rollup.
+ * Reads/writes only the local DB.
  */
 @Controller
 public class AssociationController {
 
     private final AssociationService associations;
+    private final DashboardMetricsService metrics;
 
-    public AssociationController(AssociationService associations) {
+    public AssociationController(AssociationService associations, DashboardMetricsService metrics) {
         this.associations = associations;
+        this.metrics = metrics;
     }
 
     @GetMapping("/associations")
@@ -27,6 +31,9 @@ public class AssociationController {
         model.addAttribute("unassigned", associations.unassignedStudents());
         model.addAttribute("familyKeys", associations.existingFamilyKeys());
         model.addAttribute("emptyFamilies", associations.emptyFamilies());
+        // Per-family activity (this week's hours/sessions, categories/locations, memberships) for the
+        // drill-down, keyed by Account_ID. Covers all families (incl. single-kid), unlike familyGroups.
+        model.addAttribute("familyActivity", metrics.familyActivityByAccount(null));
         return "associations";
     }
 

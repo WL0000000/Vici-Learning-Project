@@ -2,16 +2,12 @@ package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.association.AssociationService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
-import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyGroup;
-import ca.vicilearning.dashboard.metrics.DashboardMetricsService.FamilyMember;
-import ca.vicilearning.dashboard.metrics.DashboardMetricsService.MembershipSummary;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.StudentRow;
 import ca.vicilearning.dashboard.domain.StudentStatus;
 import ca.vicilearning.dashboard.student.StudentStatusService;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -89,25 +85,6 @@ class StudentsControllerTest {
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
-    void familiesPanelRendersMembershipSummary() throws Exception {
-        // Exercises the family membership block end-to-end, incl. #temporals.format on the expiry —
-        // which the empty-metrics tests never render, so a template error there would ship unseen.
-        stubEmptyMetrics();
-        FamilyMember member = new FamilyMember("EXT-1", "Sam Tran", "s@x.com", "555");
-        MembershipSummary summary =
-                new MembershipSummary(5, false, LocalDateTime.of(2026, 8, 1, 0, 0), "SI-2026000096");
-        FamilyGroup fam = new FamilyGroup("VICI-0001", List.of(member), 2, 3.0,
-                List.of(), List.of(), List.of(summary));
-        when(metrics.familyGroups(null)).thenReturn(List.of(fam));
-
-        mockMvc.perform(get("/students"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("SI-2026000096")))
-                .andExpect(content().string(containsString("Aug 1, 2026")));  // #temporals.format worked
-    }
-
-    @Test
     @WithMockUser(roles = "STAFF")
     void staffCanUpdateStatus() throws Exception {
         mockMvc.perform(post("/students/EXT-7/status").param("status", "ACTIVE").with(csrf()))
@@ -150,7 +127,7 @@ class StudentsControllerTest {
         StudentRow row = new StudentRow(
                 "E1", "Kid", "Gray_Account", "E1", "s@x.com", "555", StudentStatus.ACTIVE, 2.0, 1, true);
         when(metrics.studentRows(null, null)).thenReturn(List.of(row));
-        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "Gray_Account");
+        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "555", ca.vicilearning.dashboard.domain.StudentStatus.ACTIVE, "Gray_Account");
         when(associations.families()).thenReturn(List.of(
                 new AssociationService.FamilyView("Gray_Account", "Gray Family", null, List.of(m))));
 
@@ -168,7 +145,7 @@ class StudentsControllerTest {
         StudentRow other = new StudentRow(
                 "E2", "Someone Else", "Lee_Account", "E2", "l@x.com", "555", StudentStatus.ACTIVE, 1.0, 1, true);
         when(metrics.studentRows(null, null)).thenReturn(List.of(gray, other));
-        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "Gray_Account");
+        AssociationService.StudentView m = new AssociationService.StudentView("E1", "Kid", "s@x.com", "555", ca.vicilearning.dashboard.domain.StudentStatus.ACTIVE, "Gray_Account");
         when(associations.families()).thenReturn(List.of(
                 new AssociationService.FamilyView("Gray_Account", "Gray Family", null, List.of(m))));
 
@@ -184,7 +161,6 @@ class StudentsControllerTest {
         when(metrics.hoursByPeriod(PeriodUnit.WEEK, 3, 2, null)).thenReturn(Collections.emptyList());
         when(metrics.studentRows(null, null)).thenReturn(Collections.emptyList());
         when(metrics.upcoming(10, null)).thenReturn(Collections.emptyList());
-        when(metrics.familyGroups(null)).thenReturn(Collections.emptyList());
         when(metrics.tutorHoursForPeriod(PeriodUnit.WEEK, false, null)).thenReturn(Collections.emptyList());
     }
 }
