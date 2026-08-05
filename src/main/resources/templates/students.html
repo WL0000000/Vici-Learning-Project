@@ -216,7 +216,7 @@
                 <svg class="vici-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
                 <div class="flex-grow-1">
                     <h2 class="vici-summary-title">Students</h2>
-                    <p class="vici-summary-sub">The Brevo roster — each student by EXT_ID, family (Account_ID) and status<span
+                    <p class="vici-summary-sub">The Brevo roster — each student by EXT_ID, family (Account_ID) and status · this week's hours are per-student for solo families, family-level (tagged) for siblings<span
                         th:if="${filterLabel != null}" style="color:var(--vici-navy); font-weight:600;"> · filtered: <span th:text="${filterLabel}"></span></span></p>
                 </div>
                 <span class="vici-count-badge" th:text="${#lists.size(students)}">0</span>
@@ -227,6 +227,7 @@
                         <tr>
                             <th>Name</th>
                             <th>Status</th>
+                            <th>This week</th>
                             <!-- Sensitive columns: identity keys + contact info are ADMIN/STAFF-only. -->
                             <th sec:authorize="hasAnyRole('ADMIN','STAFF')">EXT_ID</th>
                             <th sec:authorize="hasAnyRole('ADMIN','STAFF')">Account ID</th>
@@ -254,6 +255,21 @@
                                             th:text="${s.status.name() == 'ACTIVE'} ? 'Pause' : 'Activate'">Pause</button>
                                 </form>
                             </td>
+                            <!-- This week's hours. For a single-student family they are that student's;
+                                 for siblings they are the family total (tagged "family"); an unassigned
+                                 student has no bookings to attribute (—). -->
+                            <td>
+                                <span th:if="${s.weeklyHours == null}" class="text-muted"
+                                      title="No family assigned yet — assign this student to a family to see hours">—</span>
+                                <span th:if="${s.weeklyHours != null}">
+                                    <span style="font-weight:600;" th:text="${s.weeklyHours} + ' h'">0 h</span>
+                                    <span class="text-muted" style="font-size:12px;"
+                                          th:text="'· ' + ${s.weeklySessions} + ' sess'">· 0 sess</span>
+                                    <span th:unless="${s.hoursPerStudent}" class="status-pill pill-pending ms-1"
+                                          style="font-size:10px;"
+                                          title="Family total — shared across siblings. Per-student hours need a booking→student link.">family</span>
+                                </span>
+                            </td>
                             <td sec:authorize="hasAnyRole('ADMIN','STAFF')">
                                 <span th:if="${s.extId != null}" class="text-muted" th:text="${s.extId}">EXT-0000</span>
                                 <span class="text-muted" th:if="${s.extId == null}">—</span>
@@ -267,7 +283,7 @@
                             <td class="text-muted" sec:authorize="hasAnyRole('ADMIN','STAFF')" th:text="${s.phone != null ? s.phone : '—'}">—</td>
                         </tr>
                         <tr th:if="${#lists.isEmpty(students)}">
-                            <td colspan="6" class="vici-empty">
+                            <td colspan="7" class="vici-empty">
                                 No students. Run the seeder or a sync.
                             </td>
                         </tr>
