@@ -343,6 +343,35 @@ public class BrevoCommunicationService {
     }
 
     /**
+     * Writes a student's enrolment status back to Brevo's {@code CONTACT_STATUS} attribute, keyed by
+     * <b>EXT_ID</b> ({@code identifierType=ext_id}) — the correct per-student key (email is unreliable).
+     * Callers gate this behind config ({@code brevo.status-writeback-enabled}, off by default) until the
+     * Brevo <i>read</i> is verified against Vici's live account, since writing on a misread would corrupt
+     * her CRM.
+     *
+     * <p><b>Format caveat:</b> {@code CONTACT_STATUS} is a list/category attribute and the exact write
+     * payload could not be verified with the API keys revoked. This sends the plain category value and
+     * logs the outcome — verify (and adjust the payload shape if needed) on the first live key window
+     * before enabling the flag.
+     */
+    public void updateContactStatusByExtId(String extId, String contactStatusValue) {
+        if (extId == null || extId.isBlank() || contactStatusValue == null || contactStatusValue.isBlank()) {
+            return;
+        }
+        try {
+            Map<String, Object> body = Map.of("attributes", Map.of("CONTACT_STATUS", contactStatusValue));
+            brevoRestClient.put()
+                    .uri("/contacts/{identifier}?identifierType=ext_id", extId.trim())
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.info("CONTACT_STATUS '{}' written back to Brevo for EXT_ID {}", contactStatusValue, extId);
+        } catch (Exception e) {
+            log.error("Failed writing CONTACT_STATUS back to Brevo for EXT_ID {}", extId, e);
+        }
+    }
+
+    /**
      * Dispatches transactional templates out to specialized target accounts using SMTP parameters.
      *
      * @param targetEmail    Recipient communication address.

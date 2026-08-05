@@ -26,6 +26,11 @@ public enum StudentStatus {
         return this == ACTIVE || this == PAUSED;
     }
 
+    /** The Brevo CONTACT_STATUS string for this status (proper case, e.g. ACTIVE → "Active"), for write-back. */
+    public String brevoValue() {
+        return name().charAt(0) + name().substring(1).toLowerCase();
+    }
+
     /** Tolerant parse of a Brevo CONTACT_STATUS value (e.g. "Active" → ACTIVE); null when unrecognized. */
     public static StudentStatus fromBrevo(String raw) {
         if (raw == null || raw.isBlank()) {
