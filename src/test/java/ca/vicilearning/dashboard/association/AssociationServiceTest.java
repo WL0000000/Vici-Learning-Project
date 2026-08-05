@@ -93,6 +93,25 @@ class AssociationServiceTest {
         verify(rosterStudentRepo).save(gray);
     }
 
+    // ── #2a: unassign a student back to the queue ────────────────────────────────
+
+    @Test
+    void unassign_clearsTheFamilyKey() {
+        RosterStudent r = roster("EXT-5", "Gray_Account");
+        when(rosterStudentRepo.findById("EXT-5")).thenReturn(Optional.of(r));
+
+        service.unassign("EXT-5");
+
+        assertThat(r.getAccountId()).isNull();
+        verify(rosterStudentRepo).save(r);
+    }
+
+    @Test
+    void unassign_blankIdIsANoOp() {
+        service.unassign("  ");
+        verify(rosterStudentRepo, never()).save(any());
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────
 
     /** No families exist yet — both lookups the resolver consults return empty. */

@@ -106,6 +106,23 @@ public class AssociationService {
     }
 
     /**
+     * Remove a student's family assignment (by EXT_ID), returning it to the unassigned queue. Clears
+     * the Account_ID; the roster sync's carry-over only preserves a <b>non-null</b> staff key, so this
+     * unassignment survives the next sync (the student stays unassigned until staff re-assign it).
+     * No-op for a blank/unknown id.
+     */
+    @Transactional
+    public void unassign(String extId) {
+        if (isBlank(extId)) {
+            return;
+        }
+        rosterStudentRepo.findById(extId).ifPresent(s -> {
+            s.setAccountId(null);
+            rosterStudentRepo.save(s);
+        });
+    }
+
+    /**
      * Set a family's staff-editable name and notes (creating the family row if needed), stamping
      * {@code updatedAt}. Blank name/notes are stored as null so the view falls back to the raw
      * Account_ID / hides the notes line. No-op when the account key is blank.

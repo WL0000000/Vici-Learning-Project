@@ -116,6 +116,12 @@
                                        placeholder="Move to family…"/>
                                 <button type="submit" class="btn-vici-outline btn-sm">Move</button>
                             </form>
+                            <!-- Return the student to the unassigned queue (clears its family). -->
+                            <form th:action="@{/associations/unassign}" method="post" class="mb-0">
+                                <input type="hidden" name="extId" th:value="${m.extId}"/>
+                                <button type="submit" class="btn btn-link btn-sm p-0 text-danger"
+                                        style="font-size:12px; text-decoration:none;">Unassign</button>
+                            </form>
                         </li>
                     </ul>
 

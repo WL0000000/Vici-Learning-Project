@@ -42,4 +42,10 @@ public class AssociationController {
         associations.updateFamily(accountId, name, notes);
         return "redirect:/associations";
     }
+
+    @PostMapping("/associations/unassign")
+    public String unassign(@RequestParam String extId) {
+        associations.unassign(extId);
+        return "redirect:/associations";
+    }
 }
