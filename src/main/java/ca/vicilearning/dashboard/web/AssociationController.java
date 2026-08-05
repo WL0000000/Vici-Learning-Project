@@ -26,6 +26,7 @@ public class AssociationController {
         model.addAttribute("families", associations.families());
         model.addAttribute("unassigned", associations.unassignedStudents());
         model.addAttribute("familyKeys", associations.existingFamilyKeys());
+        model.addAttribute("emptyFamilies", associations.emptyFamilies());
         return "associations";
     }
 
@@ -40,6 +41,30 @@ public class AssociationController {
                                @RequestParam(required = false) String name,
                                @RequestParam(required = false) String notes) {
         associations.updateFamily(accountId, name, notes);
+        return "redirect:/associations";
+    }
+
+    @PostMapping("/associations/unassign")
+    public String unassign(@RequestParam String extId) {
+        associations.unassign(extId);
+        return "redirect:/associations";
+    }
+
+    @PostMapping("/associations/rename")
+    public String rename(@RequestParam String accountId, @RequestParam String newAccountId) {
+        associations.renameFamily(accountId, newAccountId);
+        return "redirect:/associations";
+    }
+
+    @PostMapping("/associations/merge")
+    public String merge(@RequestParam String fromAccountId, @RequestParam String intoAccountId) {
+        associations.mergeFamilies(fromAccountId, intoAccountId);
+        return "redirect:/associations";
+    }
+
+    @PostMapping("/associations/family/delete")
+    public String deleteFamily(@RequestParam String accountId) {
+        associations.deleteFamily(accountId);
         return "redirect:/associations";
     }
 }

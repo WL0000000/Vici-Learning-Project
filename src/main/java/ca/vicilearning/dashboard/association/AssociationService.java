@@ -14,6 +14,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -82,21 +83,79 @@ public class AssociationService {
     }
 
     /**
-     * Assign a student (by EXT_ID) to a family by setting its Account_ID, and ensure that family has a
-     * {@link FamilyAssociation} row (created if the key is new). Blank input is a no-op so an empty
-     * form submission can't wipe an assignment.
+     * Family rows that have no assigned members left — typically left behind after their students were
+     * moved, unassigned, or merged away. These don't appear in {@link #families()} (which is grouped
+     * from assigned students), so they're surfaced separately for staff to delete.
+     */
+    public List<FamilyView> emptyFamilies() {
+        Set<String> withMembers = rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().stream()
+                .map(r -> r.getAccountId().trim().toLowerCase())
+                .collect(Collectors.toSet());
+        return familyRepo.findAll().stream()
+                .filter(f -> !isBlank(f.getAccountId()))
+                .filter(f -> !withMembers.contains(f.getAccountId().trim().toLowerCase()))
+                .sorted(Comparator.comparing(FamilyAssociation::getAccountId, String.CASE_INSENSITIVE_ORDER))
+                .map(f -> new FamilyView(f.getAccountId(), f.getName(), f.getNotes(), List.of()))
+                .toList();
+    }
+
+    /**
+     * Delete a family row, but only when it has no assigned members — a delete can never orphan a
+     * student. No-op for a blank/unknown key or a family that still has members.
      */
     @Transactional
-    public void assignToFamily(String extId, String accountId) {
-        if (extId == null || extId.isBlank() || accountId == null || accountId.isBlank()) {
+    public void deleteFamily(String accountId) {
+        if (isBlank(accountId)) {
             return;
         }
         String key = accountId.trim();
+        boolean hasMembers = rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().stream()
+                .anyMatch(r -> key.equalsIgnoreCase(r.getAccountId().trim()));
+        if (hasMembers) {
+            return;
+        }
+        familyRepo.findById(key).ifPresent(familyRepo::delete);
+    }
+
+    /**
+     * Assign a student (by EXT_ID) to a family by setting its Account_ID, and ensure that family has a
+     * {@link FamilyAssociation} row (created if the key is new). The staff-typed key is normalized so a
+     * spelling like {@code "Gray"} folds into an existing {@code "Gray_Account"} family instead of
+     * forking a second one (see {@link #resolveFamilyKey}). Also handles a <b>move</b>: assigning an
+     * already-assigned student simply repoints it. Blank input is a no-op so an empty form submission
+     * can't wipe an assignment.
+     */
+    @Transactional
+    public void assignToFamily(String extId, String accountId) {
+        if (isBlank(extId) || isBlank(accountId)) {
+            return;
+        }
+        String key = resolveFamilyKey(accountId);
+        if (key == null) {
+            return;
+        }
         rosterStudentRepo.findById(extId).ifPresent(s -> {
             s.setAccountId(key);
             rosterStudentRepo.save(s);
         });
         getOrCreateFamily(key);
+    }
+
+    /**
+     * Remove a student's family assignment (by EXT_ID), returning it to the unassigned queue. Clears
+     * the Account_ID; the roster sync's carry-over only preserves a <b>non-null</b> staff key, so this
+     * unassignment survives the next sync (the student stays unassigned until staff re-assign it).
+     * No-op for a blank/unknown id.
+     */
+    @Transactional
+    public void unassign(String extId) {
+        if (isBlank(extId)) {
+            return;
+        }
+        rosterStudentRepo.findById(extId).ifPresent(s -> {
+            s.setAccountId(null);
+            rosterStudentRepo.save(s);
+        });
     }
 
     /**
@@ -116,6 +175,85 @@ public class AssociationService {
         familyRepo.save(fam);
     }
 
+    /**
+     * Rename a family to a new Account_ID spelling: repoints every assigned member from the old key to
+     * the resolved new key and moves the family's name/notes onto the new key's row, deleting the old
+     * one. If the new spelling resolves to an <b>existing different</b> family, this becomes a merge
+     * into it (that family keeps its own name/notes). No-op when either key is blank or they resolve to
+     * the same family.
+     */
+    @Transactional
+    public void renameFamily(String oldAccountId, String newAccountId) {
+        if (isBlank(oldAccountId) || isBlank(newAccountId)) {
+            return;
+        }
+        String oldKey = oldAccountId.trim();
+        String newKey = resolveFamilyKey(newAccountId);
+        if (newKey == null || newKey.equals(oldKey)) {
+            return;
+        }
+        repointFamily(oldKey, newKey);
+    }
+
+    /**
+     * Merge one family into another: repoints every member of {@code fromAccountId} onto the existing
+     * {@code intoAccountId} family and deletes the emptied source row. The target keeps its own
+     * name/notes. The remedy for two families that should be one (e.g. a historical typo-fork). No-op
+     * when either key is blank, they are the same family, or the target family doesn't exist.
+     */
+    @Transactional
+    public void mergeFamilies(String fromAccountId, String intoAccountId) {
+        if (isBlank(fromAccountId) || isBlank(intoAccountId)) {
+            return;
+        }
+        String fromKey = fromAccountId.trim();
+        String intoKey = intoAccountId.trim();
+        if (fromKey.equalsIgnoreCase(intoKey) || familyRepo.findById(intoKey).isEmpty()) {
+            return;
+        }
+        repointFamily(fromKey, intoKey);
+    }
+
+    /**
+     * Resolve a staff-typed family key to the canonical stored key: if it denotes an <b>existing</b>
+     * family (same {@link AccountIdNormalizer#compareKey}), reuse that family's exact spelling so
+     * {@code "Gray"} / {@code "gray"} / {@code "Gray_Account"} all land on the one family; otherwise
+     * mint a fresh {@link AccountIdNormalizer#canonical} key ({@code "Smith"} → {@code "Smith_Account"}).
+     * Null/blank yields null. Mirrors the Brevo family-link sync's matching so manual and automatic
+     * assignment agree on one key per family — the fix for typo-forked duplicate families.
+     */
+    private String resolveFamilyKey(String raw) {
+        String compareKey = AccountIdNormalizer.compareKey(raw);
+        if (compareKey.isEmpty()) {
+            return null;
+        }
+        return existingKeysByCompareKey().getOrDefault(compareKey, AccountIdNormalizer.canonical(raw));
+    }
+
+    /**
+     * compareKey → the exact stored family key currently in use, across both assigned roster students
+     * and existing {@link FamilyAssociation} rows (so an emptied-but-not-yet-deleted family still
+     * anchors its spelling). First spelling seen wins for a given compareKey.
+     */
+    private Map<String, String> existingKeysByCompareKey() {
+        Map<String, String> byCompareKey = new LinkedHashMap<>();
+        rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().forEach(r -> {
+            String key = r.getAccountId().trim();
+            byCompareKey.putIfAbsent(AccountIdNormalizer.compareKey(key), key);
+        });
+        familyRepo.findAll().forEach(f -> {
+            if (!isBlank(f.getAccountId())) {
+                String key = f.getAccountId().trim();
+                byCompareKey.putIfAbsent(AccountIdNormalizer.compareKey(key), key);
+            }
+        });
+        return byCompareKey;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s.trim();
     }
@@ -129,6 +267,37 @@ public class AssociationService {
         fam.setAccountId(accountId);
         fam.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
         return familyRepo.save(fam);
+    }
+
+    /**
+     * Move every assigned member (and the family metadata) from {@code oldKey} to {@code newKey}, then
+     * delete the old family row. Members are matched case-insensitively on their stored key. The old
+     * name/notes are carried onto the new row only where it doesn't already have its own, so merging
+     * into an existing family never clobbers that family's details. Shared by rename and merge.
+     */
+    private void repointFamily(String oldKey, String newKey) {
+        List<RosterStudent> members = rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull().stream()
+                .filter(r -> oldKey.equalsIgnoreCase(r.getAccountId().trim()))
+                .toList();
+        members.forEach(r -> r.setAccountId(newKey));
+        if (!members.isEmpty()) {
+            rosterStudentRepo.saveAll(members);
+        }
+
+        FamilyAssociation oldFam = familyRepo.findById(oldKey).orElse(null);
+        if (oldFam == null) {
+            return;
+        }
+        FamilyAssociation newFam = getOrCreateFamily(newKey);
+        if (isBlank(newFam.getName())) {
+            newFam.setName(oldFam.getName());
+        }
+        if (isBlank(newFam.getNotes())) {
+            newFam.setNotes(oldFam.getNotes());
+        }
+        newFam.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        familyRepo.save(newFam);
+        familyRepo.delete(oldFam);
     }
 
     private static StudentView toView(RosterStudent s) {

@@ -100,11 +100,28 @@
                         <span class="vici-count-badge" th:text="${fam.size()} + ' student(s)'">0</span>
                     </div>
                     <div class="text-muted small mb-1" th:if="${fam.notes}" th:text="${fam.notes}"></div>
-                    <ul class="mb-0">
-                        <li th:each="m : ${fam.members}">
+                    <ul class="list-unstyled mb-0">
+                        <li th:each="m : ${fam.members}"
+                            class="d-flex flex-wrap align-items-center gap-2 mb-1">
                             <span th:text="${m.name}">Student</span>
                             <span class="text-muted small" th:if="${m.extId}"
                                   th:text="'· EXT_ID ' + ${m.extId}"></span>
+                            <!-- Move a mis-assigned student to another family (reuses the assign
+                                 endpoint, which repoints an already-assigned student). -->
+                            <form th:action="@{/associations/assign}" method="post"
+                                  class="d-flex gap-1 mb-0 ms-2">
+                                <input type="hidden" name="extId" th:value="${m.extId}"/>
+                                <input type="text" name="accountId" class="form-control form-control-sm"
+                                       style="max-width:180px;" list="family-keys"
+                                       placeholder="Move to family…"/>
+                                <button type="submit" class="btn-vici-outline btn-sm">Move</button>
+                            </form>
+                            <!-- Return the student to the unassigned queue (clears its family). -->
+                            <form th:action="@{/associations/unassign}" method="post" class="mb-0">
+                                <input type="hidden" name="extId" th:value="${m.extId}"/>
+                                <button type="submit" class="btn btn-link btn-sm p-0 text-danger"
+                                        style="font-size:12px; text-decoration:none;">Unassign</button>
+                            </form>
                         </li>
                     </ul>
 
@@ -118,7 +135,53 @@
                                style="max-width:320px;" th:value="${fam.notes}" placeholder="Notes"/>
                         <button type="submit" class="btn-vici-outline btn-sm">Save</button>
                     </form>
+
+                    <!-- Rename the underlying Account_ID key (repoints every member). Renaming to an
+                         existing family's key merges into it. -->
+                    <form th:action="@{/associations/rename}" method="post"
+                          class="d-flex flex-wrap align-items-center gap-2 mt-1">
+                        <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
+                        <input type="text" name="newAccountId" class="form-control form-control-sm"
+                               style="max-width:220px;" list="family-keys"
+                               placeholder="Rename key (e.g. Grey_Account)"/>
+                        <button type="submit" class="btn-vici-outline btn-sm">Rename key</button>
+                    </form>
+
+                    <!-- Merge this family into another existing one (fixes a typo-forked duplicate). -->
+                    <form th:action="@{/associations/merge}" method="post"
+                          class="d-flex flex-wrap align-items-center gap-2 mt-1"
+                          th:if="${#lists.size(familyKeys) > 1}">
+                        <input type="hidden" name="fromAccountId" th:value="${fam.accountId}"/>
+                        <select name="intoAccountId" class="form-select form-select-sm" style="max-width:220px;">
+                            <option value="" selected disabled>Merge into…</option>
+                            <option th:each="k : ${familyKeys}" th:if="${k != fam.accountId}"
+                                    th:value="${k}" th:text="${k}"></option>
+                        </select>
+                        <button type="submit" class="btn-vici-outline btn-sm">Merge</button>
+                    </form>
                 </div>
+            </div>
+        </div>
+
+        <!-- ── Empty families: rows with no members left (safe to delete) ──────── -->
+        <div class="vici-panel mt-3" th:if="${!#lists.isEmpty(emptyFamilies)}">
+            <div style="padding:14px 18px;">
+                <h2 class="h6 mb-1">Empty families</h2>
+                <p class="text-muted small mb-3">
+                    Family records with no members left — after moves, unassignments or merges.
+                    Deleting one only removes the empty record; it can never orphan a student.
+                </p>
+                <ul class="list-unstyled mb-0">
+                    <li th:each="fam : ${emptyFamilies}" class="d-flex align-items-center gap-2 mb-1">
+                        <strong th:text="${fam.displayName()}">Family</strong>
+                        <span class="text-muted small" th:if="${fam.name}" th:text="${fam.accountId}"></span>
+                        <form th:action="@{/associations/family/delete}" method="post" class="mb-0">
+                            <input type="hidden" name="accountId" th:value="${fam.accountId}"/>
+                            <button type="submit" class="btn btn-link btn-sm p-0 text-danger"
+                                    style="font-size:12px; text-decoration:none;">Delete</button>
+                        </form>
+                    </li>
+                </ul>
             </div>
         </div>
 
