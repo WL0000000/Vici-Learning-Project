@@ -58,6 +58,7 @@ public class StudentsController {
             @RequestParam(required = false) String location,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String family,
             Model model) {
 
         boolean sortByName = "name".equalsIgnoreCase(sort);
@@ -162,7 +163,16 @@ public class StudentsController {
         }
         model.addAttribute("familyNames", familyNames);
 
-        model.addAttribute("students", metrics.studentRows(scope, statusFilter));
+        // Roster, optionally narrowed to one family when arriving via the Association page's
+        // "View on students" link (?family=). The view shows a chip for the active filter.
+        var rows = metrics.studentRows(scope, statusFilter);
+        String familyFilter = blankToNull(family);
+        if (familyFilter != null) {
+            rows = rows.stream().filter(r -> familyFilter.equals(r.accountId())).toList();
+            model.addAttribute("selectedFamily", familyFilter);
+            model.addAttribute("selectedFamilyName", familyNames.getOrDefault(familyFilter, familyFilter));
+        }
+        model.addAttribute("students", rows);
         model.addAttribute("families", metrics.familyGroups(scope));
         model.addAttribute("upcoming", metrics.upcoming(10, scope));
         return "students";
