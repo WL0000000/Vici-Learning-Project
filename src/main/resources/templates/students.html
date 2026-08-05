@@ -254,9 +254,11 @@
                                 <span class="status-pill"
                                       th:classappend="${s.status.name() == 'ACTIVE'} ? 'pill-confirmed' : (${s.status.name() == 'PAUSED'} ? 'pill-pending' : 'pill-cancelled')"
                                       th:text="${#strings.capitalize(#strings.toLowerCase(s.status))}">Active</span>
-                                <!-- ADMIN/STAFF inline toggle → flips to the opposite status and
-                                     writes it back to Brevo. The POST endpoint is role-guarded in
-                                     SecurityConfig too; th:action injects the CSRF token. -->
+                                <!-- ADMIN/STAFF inline toggle → flips to the opposite status. This is a
+                                     LOCAL override on the roster; the Brevo CONTACT_STATUS write-back is
+                                     gated behind config (brevo.status-writeback-enabled, off by default)
+                                     until the Brevo read is verified against Vici's live account. The
+                                     POST endpoint is role-guarded in SecurityConfig; th:action injects CSRF. -->
                                 <form sec:authorize="hasAnyRole('ADMIN','STAFF')" method="post" class="d-inline"
                                       th:action="@{/students/{id}/status(id=${s.id})}">
                                     <input type="hidden" name="status"
