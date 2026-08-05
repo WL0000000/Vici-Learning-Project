@@ -74,6 +74,25 @@ class AssociationServiceTest {
         verify(familyRepo, never()).save(any());
     }
 
+    // ── #1: move an already-assigned student to another family ───────────────────
+
+    @Test
+    void assign_movesAnAlreadyAssignedStudentToAnotherFamily() {
+        // Two families already exist; EXT-9 currently belongs to Gray.
+        RosterStudent gray = roster("EXT-9", "Gray_Account");
+        RosterStudent leeSibling = roster("EXT-8", "Lee_Account");
+        when(rosterStudentRepo.findByDeletedAtIsNullAndAccountIdIsNotNull())
+                .thenReturn(List.of(gray, leeSibling));
+        when(familyRepo.findAll()).thenReturn(List.of());
+        when(rosterStudentRepo.findById("EXT-9")).thenReturn(Optional.of(gray));
+        when(familyRepo.findById("Lee_Account")).thenReturn(Optional.of(family("Lee_Account")));
+
+        service.assignToFamily("EXT-9", "Lee");
+
+        assertThat(gray.getAccountId()).isEqualTo("Lee_Account");
+        verify(rosterStudentRepo).save(gray);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────
 
     /** No families exist yet — both lookups the resolver consults return empty. */

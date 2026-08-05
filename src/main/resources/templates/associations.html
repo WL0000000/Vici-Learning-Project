@@ -100,11 +100,22 @@
                         <span class="vici-count-badge" th:text="${fam.size()} + ' student(s)'">0</span>
                     </div>
                     <div class="text-muted small mb-1" th:if="${fam.notes}" th:text="${fam.notes}"></div>
-                    <ul class="mb-0">
-                        <li th:each="m : ${fam.members}">
+                    <ul class="list-unstyled mb-0">
+                        <li th:each="m : ${fam.members}"
+                            class="d-flex flex-wrap align-items-center gap-2 mb-1">
                             <span th:text="${m.name}">Student</span>
                             <span class="text-muted small" th:if="${m.extId}"
                                   th:text="'· EXT_ID ' + ${m.extId}"></span>
+                            <!-- Move a mis-assigned student to another family (reuses the assign
+                                 endpoint, which repoints an already-assigned student). -->
+                            <form th:action="@{/associations/assign}" method="post"
+                                  class="d-flex gap-1 mb-0 ms-2">
+                                <input type="hidden" name="extId" th:value="${m.extId}"/>
+                                <input type="text" name="accountId" class="form-control form-control-sm"
+                                       style="max-width:180px;" list="family-keys"
+                                       placeholder="Move to family…"/>
+                                <button type="submit" class="btn-vici-outline btn-sm">Move</button>
+                            </form>
                         </li>
                     </ul>
 
