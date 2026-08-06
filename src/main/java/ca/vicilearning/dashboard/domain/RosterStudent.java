@@ -19,6 +19,11 @@ import java.time.LocalDateTime;
  * <p>{@code accountId} (the family key) is <b>staff-owned</b> — Brevo has no usable family field, so
  * new students arrive unassigned ({@code accountId == null}) and staff assign them on the Association
  * page (Sara's #1 feature). The sync preserves a staff-set {@code accountId} across runs.
+ *
+ * <p>{@code assignedTutor} (added Meeting 5 follow-up) is the primary-tutor source of truth from
+ * Brevo's ASSIGNED_TUTOR field — distinct from who taught any one SimplyBook session. A substitute
+ * tutor covering a single booking should not make a student show up as "theirs" in the tutor portal;
+ * only the Brevo-assigned primary tutor should.
  */
 @Entity
 @Table(name = "roster_students")
@@ -51,6 +56,12 @@ public class RosterStudent {
     // contacts by id (never email). Used to bootstrap the family for still-unassigned students.
     private Long brevoContactId;
 
+    // Primary tutor assignment from Brevo's ASSIGNED_TUTOR field on the student contact. This is
+    // the source of truth for "whose student is this" — distinct from who actually taught any one
+    // session (a substitute tutor's booking shouldn't make a student "theirs"). Nullable: some
+    // students may not have an assigned tutor set yet in Brevo.
+    private String assignedTutor;
+
     @Column(nullable = false)
     private LocalDateTime syncedAt;
 
@@ -77,6 +88,9 @@ public class RosterStudent {
 
     public Long getBrevoContactId() { return brevoContactId; }
     public void setBrevoContactId(Long brevoContactId) { this.brevoContactId = brevoContactId; }
+
+    public String getAssignedTutor() { return assignedTutor; }
+    public void setAssignedTutor(String assignedTutor) { this.assignedTutor = assignedTutor; }
 
     public LocalDateTime getSyncedAt() { return syncedAt; }
     public void setSyncedAt(LocalDateTime syncedAt) { this.syncedAt = syncedAt; }

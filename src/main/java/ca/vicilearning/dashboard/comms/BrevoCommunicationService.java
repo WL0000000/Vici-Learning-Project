@@ -55,7 +55,11 @@ public class BrevoCommunicationService {
         @JsonProperty("STUDENT_NAME") String studentName,
         @JsonProperty("FIRSTNAME") String firstName,
         @JsonProperty("LASTNAME") String lastName,
-        @JsonProperty("SMS") String sms
+        @JsonProperty("SMS") String sms,
+        // Primary assigned tutor for this student (Meeting 5 follow-up, confirmed on Vici's live
+        // Brevo). The reliable source for "whose student is this" — a substitute's session booking
+        // in SimplyBookMe shouldn't be confused with actual primary assignment.
+        @JsonProperty("ASSIGNED_TUTOR") String assignedTutor
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -104,12 +108,13 @@ public class BrevoCommunicationService {
     /**
      * A Brevo contact reduced to the roster fields: the unique {@code extId}, display {@code name},
      * optional {@code email}/{@code phone} (often missing), the raw {@code status} string from
-     * CONTACT_STATUS, and the Brevo numeric {@code contactId} (the key a family Company's
-     * linkedContactsIds reference). The sync maps {@code status} to
+     * CONTACT_STATUS, the Brevo numeric {@code contactId} (the key a family Company's
+     * linkedContactsIds reference), and {@code assignedTutor} — the primary tutor from Brevo's
+     * ASSIGNED_TUTOR field. The sync maps {@code status} to
      * {@link ca.vicilearning.dashboard.domain.StudentStatus}.
      */
     public record BrevoStudent(String extId, String name, String email, String phone, String status,
-                               Long contactId) {}
+                               Long contactId, String assignedTutor) {}
 
     private final RestClient brevoRestClient;
     private final int contactsPageSize;
@@ -181,7 +186,9 @@ public class BrevoCommunicationService {
                     contact.email(),
                     attrs.sms(),
                     firstValue(attrs.contactStatus()),
-                    contact.id()));
+                    contact.id(),
+                    attrs.assignedTutor() != null && !attrs.assignedTutor().isBlank()
+                            ? attrs.assignedTutor().trim() : null));
         }
         return students;
     }

@@ -2,6 +2,8 @@ package ca.vicilearning.dashboard.tutorportal;
 
 import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
+import ca.vicilearning.dashboard.domain.RosterStudent;
+import ca.vicilearning.dashboard.domain.RosterStudentRepository;
 import ca.vicilearning.dashboard.domain.Tutor;
 import ca.vicilearning.dashboard.domain.TutorRepository;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.UpcomingSession;
@@ -32,6 +34,14 @@ import java.util.Optional;
  * against Tutor.email (case-insensitive). If nothing matches, resolveTutor() returns
  * empty and the controllers show a "not linked yet" message instead of guessing.
  *
+ * "My Students" (myStudentSummaries) is deliberately sourced from RosterStudent.assignedTutor
+ * (Brevo's ASSIGNED_TUTOR field), NOT from booking history. Sara flagged onsite that deriving
+ * a tutor's roster from SimplyBook.me bookings is unreliable — a tutor who only substituted a
+ * single session for someone else's regular student would incorrectly show up as that student's
+ * tutor. ASSIGNED_TUTOR is the real primary-assignment source of truth; booking data is still
+ * used for hours/session counts, since that part (how much this tutor actually taught) was
+ * always correct.
+ *
  * Class-level @Transactional keeps the Hibernate session open for the full duration of
  * any single method call here, so lazy fields (Booking.student, Booking.service) resolve
  * safely. That only works within ONE method call though — if a controller fetches bookings
@@ -46,10 +56,13 @@ public class TutorPortalDataService {
 
     private final TutorRepository tutorRepo;
     private final BookingRepository bookingRepo;
+    private final RosterStudentRepository rosterStudentRepo;
 
-    public TutorPortalDataService(TutorRepository tutorRepo, BookingRepository bookingRepo) {
+    public TutorPortalDataService(TutorRepository tutorRepo, BookingRepository bookingRepo,
+                                   RosterStudentRepository rosterStudentRepo) {
         this.tutorRepo = tutorRepo;
         this.bookingRepo = bookingRepo;
+        this.rosterStudentRepo = rosterStudentRepo;
     }
 
     public Optional<Tutor> resolveTutor(String username) {
@@ -105,64 +118,109 @@ public class TutorPortalDataService {
     }
 
     /**
-     * Distinct students this tutor currently has upcoming sessions with, along with the
-     * "score" Sara asked for in Meeting 5: total historical session count with each student,
-     * and a rough consistency figure (average sessions per month since the first booking).
+     * This tutor's real assigned roster, from RosterStudent.assignedTutor (Brevo's ASSIGNED_TUTOR
+     * field) — matched against the tutor's name, since that's what Brevo stores in that field, not
+     * an email. Along with each student's contact info, includes the session-history "score" Sara
+     * asked for in Meeting 5: total historical bookings with each student and a rough consistency
+     * figure (average sessions per month since the first booking with them). Hours/sessions this
+     * week are still derived from actual SimplyBookMe bookings, since that reflects real work done.
      */
     public List<StudentSummary> myStudentSummaries(Tutor tutor) {
+        if (tutor.getName() == null || tutor.getName().isBlank()) {
+            return List.of();
+        }
+
+        List<RosterStudent> assigned = rosterStudentRepo
+                .findByDeletedAtIsNullAndAssignedTutorIgnoreCase(tutor.getName().trim());
+        if (assigned.isEmpty()) {
+            return List.of();
+        }
+
         LocalDate weekStart = weekStart(today());
+        LocalDate today = today();
+
+        // All of this tutor's non-cancelled bookings, so we can compute per-student session
+        // history/consistency even for students only linked by name via Brevo (not by a booking
+        // student_id match). Bookings are matched to a roster student by student name — the same
+        // "known limitation" the rest of this codebase already lives with, since SimplyBook and
+        // Brevo don't share a direct per-student id.
         List<Booking> allNonCancelled = bookingRepo.findByTutorId(tutor.getId()).stream()
                 .filter(b -> b.getDeletedAt() == null)
                 .filter(b -> !isCancelled(b))
                 .toList();
 
-        Map<Long, double[]> thisWeekByStudent = new LinkedHashMap<>(); // [hours, sessions]
+        Map<String, List<Booking>> bookingsByStudentName = new LinkedHashMap<>();
         for (Booking b : allNonCancelled) {
-            LocalDate d = b.getStartTime().toLocalDate();
-            if (!d.isBefore(weekStart) && d.isBefore(weekStart.plusDays(7))) {
-                double[] cell = thisWeekByStudent.computeIfAbsent(b.getStudent().getId(), k -> new double[]{0.0, 0.0});
-                cell[0] += hoursOf(b);
-                cell[1] += 1;
-            }
+            String name = b.getStudent() != null ? b.getStudent().getName() : null;
+            if (name == null || name.isBlank()) continue;
+            bookingsByStudentName.computeIfAbsent(name.trim().toLowerCase(), k -> new ArrayList<>()).add(b);
         }
 
-        Map<Long, List<Booking>> byStudent = new LinkedHashMap<>();
-        for (Booking b : allNonCancelled) {
-            byStudent.computeIfAbsent(b.getStudent().getId(), k -> new ArrayList<>()).add(b);
-        }
-
-        // "currently booked with" = has at least one non-cancelled booking today or later
-        LocalDate today = today();
         List<StudentSummary> out = new ArrayList<>();
-        for (var entry : byStudent.entrySet()) {
-            List<Booking> studentBookings = entry.getValue();
-            boolean hasUpcoming = studentBookings.stream()
-                    .anyMatch(b -> !b.getStartTime().toLocalDate().isBefore(today));
-            if (!hasUpcoming) continue;
+        for (RosterStudent student : assigned) {
+            List<Booking> studentBookings = bookingsByStudentName
+                    .getOrDefault(student.getName() == null ? "" : student.getName().trim().toLowerCase(), List.of());
 
-            var s = studentBookings.get(0).getStudent();
-            double[] cell = thisWeekByStudent.getOrDefault(entry.getKey(), new double[]{0.0, 0.0});
+            double weekHours = 0.0;
+            int weekSessions = 0;
+            for (Booking b : studentBookings) {
+                LocalDate d = b.getStartTime().toLocalDate();
+                if (!d.isBefore(weekStart) && d.isBefore(weekStart.plusDays(7))) {
+                    weekHours += hoursOf(b);
+                    weekSessions += 1;
+                }
+            }
 
-            LocalDate firstSession = studentBookings.stream()
-                    .map(b -> b.getStartTime().toLocalDate())
-                    .min(LocalDate::compareTo)
-                    .orElse(today);
-            long monthsActive = Math.max(1, ChronoUnit.MONTHS.between(firstSession, today));
-            double avgPerMonth = round1((double) studentBookings.size() / monthsActive);
+            int totalSessions = studentBookings.size();
+            double avgPerMonth = 0.0;
+            if (totalSessions > 0) {
+                LocalDate firstSession = studentBookings.stream()
+                        .map(b -> b.getStartTime().toLocalDate())
+                        .min(LocalDate::compareTo)
+                        .orElse(today);
+                long monthsActive = Math.max(1, ChronoUnit.MONTHS.between(firstSession, today));
+                avgPerMonth = round1((double) totalSessions / monthsActive);
+            }
 
             out.add(new StudentSummary(
-                    s.getId(), s.getName(), s.getEmail(), s.getPhone(),
-                    (int) cell[1], round1(cell[0]),
-                    studentBookings.size(), avgPerMonth));
+                    student.getExtId(), student.getName(), student.getEmail(), student.getPhone(),
+                    weekSessions, round1(weekHours), totalSessions, avgPerMonth));
         }
         return out;
     }
 
-    /** Average total (all-time) sessions per assigned student — Sara's "overall for the tutor" ask. */
-    public double avgSessionsPerStudent(Tutor tutor) {
+    /**
+     * Average total (all-time or period-filtered) sessions per assigned student — Sara's "overall
+     * for the tutor" ask, now filterable by period per her follow-up feedback ("proper data is
+     * more important than nice-to-have features" — this replaces the old all-time-only stat).
+     */
+    public double avgSessionsPerStudent(Tutor tutor, StatsPeriod period) {
         List<StudentSummary> summaries = myStudentSummaries(tutor);
         if (summaries.isEmpty()) return 0.0;
-        double totalSessions = summaries.stream().mapToInt(StudentSummary::totalSessions).sum();
+
+        if (period == StatsPeriod.ALL_TIME) {
+            double totalSessions = summaries.stream().mapToInt(StudentSummary::totalSessions).sum();
+            return round1(totalSessions / summaries.size());
+        }
+
+        LocalDate from = switch (period) {
+            case WEEK -> weekStart(today());
+            case MONTH -> today().withDayOfMonth(1);
+            default -> today(); // unreachable, ALL_TIME handled above
+        };
+
+        double totalSessions = 0;
+        for (StudentSummary s : summaries) {
+            List<Booking> studentBookings = bookingRepo.findByTutorId(tutor.getId()).stream()
+                    .filter(b -> b.getDeletedAt() == null)
+                    .filter(b -> !isCancelled(b))
+                    .filter(b -> b.getStudent() != null
+                            && s.name() != null
+                            && s.name().equalsIgnoreCase(b.getStudent().getName()))
+                    .filter(b -> !b.getStartTime().toLocalDate().isBefore(from))
+                    .toList();
+            totalSessions += studentBookings.size();
+        }
         return round1(totalSessions / summaries.size());
     }
 
@@ -208,8 +266,15 @@ public class TutorPortalDataService {
         return weekStart.format(fmt) + " - " + weekStart.plusDays(6).format(fmt);
     }
 
-    /** A tutor-portal-only student view: basic contact + the session history "score" Sara wants. */
-    public record StudentSummary(Long id, String name, String email, String phone,
+    /** Which window avgSessionsPerStudent should be computed over. */
+    public enum StatsPeriod { WEEK, MONTH, ALL_TIME }
+
+    /**
+     * A tutor-portal-only student view: basic contact + the session history "score" Sara wants.
+     * {@code id} is the roster student's EXT_ID (a String), not a database Long id, since this is
+     * now sourced from RosterStudent rather than the SimplyBook-side Student entity.
+     */
+    public record StudentSummary(String id, String name, String email, String phone,
                                   int sessionsThisWeek, double hoursThisWeek,
                                   int totalSessions, double avgSessionsPerMonth) {}
 
