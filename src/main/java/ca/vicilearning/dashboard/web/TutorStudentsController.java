@@ -28,6 +28,7 @@ public class TutorStudentsController {
         Tutor tutor = tutorOpt.get();
         model.addAttribute("tutorLinked", true);
         model.addAttribute("tutorName", tutor.getName());
+        // now sourced from RosterStudent.assignedTutor (Brevo), not booking-derived
         model.addAttribute("myStudents", data.myStudentSummaries(tutor));
 
         return "tutor-students";

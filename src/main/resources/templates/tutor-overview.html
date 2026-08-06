@@ -60,13 +60,31 @@
             </div>
         </div>
 
-        <!-- "overall for the tutor" stat Sara asked for in Meeting 5 -->
+        <!-- "overall for the tutor" stat Sara asked for in Meeting 5, now period-filterable per her
+             follow-up feedback ("proper data over nice-to-have"), instead of all-time only -->
         <div class="row g-3 mb-3">
-            <div class="col-6 col-md-4">
+            <div class="col-12 col-md-6">
                 <div class="stat-card" style="border-left-color: #c98a2b;">
-                    <div class="stat-label">Avg Sessions / Student</div>
-                    <div class="stat-val" th:text="${avgSessionsPerStudent}">0</div>
-                    <div class="stat-sub">all-time, per assigned student</div>
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="stat-label">Avg Sessions / Student</div>
+                            <div class="stat-val" th:text="${avgSessionsPerStudent}">0</div>
+                            <div class="stat-sub" th:text="${avgPeriod == 'week'} ? 'this week, per assigned student'
+                                                          : (${avgPeriod == 'month'} ? 'this month, per assigned student'
+                                                          : 'all-time, per assigned student')">—</div>
+                        </div>
+                        <div class="d-flex flex-column gap-1">
+                            <a th:href="@{/tutor-portal/overview(avgPeriod='week')}"
+                               th:class="${avgPeriod == 'week'} ? 'btn-vici' : 'btn-vici-outline'"
+                               style="text-decoration:none; font-size:11px; padding:3px 10px;">Week</a>
+                            <a th:href="@{/tutor-portal/overview(avgPeriod='month')}"
+                               th:class="${avgPeriod == 'month'} ? 'btn-vici' : 'btn-vici-outline'"
+                               style="text-decoration:none; font-size:11px; padding:3px 10px;">Month</a>
+                            <a th:href="@{/tutor-portal/overview(avgPeriod='all')}"
+                               th:class="${avgPeriod == 'all'} ? 'btn-vici' : 'btn-vici-outline'"
+                               style="text-decoration:none; font-size:11px; padding:3px 10px;">All-time</a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

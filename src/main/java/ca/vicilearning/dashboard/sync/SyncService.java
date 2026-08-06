@@ -363,6 +363,7 @@ public class SyncService {
             r.setEmail(bs.email());
             r.setPhone(bs.phone());
             r.setBrevoContactId(bs.contactId());
+            r.setAssignedTutor(bs.assignedTutor());
             StudentStatus status = StudentStatus.fromBrevo(bs.status());
             if (status != null) {
                 r.setStatus(status); // else keep default/existing (unrecognized upstream value)
