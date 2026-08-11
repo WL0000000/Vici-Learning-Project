@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.comms;
 
+import ca.vicilearning.dashboard.domain.NameNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -187,8 +188,7 @@ public class BrevoCommunicationService {
                     attrs.sms(),
                     firstValue(attrs.contactStatus()),
                     contact.id(),
-                    attrs.assignedTutor() != null && !attrs.assignedTutor().isBlank()
-                            ? attrs.assignedTutor().trim() : null));
+                    NameNormalizer.normalize(attrs.assignedTutor())));
         }
         return students;
     }

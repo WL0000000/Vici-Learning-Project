@@ -1,6 +1,7 @@
 package ca.vicilearning.dashboard.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnDefault;
 import java.time.LocalDateTime;
 
 @Entity
@@ -20,12 +21,19 @@ public class Tutor {
     @Column(nullable = false)
     private boolean active;
 
+    // Active/Inactive/Legacy — see TutorStatus. Recomputed each sync (Active/Inactive) except
+    // when already Legacy, which is a manual/sticky state the sync never overwrites.
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @ColumnDefault("'INACTIVE'")
+    private TutorStatus status = TutorStatus.INACTIVE;
+
     @Column(nullable = false)
     private LocalDateTime syncedAt;
 
-    // Soft-delete marker: set when a sync no longer finds this tutor upstream.
-    // null = still present in SimplyBook.me. Distinct from `active`, which mirrors
-    // the upstream visibility flag.
+    // Soft-delete marker, no longer set for tutors (see TutorStatus.LEGACY, used instead when a
+    // tutor disappears from SimplyBook.me so their record stays visible). Kept for schema/history
+    // compatibility and because other soft-deletable entities still share this shape.
     private LocalDateTime deletedAt;
 
     public Long getId() { return id; }
@@ -42,6 +50,9 @@ public class Tutor {
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+
+    public TutorStatus getStatus() { return status; }
+    public void setStatus(TutorStatus status) { this.status = status; }
 
     public LocalDateTime getSyncedAt() { return syncedAt; }
     public void setSyncedAt(LocalDateTime syncedAt) { this.syncedAt = syncedAt; }

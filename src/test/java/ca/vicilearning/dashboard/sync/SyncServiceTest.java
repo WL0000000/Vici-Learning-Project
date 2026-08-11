@@ -150,7 +150,7 @@ class SyncServiceTest {
     }
 
     @Test
-    void rowMissingUpstream_isSoftDeleted_whilePresentRowsAreUntouched() {
+    void rowMissingUpstream_isMarkedLegacy_whilePresentRowsAreUntouched() {
         Tutor live  = tutorWithId(1L);   // still returned by SimplyBook.me
         Tutor stale = tutorWithId(2L);   // in our DB but no longer upstream
 
@@ -167,8 +167,11 @@ class SyncServiceTest {
 
         SyncLog result = syncService.sync();
 
-        assertThat(stale.getDeletedAt()).isNotNull();   // gone upstream → soft-deleted
+        // Gone upstream → marked Legacy, never soft-deleted (kept on record per client request).
+        assertThat(stale.getStatus()).isEqualTo(TutorStatus.LEGACY);
+        assertThat(stale.getDeletedAt()).isNull();
         assertThat(live.getDeletedAt()).isNull();       // still present → left alone
+        assertThat(live.getStatus()).isEqualTo(TutorStatus.INACTIVE); // no roster assignment matched
         assertThat(result.getTutorsRemoved()).isEqualTo(1);
         assertThat(result.isSuccess()).isTrue();
     }

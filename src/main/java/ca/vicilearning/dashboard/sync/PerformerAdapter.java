@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.sync;
 
+import ca.vicilearning.dashboard.domain.NameNormalizer;
 import ca.vicilearning.dashboard.domain.Tutor;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Component;
@@ -25,7 +26,8 @@ public class PerformerAdapter {
 
         Tutor t = new Tutor();
         t.setId(id);
-        t.setName(node.path("name").asText("Unknown"));
+        String normalizedName = NameNormalizer.normalize(node.path("name").asText("Unknown"));
+        t.setName(normalizedName != null ? normalizedName : "Unknown");
         t.setEmail(AdapterUtils.blankToNull(node.path("email").asText(null)));
         t.setPhone(AdapterUtils.blankToNull(node.path("phone").asText(null)));
         t.setActive(AdapterUtils.parseBool(node.path("is_visible")));
