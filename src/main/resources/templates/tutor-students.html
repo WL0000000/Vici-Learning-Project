@@ -156,7 +156,10 @@
             </div>
 
             <div th:if="${#lists.isEmpty(myStudents)}" class="text-center text-muted" style="padding:24px;">
-                No students assigned yet.
+                <div th:text="'No students found for &quot;' + ${tutorName} + '&quot;.'">No students found.</div>
+                <div style="font-size:12px; margin-top:4px;">
+                    If this looks wrong, check that this name matches Brevo's ASSIGNED_TUTOR field exactly (case differences are fine, but the name itself must match).
+                </div>
             </div>
         </div>
 

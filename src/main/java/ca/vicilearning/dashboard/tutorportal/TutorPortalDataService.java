@@ -2,6 +2,7 @@ package ca.vicilearning.dashboard.tutorportal;
 
 import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
+import ca.vicilearning.dashboard.domain.NameNormalizer;
 import ca.vicilearning.dashboard.domain.RosterStudent;
 import ca.vicilearning.dashboard.domain.RosterStudentRepository;
 import ca.vicilearning.dashboard.domain.Tutor;
@@ -131,7 +132,7 @@ public class TutorPortalDataService {
         }
 
         List<RosterStudent> assigned = rosterStudentRepo
-                .findByDeletedAtIsNullAndAssignedTutorIgnoreCase(tutor.getName().trim());
+                .findByDeletedAtIsNullAndAssignedTutorIgnoreCase(NameNormalizer.normalize(tutor.getName()));
         if (assigned.isEmpty()) {
             return List.of();
         }

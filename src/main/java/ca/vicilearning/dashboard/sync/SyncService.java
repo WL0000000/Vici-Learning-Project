@@ -138,6 +138,10 @@ public class SyncService {
         // id, backlog-only). Runs right after the roster pull so contact ids are fresh; own step so a
         // Brevo Companies issue can't fail the roster or anything else.
         runStep("rosterFamilyLinks", this::syncRosterFamilyLinks, failures);
+        // Recomputes each tutor's Active/Inactive status from RosterStudent assignments. Runs
+        // after both tutors and roster students are synced, own step so a name-matching issue
+        // can't fail the rest of the sync.
+        runStep("tutorStatuses", this::syncTutorStatuses, failures);
         runStep("bookings", () -> syncBookings(entry), failures);
         // Runs after students so their rows exist; uses REST v2 (not JSON-RPC) for the
         // Account_ID custom field. Its own step so a REST outage can't fail booking sync.
@@ -193,11 +197,41 @@ public class SyncService {
     private void syncTutors(SyncLog entry) {
         List<Tutor> tutors = performerAdapter.toTutors(client.getPerformerList());
         tutorRepo.saveAll(tutors);
-        int removed = reconcileDeletions(
-                tutorRepo.findAll(), tutors,
-                Tutor::getId, Tutor::getDeletedAt, Tutor::setDeletedAt, tutorRepo);
+        int markedLegacy = markMissingTutorsLegacy(tutors);
         entry.setTutorsUpserted(tutors.size());
-        entry.setTutorsRemoved(removed);
+        entry.setTutorsRemoved(markedLegacy);
+    }
+
+    // Tutors missing from SimplyBook.me's performer list are marked Legacy rather than
+    // soft-deleted, so their record and history stay visible instead of disappearing.
+    // A tutor already Legacy (e.g. set manually) is left alone.
+    private int markMissingTutorsLegacy(List<Tutor> fetched) {
+        Set<Long> liveIds = fetched.stream().map(Tutor::getId).collect(Collectors.toSet());
+        List<Tutor> newlyMissing = tutorRepo.findAll().stream()
+                .filter(t -> !liveIds.contains(t.getId()))
+                .filter(t -> t.getStatus() != TutorStatus.LEGACY)
+                .toList();
+        newlyMissing.forEach(t -> t.setStatus(TutorStatus.LEGACY));
+        tutorRepo.saveAll(newlyMissing);
+        return newlyMissing.size();
+    }
+
+    // Recomputes Active/Inactive for every non-Legacy tutor from real RosterStudent assignments
+    // (Brevo's ASSIGNED_TUTOR matched against Tutor.name). Runs after both tutors and roster
+    // students are synced so both sides of the match are fresh. Legacy is a sticky manual/auto
+    // state this never overwrites.
+    private void syncTutorStatuses() {
+        List<Tutor> tutors = tutorRepo.findAll();
+        for (Tutor t : tutors) {
+            if (t.getStatus() == TutorStatus.LEGACY) {
+                continue;
+            }
+            String normalizedName = NameNormalizer.normalize(t.getName());
+            boolean hasAssignedStudents = normalizedName != null
+                    && !rosterStudentRepo.findByDeletedAtIsNullAndAssignedTutorIgnoreCase(normalizedName).isEmpty();
+            t.setStatus(hasAssignedStudents ? TutorStatus.ACTIVE : TutorStatus.INACTIVE);
+        }
+        tutorRepo.saveAll(tutors);
     }
 
     private void syncServices(SyncLog entry) {

@@ -161,6 +161,20 @@ class AdapterTest {
 
             assertThat(tutors.get(0).isActive()).isTrue();
         }
+
+        @Test
+        void collapsesInternalWhitespaceInName() throws Exception {
+            // SimplyBook.me names get compared against Brevo's ASSIGNED_TUTOR to build a tutor's
+            // roster (TutorPortalDataService); double spaces here would otherwise silently break
+            // that match even though IgnoreCase already handles casing.
+            JsonNode json = mapper.readTree("""
+                    {"1":{"id":"1","name":"Sara   Johnson","is_visible":"1"}}
+                    """);
+
+            List<Tutor> tutors = adapter.toTutors(json);
+
+            assertThat(tutors.get(0).getName()).isEqualTo("Sara Johnson");
+        }
     }
 
     // ── ServiceAdapter ────────────────────────────────────────────────────────
