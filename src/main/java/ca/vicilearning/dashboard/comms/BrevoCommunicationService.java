@@ -38,9 +38,10 @@ public class BrevoCommunicationService {
     public record BrevoAttributesNode(
         @JsonProperty("VICI_ACCOUNT_ID") String viciAccountId,
         @JsonProperty("STUDENT_NAMES") String studentNames,
-        // Enrolment status (ACTIVE/PAUSED) — distinct from ACTIVITY_STATUS, which drives lapse
-        // detection. Read per contact for the StudentStatus sync.
-        @JsonProperty("STUDENT_STATUS") String studentStatus,
+        // STUDENT_STATUS is intentionally NOT mapped. On Vici's live Brevo it is a list-typed
+        // (category) attribute that arrives as a JSON array, so binding it to a String made Jackson
+        // fail the WHOLE /contacts response and silently empty the roster. It is unused (the real
+        // Active/Paused comes from CONTACT_STATUS), so we let @JsonIgnoreProperties drop it.
         @JsonProperty("ACTIVITY_STATUS") String activityStatus,
         @JsonProperty("LAST_BOOKING_DATE") String lastBookingDate,
         // The per-student EXT_ID as a custom ATTRIBUTE. A live probe (2026-07-20) confirmed Brevo
