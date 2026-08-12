@@ -412,6 +412,17 @@ public class SyncService {
         }
         rosterStudentRepo.saveAll(upserted);
 
+        // Diagnostic (why the Active count can exceed Sara's "Active Students" segment): a blank or
+        // unrecognized CONTACT_STATUS maps to null and the student keeps the default ACTIVE. This logs
+        // the mapped breakdown plus how many defaulted, so a live sync shows whether an inflated Active
+        // count is real data or contacts missing CONTACT_STATUS. Log-only; does not change status.
+        Map<StudentStatus, Long> byStatus = upserted.stream()
+                .collect(Collectors.groupingBy(RosterStudent::getStatus, Collectors.counting()));
+        long defaultedStatus = fetched.stream()
+                .filter(bs -> StudentStatus.fromBrevo(bs.status()) == null).count();
+        log.info("Roster status breakdown: {} (blank/unrecognized CONTACT_STATUS defaulted to ACTIVE: {})",
+                byStatus, defaultedStatus);
+
         int removed = reconcileDeletions(
                 rosterStudentRepo.findAll(), upserted,
                 RosterStudent::getExtId, RosterStudent::getDeletedAt, RosterStudent::setDeletedAt,
