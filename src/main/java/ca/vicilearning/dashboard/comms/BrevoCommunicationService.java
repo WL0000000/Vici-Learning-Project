@@ -169,6 +169,8 @@ public class BrevoCommunicationService {
      */
     public List<BrevoStudent> fetchStudents() {
         List<BrevoStudent> students = new ArrayList<>();
+        int studentContacts = 0;
+        List<String> skippedNoExtId = new ArrayList<>();
         for (BrevoContactNode contact : fetchAllContacts()) {
             BrevoAttributesNode attrs = contact.attributes();
             if (attrs == null) {
@@ -177,10 +179,15 @@ public class BrevoCommunicationService {
             if (!studentContactType.equalsIgnoreCase(firstValue(attrs.contactType()))) {
                 continue; // not a student contact
             }
+            studentContacts++;
             String extId = (attrs.extIdAttribute() != null && !attrs.extIdAttribute().isBlank())
                     ? attrs.extIdAttribute() : contact.extId();
             if (extId == null || extId.isBlank()) {
-                continue; // no unique key
+                // Keyed by EXT_ID, so a blank one can't enter the roster. Name the contact so staff
+                // can fill its EXT_ID in Brevo (this is why the roster count trails the segment).
+                skippedNoExtId.add(contact.email() != null && !contact.email().isBlank()
+                        ? contact.email() : ("contactId=" + contact.id()));
+                continue;
             }
             students.add(new BrevoStudent(
                     extId.trim(),
@@ -190,6 +197,13 @@ public class BrevoCommunicationService {
                     firstValue(attrs.contactStatus()),
                     contact.id(),
                     NameNormalizer.normalize(attrs.assignedTutor())));
+        }
+        if (!skippedNoExtId.isEmpty()) {
+            log.warn("Roster: {} of {} CONTACT_TYPE={} contacts have no EXT_ID and were skipped "
+                    + "(add an EXT_ID in Brevo so they appear): {}",
+                    skippedNoExtId.size(), studentContacts, studentContactType, skippedNoExtId);
+        } else {
+            log.info("Roster: {} student contacts, all with an EXT_ID.", studentContacts);
         }
         return students;
     }
