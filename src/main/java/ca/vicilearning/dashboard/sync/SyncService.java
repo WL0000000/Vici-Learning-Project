@@ -398,10 +398,12 @@ public class SyncService {
             r.setPhone(bs.phone());
             r.setBrevoContactId(bs.contactId());
             r.setAssignedTutor(bs.assignedTutor());
+            // Brevo is authoritative for status. A blank or unrecognized CONTACT_STATUS maps to
+            // BLANK (its own bucket) rather than silently defaulting to ACTIVE, so the Active count
+            // matches Sara's "Active Students" segment. She fills the real value and the next sync
+            // reclassifies the student.
             StudentStatus status = StudentStatus.fromBrevo(bs.status());
-            if (status != null) {
-                r.setStatus(status); // else keep default/existing (unrecognized upstream value)
-            }
+            r.setStatus(status != null ? status : StudentStatus.BLANK);
             String knownAccount = knownAccountIds.get(bs.extId());
             if (knownAccount != null) {
                 r.setAccountId(knownAccount);
@@ -412,16 +414,15 @@ public class SyncService {
         }
         rosterStudentRepo.saveAll(upserted);
 
-        // Diagnostic (why the Active count can exceed Sara's "Active Students" segment): a blank or
-        // unrecognized CONTACT_STATUS maps to null and the student keeps the default ACTIVE. This logs
-        // the mapped breakdown plus how many defaulted, so a live sync shows whether an inflated Active
-        // count is real data or contacts missing CONTACT_STATUS. Log-only; does not change status.
+        // Diagnostic: the mapped status breakdown plus how many contacts had a blank/unrecognized
+        // CONTACT_STATUS (now bucketed as BLANK, not ACTIVE), so a live sync shows how many students
+        // Sara still needs to set a status on. Log-only.
         Map<StudentStatus, Long> byStatus = upserted.stream()
                 .collect(Collectors.groupingBy(RosterStudent::getStatus, Collectors.counting()));
-        long defaultedStatus = fetched.stream()
+        long blankStatus = fetched.stream()
                 .filter(bs -> StudentStatus.fromBrevo(bs.status()) == null).count();
-        log.info("Roster status breakdown: {} (blank/unrecognized CONTACT_STATUS defaulted to ACTIVE: {})",
-                byStatus, defaultedStatus);
+        log.info("Roster status breakdown: {} (blank/unrecognized CONTACT_STATUS bucketed as BLANK: {})",
+                byStatus, blankStatus);
 
         int removed = reconcileDeletions(
                 rosterStudentRepo.findAll(), upserted,

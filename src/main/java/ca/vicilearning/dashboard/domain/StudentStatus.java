@@ -10,16 +10,20 @@ package ca.vicilearning.dashboard.domain;
  *   <li>{@code PAUSED} — temporarily not enrolled (e.g. a break), still on the books.</li>
  *   <li>{@code DROPPED} — left; no longer a student.</li>
  *   <li>{@code COMPLETED} — finished their programme.</li>
+ *   <li>{@code BLANK} — Brevo's CONTACT_STATUS is empty or unrecognized. Its own bucket (filterable
+ *       on the roster) so these students are NOT silently counted as ACTIVE. Sara fills the real
+ *       value in Brevo and the next sync reclassifies them.</li>
  * </ul>
  *
- * <p>ACTIVE + PAUSED are the "current" roster; DROPPED + COMPLETED are past students (filtered out
- * of the current view by default). Distinct from the computed "lapsed" concept (booking recency).
+ * <p>ACTIVE + PAUSED are the "current" roster; DROPPED + COMPLETED are past students; BLANK is
+ * "status not set yet". Distinct from the computed "lapsed" concept (booking recency).
  */
 public enum StudentStatus {
     ACTIVE,
     PAUSED,
     DROPPED,
-    COMPLETED;
+    COMPLETED,
+    BLANK;
 
     /** True for statuses that count as a current student (shown on the default roster). */
     public boolean isCurrent() {
