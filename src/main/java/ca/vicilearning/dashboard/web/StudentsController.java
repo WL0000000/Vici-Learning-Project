@@ -5,13 +5,9 @@ import ca.vicilearning.dashboard.domain.StudentStatus;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.ServiceScope;
-import ca.vicilearning.dashboard.student.StudentStatusService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.LocalDate;
@@ -33,13 +29,10 @@ import java.util.Map;
 public class StudentsController {
 
     private final DashboardMetricsService metrics;
-    private final StudentStatusService studentStatus;
     private final AssociationService associations;
 
-    public StudentsController(DashboardMetricsService metrics, StudentStatusService studentStatus,
-                              AssociationService associations) {
+    public StudentsController(DashboardMetricsService metrics, AssociationService associations) {
         this.metrics = metrics;
-        this.studentStatus = studentStatus;
         this.associations = associations;
     }
 
@@ -175,35 +168,6 @@ public class StudentsController {
         model.addAttribute("students", rows);
         model.addAttribute("upcoming", metrics.upcoming(10, scope));
         return "students";
-    }
-
-    /**
-     * Set a roster student's status by EXT_ID (ADMIN/STAFF — the whole {@code /students} area is gated
-     * to those roles in {@code SecurityConfig}). A local override on the Brevo roster (see
-     * {@code StudentStatusService}). Redirects back to the students page the edit came from so the
-     * current period/location/category/status filters are preserved.
-     */
-    @PostMapping("/students/{extId}/status")
-    public String updateStatus(@PathVariable String extId,
-                               @RequestParam String status,
-                               @RequestHeader(value = "Referer", required = false) String referer) {
-        studentStatus.setStatus(extId, status);
-        return "redirect:" + backToStudents(referer);
-    }
-
-    /**
-     * The students URL to return to after an edit: the path+query of the Referer (so filters are
-     * kept), reduced to a same-origin relative path to avoid an open redirect; falls back to the
-     * bare {@code /students} when there's no usable Referer.
-     */
-    private static String backToStudents(String referer) {
-        if (referer != null) {
-            int i = referer.indexOf("/students");
-            if (i >= 0) {
-                return referer.substring(i);
-            }
-        }
-        return "/students";
     }
 
     private static String blankToNull(String s) {
