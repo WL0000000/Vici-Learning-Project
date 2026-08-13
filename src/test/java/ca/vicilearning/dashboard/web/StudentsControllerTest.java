@@ -5,7 +5,6 @@ import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.PeriodUnit;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService.StudentRow;
 import ca.vicilearning.dashboard.domain.StudentStatus;
-import ca.vicilearning.dashboard.student.StudentStatusService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -19,12 +18,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Collections;
 
 import static org.hamcrest.Matchers.containsString;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -36,9 +31,6 @@ class StudentsControllerTest {
 
     @MockitoBean
     private DashboardMetricsService metrics;
-
-    @MockitoBean
-    private StudentStatusService studentStatus;
 
     @MockitoBean
     private AssociationService associations;
@@ -73,33 +65,6 @@ class StudentsControllerTest {
     void studentsPageRedirectsIfNotLoggedIn() throws Exception {
         mockMvc.perform(get("/students"))
                 .andExpect(status().is3xxRedirection());
-    }
-
-    @Test
-    @WithMockUser(roles = "ADMIN")
-    void adminCanUpdateStatus() throws Exception {
-        mockMvc.perform(post("/students/EXT-5/status").param("status", "PAUSED").with(csrf()))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/students"));
-        verify(studentStatus).setStatus("EXT-5", "PAUSED");
-    }
-
-    @Test
-    @WithMockUser(roles = "STAFF")
-    void staffCanUpdateStatus() throws Exception {
-        mockMvc.perform(post("/students/EXT-7/status").param("status", "ACTIVE").with(csrf()))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/students"));
-        verify(studentStatus).setStatus("EXT-7", "ACTIVE");
-    }
-
-    @Test
-    @WithMockUser(roles = "TUTOR")
-    void tutorCannotUpdateStatus() throws Exception {
-        // The status endpoint is admin-only; a tutor POST is rejected and never reaches the service.
-        mockMvc.perform(post("/students/5/status").param("status", "PAUSED").with(csrf()))
-                .andExpect(status().isForbidden());
-        verifyNoInteractions(studentStatus);
     }
 
     @Test

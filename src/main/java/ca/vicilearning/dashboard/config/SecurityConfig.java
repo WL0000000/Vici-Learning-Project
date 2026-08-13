@@ -25,8 +25,7 @@ public class SecurityConfig {
                 .requestMatchers("/login", "/register", "/css/**", "/js/**").permitAll()
                 .requestMatchers("/admin/users/**").hasRole("ADMIN")
                 .requestMatchers("/sync/**", "/comms/**").hasAnyRole("ADMIN", "STAFF")
-                // Everything under /students — including POST /students/{id}/status (the enrolment
-                // ACTIVE/PAUSED toggle) — is ADMIN/STAFF; tutors are redirected to their own portal.
+                // Everything under /students is ADMIN/STAFF; tutors are redirected to their own portal.
                 .requestMatchers("/", "/students/**", "/api/notion/**", "/associations/**")
                     .hasAnyRole("ADMIN", "STAFF")
                 .requestMatchers("/tutor-portal/**").hasAnyRole("ADMIN", "STAFF", "TUTOR")

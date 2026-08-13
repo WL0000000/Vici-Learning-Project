@@ -928,7 +928,7 @@ public class DashboardMetricsService {
     public record TutorHours(String tutorName, double hours, int sessions) {}
 
     /**
-     * One roster student: {@code id} is the EXT_ID (the toggle/edit key), plus identity/family/status.
+     * One roster student: {@code id} is the EXT_ID, plus identity/family/status.
      * {@code weeklyHours}/{@code weeklySessions} are this week's booked totals for the student's family
      * (null when unassigned). {@code hoursPerStudent} is true only when the family has a single roster
      * student, so those totals are unambiguously this student's; false means the total is shared across
