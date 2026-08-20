@@ -166,6 +166,8 @@ public class BrevoCommunicationService {
      */
     public List<BrevoStudent> fetchStudents() {
         List<BrevoStudent> students = new ArrayList<>();
+        int studentContacts = 0;
+        List<String> skippedNoExtId = new ArrayList<>();
         for (BrevoContactNode contact : fetchAllContacts()) {
             BrevoAttributesNode attrs = contact.attributes();
             if (attrs == null) {
@@ -174,10 +176,15 @@ public class BrevoCommunicationService {
             if (!studentContactType.equalsIgnoreCase(firstValue(attrs.contactType()))) {
                 continue; // not a student contact
             }
+            studentContacts++;
             String extId = (attrs.extIdAttribute() != null && !attrs.extIdAttribute().isBlank())
                     ? attrs.extIdAttribute() : contact.extId();
             if (extId == null || extId.isBlank()) {
-                continue; // no unique key
+                // Keyed by EXT_ID, so a blank one can't enter the roster. Name the contact so staff
+                // can fill its EXT_ID in Brevo (this is why the roster count trails the segment).
+                skippedNoExtId.add(contact.email() != null && !contact.email().isBlank()
+                        ? contact.email() : ("contactId=" + contact.id()));
+                continue;
             }
             students.add(new BrevoStudent(
                     extId.trim(),
@@ -187,6 +194,13 @@ public class BrevoCommunicationService {
                     firstValue(attrs.contactStatus()),
                     contact.id(),
                     NameNormalizer.normalize(attrs.assignedTutor())));
+        }
+        if (!skippedNoExtId.isEmpty()) {
+            log.warn("Roster: {} of {} CONTACT_TYPE={} contacts have no EXT_ID and were skipped "
+                    + "(add an EXT_ID in Brevo so they appear): {}",
+                    skippedNoExtId.size(), studentContacts, studentContactType, skippedNoExtId);
+        } else {
+            log.info("Roster: {} student contacts, all with an EXT_ID.", studentContacts);
         }
         return students;
     }
@@ -284,35 +298,6 @@ public class BrevoCommunicationService {
             log.info("Attributes successfully synchronized on Brevo container for: {}", parentEmail);
         } catch (Exception e) {
             log.error("Failed adjusting system configuration node for: {}", parentEmail, e);
-        }
-    }
-
-    /**
-     * Writes a student's enrolment status back to Brevo's {@code CONTACT_STATUS} attribute, keyed by
-     * <b>EXT_ID</b> ({@code identifierType=ext_id}) — the correct per-student key (email is unreliable).
-     * Callers gate this behind config ({@code brevo.status-writeback-enabled}, off by default) until the
-     * Brevo <i>read</i> is verified against Vici's live account, since writing on a misread would corrupt
-     * her CRM.
-     *
-     * <p><b>Format caveat:</b> {@code CONTACT_STATUS} is a list/category attribute and the exact write
-     * payload could not be verified with the API keys revoked. This sends the plain category value and
-     * logs the outcome — verify (and adjust the payload shape if needed) on the first live key window
-     * before enabling the flag.
-     */
-    public void updateContactStatusByExtId(String extId, String contactStatusValue) {
-        if (extId == null || extId.isBlank() || contactStatusValue == null || contactStatusValue.isBlank()) {
-            return;
-        }
-        try {
-            Map<String, Object> body = Map.of("attributes", Map.of("CONTACT_STATUS", contactStatusValue));
-            brevoRestClient.put()
-                    .uri("/contacts/{identifier}?identifierType=ext_id", extId.trim())
-                    .body(body)
-                    .retrieve()
-                    .toBodilessEntity();
-            log.info("CONTACT_STATUS '{}' written back to Brevo for EXT_ID {}", contactStatusValue, extId);
-        } catch (Exception e) {
-            log.error("Failed writing CONTACT_STATUS back to Brevo for EXT_ID {}", extId, e);
         }
     }
 

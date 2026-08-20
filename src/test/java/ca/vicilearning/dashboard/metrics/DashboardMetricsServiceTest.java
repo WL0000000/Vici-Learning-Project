@@ -70,7 +70,8 @@ class DashboardMetricsServiceTest {
                 booking(1, null, "confirmed", now, 60),
                 booking(2, null, "confirmed", now, 120),
                 booking(3, null, "cancelled", now, 60)));
-        // "Active students" is the CURRENT (ACTIVE+PAUSED) count on the Brevo roster; DROPPED excluded.
+        // "Active students" is strictly CONTACT_STATUS=Active on the Brevo roster (matches Sara's
+        // "Active Students" segment); PAUSED and DROPPED are both excluded.
         RosterStudent active = rosterStudent("E1", "A", "f");
         RosterStudent paused = rosterStudent("E2", "B", "f");
         paused.setStatus(StudentStatus.PAUSED);
@@ -80,7 +81,7 @@ class DashboardMetricsServiceTest {
 
         DashboardMetricsService.Overview o = service.overview();
 
-        assertThat(o.activeStudents()).isEqualTo(2L);   // ACTIVE + PAUSED current; DROPPED not counted
+        assertThat(o.activeStudents()).isEqualTo(1L);   // strictly ACTIVE; PAUSED + DROPPED excluded
         assertThat(o.sessionsThisWeek()).isEqualTo(2);
         assertThat(o.hoursThisWeek()).isEqualTo(3.0);
         // Same stubbed list is used for the month query → one cancelled booking.

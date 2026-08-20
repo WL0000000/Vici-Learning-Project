@@ -189,11 +189,12 @@ public class DashboardMetricsService {
         long cancellations = activeBetween(monthStart, monthStart.plusMonths(1)).stream()
                 .filter(b -> isCancelled(b) && matches(b, scope)).count();
 
-        // "Active students" = current (ACTIVE/PAUSED) students on the Brevo roster — the real count,
-        // not the SimplyBook client list (which has duplicates/old accounts). Scope (a booking filter)
-        // doesn't apply to the roster, so it always reflects the whole roster.
+        // "Active students" = strictly CONTACT_STATUS=Active on the Brevo roster, to match Sara's
+        // "Active Students" segment. Counting current (ACTIVE+PAUSED) inflated this card massively
+        // (Paused is the biggest group), so the card read ~81 vs her segment's ~16. Scope (a booking
+        // filter) doesn't apply to the roster, so it always reflects the whole roster.
         long activeStudents = rosterStudentRepo.findByDeletedAtIsNull().stream()
-                .filter(r -> r.getStatus().isCurrent())
+                .filter(r -> r.getStatus() == StudentStatus.ACTIVE)
                 .count();
 
         return new Overview(activeStudents, sessions, round1(hours), (int) cancellations);
@@ -927,7 +928,7 @@ public class DashboardMetricsService {
     public record TutorHours(String tutorName, double hours, int sessions) {}
 
     /**
-     * One roster student: {@code id} is the EXT_ID (the toggle/edit key), plus identity/family/status.
+     * One roster student: {@code id} is the EXT_ID, plus identity/family/status.
      * {@code weeklyHours}/{@code weeklySessions} are this week's booked totals for the student's family
      * (null when unassigned). {@code hoursPerStudent} is true only when the family has a single roster
      * student, so those totals are unambiguously this student's; false means the total is shared across
