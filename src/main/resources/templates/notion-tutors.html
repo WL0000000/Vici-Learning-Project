@@ -145,7 +145,27 @@
                             <dl>
                                 <div><dt>Bio</dt><dd><textarea class="notion-edit-textarea" name="oneSentenceBio" rows="2" th:text="${tutor.oneSentenceBio}" placeholder="-"></textarea></dd></div>
                                 <div><dt>Languages</dt><dd><input class="notion-edit-input" type="text" name="languages" th:value="${tutor.languages}" placeholder="-"></dd></div>
-                                <div><dt>Subjects</dt><dd><input class="notion-edit-input" type="text" name="subjects" th:value="${tutor.subjects}" placeholder="-"></dd></div>
+                                <div>
+                                    <dt>Subjects</dt>
+                                    <dd>
+                                        <span th:if="${#strings.isEmpty(tutor.subjects)}">-</span>
+                                        <div class="notion-subjects" th:unless="${#strings.isEmpty(tutor.subjects)}"
+                                             th:with="subjectArr=${#strings.arraySplit(tutor.subjects, ',')}">
+                                            <span th:text="${#strings.trim(subjectArr[0])}">Math</span>
+                                            <div class="dropdown notion-subjects-more" th:if="${#arrays.length(subjectArr) > 1}">
+                                                <span class="notion-subjects-badge" role="button" tabindex="0"
+                                                      data-bs-toggle="dropdown" aria-expanded="false"
+                                                      th:text="'+' + (${#arrays.length(subjectArr) - 1})">+2</span>
+                                                <ul class="dropdown-menu notion-subjects-menu">
+                                                    <li th:each="subject : ${subjectArr}">
+                                                        <span class="dropdown-item-text" th:text="${#strings.trim(subject)}">Subject</span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        <div class="notion-subjects-hint">Edit subjects in Notion</div>
+                                    </dd>
+                                </div>
                                 <div><dt>At-Home</dt><dd><input class="notion-edit-input" type="text" name="atHomeTutoring" th:value="${tutor.atHomeTutoring}" placeholder="-"></dd></div>
                                 <div><dt>Centre</dt><dd><input class="notion-edit-input" type="text" name="centreTutoring" th:value="${tutor.centreTutoring}" placeholder="-"></dd></div>
                                 <div><dt>Virtual</dt><dd><input class="notion-edit-input" type="text" name="virtualTutoring" th:value="${tutor.virtualTutoring}" placeholder="-"></dd></div>

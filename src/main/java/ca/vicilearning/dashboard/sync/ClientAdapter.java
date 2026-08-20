@@ -1,18 +1,18 @@
 package ca.vicilearning.dashboard.sync;
 
+import ca.vicilearning.dashboard.domain.AppClock;
 import ca.vicilearning.dashboard.domain.Student;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 @Component
 public class ClientAdapter {
 
     public List<Student> toStudents(JsonNode result) {
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(AppClock.ZONE);
         return AdapterUtils.asList(result).stream()
                 .map(node -> toStudent(node, now))
                 .filter(s -> s != null)

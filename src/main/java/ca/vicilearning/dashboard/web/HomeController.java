@@ -1,6 +1,7 @@
 package ca.vicilearning.dashboard.web;
 
 import ca.vicilearning.dashboard.auth.AppUserRepository;
+import ca.vicilearning.dashboard.domain.AppClock;
 import ca.vicilearning.dashboard.domain.SyncLog;
 import ca.vicilearning.dashboard.domain.SyncLogRepository;
 import ca.vicilearning.dashboard.metrics.DashboardMetricsService;
@@ -10,7 +11,6 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -39,7 +39,7 @@ public class HomeController {
         List<SyncLog> logs = syncLogRepo.findByOrderByStartedAtDesc(PageRequest.of(0, 1));
         SyncLog last = logs.isEmpty() ? null : logs.get(0);
         Long minutesAgo = last == null ? null
-                : ChronoUnit.MINUTES.between(last.getStartedAt(), LocalDateTime.now(ZoneOffset.UTC));
+                : ChronoUnit.MINUTES.between(last.getStartedAt(), LocalDateTime.now(AppClock.ZONE));
         model.addAttribute("minutesAgo", minutesAgo);
 
         // banner shown only to ADMIN via sec:authorize in the template, harmless to compute for everyone

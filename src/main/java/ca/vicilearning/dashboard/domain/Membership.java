@@ -61,6 +61,10 @@ public class Membership {
     // null = still present in SimplyBook.me.
     private LocalDateTime deletedAt;
 
+    // When the renewal reminder was last sent for this membership, so we don't re-email the
+    // family every time someone opens the Automations page while the balance stays low.
+    private LocalDateTime lastRenewalReminderSentAt;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -99,4 +103,7 @@ public class Membership {
 
     public LocalDateTime getDeletedAt() { return deletedAt; }
     public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
+
+    public LocalDateTime getLastRenewalReminderSentAt() { return lastRenewalReminderSentAt; }
+    public void setLastRenewalReminderSentAt(LocalDateTime lastRenewalReminderSentAt) { this.lastRenewalReminderSentAt = lastRenewalReminderSentAt; }
 }

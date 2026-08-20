@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.association;
 
+import ca.vicilearning.dashboard.domain.AppClock;
 import ca.vicilearning.dashboard.domain.FamilyAssociation;
 import ca.vicilearning.dashboard.domain.FamilyAssociationRepository;
 import ca.vicilearning.dashboard.domain.RosterStudent;
@@ -9,7 +10,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -172,7 +172,7 @@ public class AssociationService {
         FamilyAssociation fam = getOrCreateFamily(accountId.trim());
         fam.setName(blankToNull(name));
         fam.setNotes(blankToNull(notes));
-        fam.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        fam.setUpdatedAt(LocalDateTime.now(AppClock.ZONE));
         familyRepo.save(fam);
     }
 
@@ -266,7 +266,7 @@ public class AssociationService {
     private FamilyAssociation createFamily(String accountId) {
         FamilyAssociation fam = new FamilyAssociation();
         fam.setAccountId(accountId);
-        fam.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        fam.setCreatedAt(LocalDateTime.now(AppClock.ZONE));
         return familyRepo.save(fam);
     }
 
@@ -296,7 +296,7 @@ public class AssociationService {
         if (isBlank(newFam.getNotes())) {
             newFam.setNotes(oldFam.getNotes());
         }
-        newFam.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        newFam.setUpdatedAt(LocalDateTime.now(AppClock.ZONE));
         familyRepo.save(newFam);
         familyRepo.delete(oldFam);
     }

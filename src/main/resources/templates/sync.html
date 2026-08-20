@@ -39,13 +39,13 @@
                         <div class="sync-text">All systems synced</div>
                         <div class="sync-sub">
                             Last synced <strong th:text="${minutesAgo}">0</strong> min ago
-                            · <span th:text="${#temporals.format(lastSync.startedAt, 'yyyy-MM-dd HH:mm')}">time</span> UTC
+                            · <span th:text="${#temporals.format(lastSync.startedAt, 'yyyy-MM-dd HH:mm')}">time</span> PT
                         </div>
                     </div>
                     <div th:if="${lastSync != null && !lastSync.success}">
                         <div class="sync-text" style="color: var(--vici-red);">Last sync failed</div>
                         <div class="sync-sub">
-                            Failed at <span th:text="${#temporals.format(lastSync.startedAt, 'yyyy-MM-dd HH:mm')}">time</span> UTC
+                            Failed at <span th:text="${#temporals.format(lastSync.startedAt, 'yyyy-MM-dd HH:mm')}">time</span> PT
                         </div>
                     </div>
                 </div>
@@ -117,7 +117,7 @@
                 <table class="table sessions-table mb-0">
                     <thead>
                         <tr>
-                            <th scope="col">Started (UTC)</th>
+                            <th scope="col">Started (PT)</th>
                             <th scope="col">Finished</th>
                             <th scope="col">Status</th>
                             <th scope="col" class="text-end">Students</th>

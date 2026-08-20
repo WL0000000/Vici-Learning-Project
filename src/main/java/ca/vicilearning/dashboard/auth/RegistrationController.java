@@ -19,8 +19,16 @@ public class RegistrationController {
     @Value("${ADMIN_NOTIFICATION_EMAIL:}")
     private String adminNotificationEmail;
 
-    @Value("${BREVO_TUTOR_APPROVAL_TEMPLATE_ID:0}")
-    private long tutorApprovalTemplateId;
+    // String, not long, on purpose: @Value's ":0" default only applies when the key's missing
+    // entirely, not when it's present but blank like the .env.example placeholder, which throws
+    // trying to convert "" to a long.
+    @Value("${BREVO_TUTOR_APPROVAL_TEMPLATE_ID:}")
+    private String tutorApprovalTemplateIdRaw;
+
+    private long tutorApprovalTemplateId() {
+        return (tutorApprovalTemplateIdRaw == null || tutorApprovalTemplateIdRaw.isBlank())
+                ? 0L : Long.parseLong(tutorApprovalTemplateIdRaw.trim());
+    }
 
     public RegistrationController(AppUserService users, BrevoCommunicationService brevo) {
         this.users = users;
@@ -62,7 +70,7 @@ public class RegistrationController {
 
         // Senior tutors get auto-approved via Notion and can sign in right away
         if (result.pendingApproval()) {
-            brevo.notifyAdminOfPendingTutor(adminNotificationEmail, tutorApprovalTemplateId, username);
+            brevo.notifyAdminOfPendingTutor(adminNotificationEmail, tutorApprovalTemplateId(), username);
             return "redirect:/login?pending";
         }
         return "redirect:/login?registered";

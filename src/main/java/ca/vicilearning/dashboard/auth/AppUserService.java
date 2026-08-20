@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.auth;
 
+import ca.vicilearning.dashboard.domain.AppClock;
 import ca.vicilearning.dashboard.notion.NotionService;
 import ca.vicilearning.dashboard.notion.NotionTutor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -11,7 +12,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 @Service
@@ -64,7 +64,7 @@ public class AppUserService implements UserDetailsService {
         user.setPassword(encoder.encode(rawPassword));
         user.setRole(role);
         user.setApproved(approved);
-        user.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        user.setCreatedAt(LocalDateTime.now(AppClock.ZONE));
         return repo.save(user);
     }
 

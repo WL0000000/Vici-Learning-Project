@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.web;
 
+import ca.vicilearning.dashboard.comms.AutomationsQueueService;
 import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
 import ca.vicilearning.dashboard.domain.AlertStudent;
 import ca.vicilearning.dashboard.domain.AlertStudentRepository;
@@ -8,6 +9,7 @@ import ca.vicilearning.dashboard.domain.StudentRepository;
 import ca.vicilearning.dashboard.sync.BrevoSyncEngineService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -26,7 +28,9 @@ public class BrevoController {
     private static final Logger log = LoggerFactory.getLogger(BrevoController.class);
 
     // Business Logic Constants
-    private static final String NOT_FOUND_FALLBACK = "Not Found in Brevo";
+    // Shown when Student.email is blank in SimplyBook.me itself, not a Brevo lookup failure.
+    // This page doesn't look up Brevo for email at all anymore, see AlertStudent.email above.
+    private static final String NOT_FOUND_FALLBACK = "No email on file";
     private static final String STATUS_ACTIVE = "Active";
     private static final String STATUS_LAPSED = "Lapsed";
     
@@ -46,6 +50,30 @@ public class BrevoController {
     private final AlertStudentRepository alertStudentRepository;
     private final StudentRepository studentRepository;
     private final BrevoSyncEngineService syncEngineService;
+    private final AutomationsQueueService queueService;
+
+    // Template IDs for the newer email types, need to be created in Sara's Brevo account first.
+    // Bound as String, not long: Spring's @Value("...:0") default only kicks in when the key is
+    // missing entirely, and .env.example ships these blank (present but empty), which would throw
+    // trying to parse "" as a long. parseTemplateId() handles both cases and just returns 0. Each
+    // payment reminder tier gets its own template since the tone should be different for a
+    // 2-week nudge vs a same-day warning.
+    @Value("${BREVO_RENEWAL_REMINDER_TEMPLATE_ID:}")
+    private String renewalReminderTemplateIdRaw;
+
+    @Value("${BREVO_PAYMENT_REMINDER_2WK_TEMPLATE_ID:}")
+    private String paymentReminder2wkTemplateIdRaw;
+
+    @Value("${BREVO_PAYMENT_REMINDER_72H_TEMPLATE_ID:}")
+    private String paymentReminder72hTemplateIdRaw;
+
+    @Value("${BREVO_PAYMENT_REMINDER_12H_TEMPLATE_ID:}")
+    private String paymentReminder12hTemplateIdRaw;
+
+    /** Blank or unset resolves to 0 ("not configured"); anything else must parse as a valid id. */
+    private long parseTemplateId(String raw) {
+        return (raw == null || raw.isBlank()) ? 0L : Long.parseLong(raw.trim());
+    }
 
     /**
      * DTO projection mapping data parameters out to the view layout table.
@@ -59,14 +87,16 @@ public class BrevoController {
         String parentEmail
     ) {}
 
-    public BrevoController(BrevoCommunicationService communicationService, 
+    public BrevoController(BrevoCommunicationService communicationService,
                            AlertStudentRepository alertStudentRepository,
                            StudentRepository studentRepository,
-                           BrevoSyncEngineService syncEngineService) {
+                           BrevoSyncEngineService syncEngineService,
+                           AutomationsQueueService queueService) {
         this.communicationService = communicationService;
         this.alertStudentRepository = alertStudentRepository;
         this.studentRepository = studentRepository;
         this.syncEngineService = syncEngineService;
+        this.queueService = queueService;
     }
 
     /**
@@ -79,20 +109,11 @@ public class BrevoController {
         
         List<AlertStudent> localAlerts = alertStudentRepository.findDiscrepancies();
         List<PendingTaskViewNode> viewTasks = new ArrayList<>();
-        Map<String, String> crmEmailDictionary;
-
-        try {
-            crmEmailDictionary = communicationService.fetchViciIdToEmailMap();
-        } catch (Exception e) {
-            log.error("Failed to fetch VICI ID to Email mapping. Falling back to empty dataset.", e);
-            crmEmailDictionary = Collections.emptyMap();
-            model.addAttribute("brevoSystemOfflineWarning", true);
-        }
 
         if (localAlerts != null) {
             for (AlertStudent alert : localAlerts) {
-                String lookupKey = (alert.getAccountId() != null) ? alert.getAccountId().trim().toUpperCase() : "";
-                String displayEmail = crmEmailDictionary.getOrDefault(lookupKey, NOT_FOUND_FALLBACK);
+                String displayEmail = (alert.getEmail() == null || alert.getEmail().isBlank())
+                        ? NOT_FOUND_FALLBACK : alert.getEmail().trim();
 
                 viewTasks.add(new PendingTaskViewNode(
                     alert.getName(),
@@ -106,6 +127,12 @@ public class BrevoController {
         }
 
         model.addAttribute("pendingTasks", viewTasks);
+        model.addAttribute("renewalTasks", queueService.renewalQueue());
+        model.addAttribute("paymentReminderTasks", queueService.paymentReminderQueue());
+        model.addAttribute("renewalTemplateConfigured", parseTemplateId(renewalReminderTemplateIdRaw) > 0);
+        model.addAttribute("payment2wkTemplateConfigured", parseTemplateId(paymentReminder2wkTemplateIdRaw) > 0);
+        model.addAttribute("payment72hTemplateConfigured", parseTemplateId(paymentReminder72hTemplateIdRaw) > 0);
+        model.addAttribute("payment12hTemplateConfigured", parseTemplateId(paymentReminder12hTemplateIdRaw) > 0);
         return "comms-review";
     }
 
@@ -165,6 +192,75 @@ public class BrevoController {
             log.error("Manual out-of-band engine synchronization step execution failed completely.", e);
         }
         return REDIRECT_REVIEW;
+    }
+
+    // sends the renewal reminder and marks it sent so the membership doesn't show back up on
+    // the queue right away (see AutomationsQueueService's cooldown)
+    @PostMapping("/approve-renewal")
+    public String approveRenewal(@RequestParam("membershipId") Long membershipId,
+                                 @RequestParam("studentName") String studentName,
+                                 @RequestParam("email") String email,
+                                 @RequestParam(value = "remainingCount", required = false) Integer remainingCount) {
+        log.info("Processing renewal follow-up approval for student: {}", studentName);
+        try {
+            if (email == null || email.isBlank()) {
+                return REDIRECT_REVIEW_ERR_EMAIL;
+            }
+            long templateId = parseTemplateId(renewalReminderTemplateIdRaw);
+            if (templateId <= 0) {
+                log.warn("Renewal reminder template not configured; skipping send for {}", studentName);
+                return REDIRECT_REVIEW;
+            }
+            Map<String, Object> params = Map.of(
+                    "STUDENT_NAME", studentName,
+                    "SESSIONS_LEFT", remainingCount == null ? "" : remainingCount.toString()
+            );
+            communicationService.sendTemplatedEmail(email, studentName, templateId, params);
+            queueService.markRenewalReminderSent(membershipId);
+        } catch (Exception e) {
+            log.error("Error sending renewal reminder for: {}", studentName, e);
+        }
+        return REDIRECT_REVIEW;
+    }
+
+    // sends the payment reminder for whichever tier triggered it, and records the tier so it
+    // doesn't get re-sent, though a more urgent tier later can still go out
+    @PostMapping("/approve-payment-reminder")
+    public String approvePaymentReminder(@RequestParam("invoiceId") Long invoiceId,
+                                         @RequestParam("studentName") String studentName,
+                                         @RequestParam("email") String email,
+                                         @RequestParam("urgency") String urgency,
+                                         @RequestParam(value = "invoiceNumber", required = false) String invoiceNumber) {
+        log.info("Processing payment reminder approval for student: {} ({})", studentName, urgency);
+        try {
+            if (email == null || email.isBlank()) {
+                return REDIRECT_REVIEW_ERR_EMAIL;
+            }
+            AutomationsQueueService.Urgency parsedUrgency = AutomationsQueueService.Urgency.valueOf(urgency);
+            long templateId = templateIdFor(parsedUrgency);
+            if (templateId <= 0) {
+                log.warn("Payment reminder template not configured for tier {}; skipping send for {}", urgency, studentName);
+                return REDIRECT_REVIEW;
+            }
+            Map<String, Object> params = Map.of(
+                    "STUDENT_NAME", studentName,
+                    "INVOICE_NUMBER", invoiceNumber == null ? "" : invoiceNumber
+            );
+            communicationService.sendTemplatedEmail(email, studentName, templateId, params);
+            queueService.markPaymentReminderSent(invoiceId, parsedUrgency);
+        } catch (Exception e) {
+            log.error("Error sending payment reminder for: {}", studentName, e);
+        }
+        return REDIRECT_REVIEW;
+    }
+
+    /** Which Brevo template corresponds to a given payment-reminder urgency tier. */
+    private long templateIdFor(AutomationsQueueService.Urgency urgency) {
+        return switch (urgency) {
+            case REMINDER_2WK -> parseTemplateId(paymentReminder2wkTemplateIdRaw);
+            case REMINDER_72H -> parseTemplateId(paymentReminder72hTemplateIdRaw);
+            case URGENT_12H -> parseTemplateId(paymentReminder12hTemplateIdRaw);
+        };
     }
 
     /**

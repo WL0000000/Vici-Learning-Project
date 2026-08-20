@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.tutorportal;
 
+import ca.vicilearning.dashboard.domain.AppClock;
 import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
 import ca.vicilearning.dashboard.domain.NameNormalizer;
@@ -14,15 +15,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Real data for the tutor portal, scoped to whichever tutor is logged in. Uses its own
@@ -131,8 +132,9 @@ public class TutorPortalDataService {
             return List.of();
         }
 
-        List<RosterStudent> assigned = rosterStudentRepo
-                .findByDeletedAtIsNullAndAssignedTutorIgnoreCase(NameNormalizer.normalize(tutor.getName()));
+        List<RosterStudent> assigned = rosterStudentRepo.findByDeletedAtIsNull().stream()
+                .filter(r -> assignedTutorMatchesTutor(r.getAssignedTutor(), tutor.getName()))
+                .toList();
         if (assigned.isEmpty()) {
             return List.of();
         }
@@ -142,25 +144,19 @@ public class TutorPortalDataService {
 
         // All of this tutor's non-cancelled bookings, so we can compute per-student session
         // history/consistency even for students only linked by name via Brevo (not by a booking
-        // student_id match). Bookings are matched to a roster student by student name — the same
-        // "known limitation" the rest of this codebase already lives with, since SimplyBook and
-        // Brevo don't share a direct per-student id.
+        // student_id match). Matched to a roster student via bookingClientNameMatchesStudent(),
+        // not a plain name comparison, since SimplyBook books under the parent's name.
         List<Booking> allNonCancelled = bookingRepo.findByTutorId(tutor.getId()).stream()
                 .filter(b -> b.getDeletedAt() == null)
                 .filter(b -> !isCancelled(b))
                 .toList();
 
-        Map<String, List<Booking>> bookingsByStudentName = new LinkedHashMap<>();
-        for (Booking b : allNonCancelled) {
-            String name = b.getStudent() != null ? b.getStudent().getName() : null;
-            if (name == null || name.isBlank()) continue;
-            bookingsByStudentName.computeIfAbsent(name.trim().toLowerCase(), k -> new ArrayList<>()).add(b);
-        }
-
         List<StudentSummary> out = new ArrayList<>();
         for (RosterStudent student : assigned) {
-            List<Booking> studentBookings = bookingsByStudentName
-                    .getOrDefault(student.getName() == null ? "" : student.getName().trim().toLowerCase(), List.of());
+            List<Booking> studentBookings = allNonCancelled.stream()
+                    .filter(b -> bookingClientNameMatchesStudent(
+                            b.getStudent() != null ? b.getStudent().getName() : null, student.getName()))
+                    .toList();
 
             double weekHours = 0.0;
             int weekSessions = 0;
@@ -215,9 +211,8 @@ public class TutorPortalDataService {
             List<Booking> studentBookings = bookingRepo.findByTutorId(tutor.getId()).stream()
                     .filter(b -> b.getDeletedAt() == null)
                     .filter(b -> !isCancelled(b))
-                    .filter(b -> b.getStudent() != null
-                            && s.name() != null
-                            && s.name().equalsIgnoreCase(b.getStudent().getName()))
+                    .filter(b -> bookingClientNameMatchesStudent(
+                            b.getStudent() != null ? b.getStudent().getName() : null, s.name()))
                     .filter(b -> !b.getStartTime().toLocalDate().isBefore(from))
                     .toList();
             totalSessions += studentBookings.size();
@@ -250,8 +245,61 @@ public class TutorPortalDataService {
         return "cancelled".equalsIgnoreCase(b.getStatus());
     }
 
+    // Matches ASSIGNED_TUTOR against the tutor's full name. Turns out staff often just type the
+    // first name in Brevo ("Ashman" instead of "Ashman Grewal"), and sometimes a comma-separated
+    // list if a student's had more than one tutor ("Sara, Ashman"). Exact match first, then falls
+    // back to checking each comma-separated piece against the tutor's first name. Won't help with
+    // the "{{ deal.assigned tutor }}" placeholder junk some rows have, that's a broken Brevo
+    // automation on their end, not something we can fix here.
+    private boolean assignedTutorMatchesTutor(String assignedTutorRaw, String tutorFullName) {
+        String normalizedTutor = NameNormalizer.normalize(tutorFullName);
+        if (normalizedTutor == null || assignedTutorRaw == null) {
+            return false;
+        }
+        String tutorFirstName = normalizedTutor.split(" ", 2)[0];
+        for (String candidate : assignedTutorRaw.split(",")) {
+            String normalizedCandidate = NameNormalizer.normalize(candidate);
+            if (normalizedCandidate != null
+                    && (normalizedCandidate.equalsIgnoreCase(normalizedTutor)
+                        || normalizedCandidate.equalsIgnoreCase(tutorFirstName))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final Pattern PARENTHETICAL_NAMES = Pattern.compile("\\(([^)]*)\\)");
+
+    // SimplyBook books under the parent's name with the kids' names in parens, e.g.
+    // "Julie Gray (Hannah & Kaylee)", while Brevo has the child's own name, "Hannah-Kaylee Gray".
+    // Different naming convention, not just a formatting mismatch, so plain NameNormalizer
+    // comparison won't catch it. Exact match first, then pull names out of the parens and check
+    // each one against the roster name.
+    private boolean bookingClientNameMatchesStudent(String bookingClientName, String rosterStudentName) {
+        String normalizedRoster = NameNormalizer.normalize(rosterStudentName);
+        if (normalizedRoster == null || bookingClientName == null) {
+            return false;
+        }
+        String normalizedBooking = NameNormalizer.normalize(bookingClientName);
+        if (normalizedRoster.equalsIgnoreCase(normalizedBooking)) {
+            return true;
+        }
+
+        Matcher m = PARENTHETICAL_NAMES.matcher(bookingClientName);
+        while (m.find()) {
+            for (String token : m.group(1).split("[&/,]|\\band\\b")) {
+                String normalizedToken = NameNormalizer.normalize(token);
+                if (normalizedToken != null
+                        && normalizedRoster.toLowerCase(Locale.ROOT).contains(normalizedToken.toLowerCase(Locale.ROOT))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public LocalDate today() {
-        return LocalDate.now(ZoneOffset.UTC);
+        return LocalDate.now(AppClock.ZONE);
     }
 
     public LocalDate weekStart(LocalDate d) {

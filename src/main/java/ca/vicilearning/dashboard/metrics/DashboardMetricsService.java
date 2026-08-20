@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.metrics;
 
+import ca.vicilearning.dashboard.domain.AppClock;
 import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
 import ca.vicilearning.dashboard.domain.Invoice;
@@ -20,7 +21,6 @@ import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
@@ -280,7 +280,7 @@ public class DashboardMetricsService {
 
     /** As {@link #upcoming(int)} but restricted to a {@link ServiceScope} (null/empty = all). */
     public List<UpcomingSession> upcoming(int limit, ServiceScope scope) {
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(AppClock.ZONE);
         return bookingRepo.findActiveWithRefsBetween(now, now.plusDays(60)).stream()
                 .filter(this::isCounted)
                 .filter(b -> matches(b, scope))
@@ -654,7 +654,7 @@ public class DashboardMetricsService {
      */
     public List<ActionItem> actionRequired() {
         LocalDate monthStart = today().withDayOfMonth(1);
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(AppClock.ZONE);
 
         Map<Long, LocalDateTime> lastBookingByStudent = new LinkedHashMap<>();
         Map<Long, Integer> cancellationsThisMonth = new LinkedHashMap<>();
@@ -868,7 +868,7 @@ public class DashboardMetricsService {
     }
 
     private LocalDate today() {
-        return LocalDate.now(ZoneOffset.UTC);
+        return LocalDate.now(AppClock.ZONE);
     }
 
     private LocalDate weekStart(LocalDate d) {

@@ -13,7 +13,6 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -132,7 +131,7 @@ public class MockDataSeeder implements ApplicationRunner {
     }
 
     private void seed() {
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(AppClock.ZONE);
         Random rng = new Random(RANDOM_SEED);
 
         List<Tutor> tutors = buildTutors(now);

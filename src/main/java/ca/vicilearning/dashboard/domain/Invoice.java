@@ -50,6 +50,11 @@ public class Invoice {
     // null = still present in SimplyBook.me.
     private LocalDateTime deletedAt;
 
+    // Last payment-reminder tier sent for this invoice, and when. Lets the queue skip re-sending
+    // the same tier on every visit but still allow a more urgent one through later.
+    private String lastReminderTier;
+    private LocalDateTime lastReminderSentAt;
+
     /**
      * True when the invoice is settled. Prefers the explicit {@code payment_received} flag from
      * REST v2 (reliable); falls back to the status string only when that flag is absent (older
@@ -91,4 +96,10 @@ public class Invoice {
 
     public LocalDateTime getDeletedAt() { return deletedAt; }
     public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
+
+    public String getLastReminderTier() { return lastReminderTier; }
+    public void setLastReminderTier(String lastReminderTier) { this.lastReminderTier = lastReminderTier; }
+
+    public LocalDateTime getLastReminderSentAt() { return lastReminderSentAt; }
+    public void setLastReminderSentAt(LocalDateTime lastReminderSentAt) { this.lastReminderSentAt = lastReminderSentAt; }
 }

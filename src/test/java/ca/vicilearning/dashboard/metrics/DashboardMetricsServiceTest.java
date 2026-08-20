@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.metrics;
 
+import ca.vicilearning.dashboard.domain.AppClock;
 import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.BookingRepository;
 import ca.vicilearning.dashboard.domain.Invoice;
@@ -22,7 +23,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,7 +45,7 @@ class DashboardMetricsServiceTest {
     // Lapse threshold of 21 days for tests (matches the production default).
     private static final int LAPSE_THRESHOLD = 21;
 
-    private final LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+    private final LocalDateTime now = LocalDateTime.now(AppClock.ZONE);
 
     @BeforeEach
     void setUp() {

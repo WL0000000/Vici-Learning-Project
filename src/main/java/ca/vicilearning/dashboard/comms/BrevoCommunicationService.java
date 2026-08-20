@@ -26,7 +26,6 @@ public class BrevoCommunicationService {
     // Endpoint URIs and API Defaults
     private static final String ENDPOINT_CONTACT_BY_EMAIL = "/contacts/{email}";
     private static final String ENDPOINT_SMTP_EMAIL = "/smtp/email";
-    private static final String DEFAULT_STATUS = "Active";
 
     // Company page size for the family-link pull (Brevo allows up to 100/page). The contact page
     // size is injectable (see constructor, default 1000) so tests can force a multi-page path.
@@ -36,12 +35,11 @@ public class BrevoCommunicationService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record BrevoAttributesNode(
-        @JsonProperty("VICI_ACCOUNT_ID") String viciAccountId,
-        @JsonProperty("STUDENT_NAMES") String studentNames,
-        // Enrolment status (ACTIVE/PAUSED) — distinct from ACTIVITY_STATUS, which drives lapse
-        // detection. Read per contact for the StudentStatus sync.
-        @JsonProperty("STUDENT_STATUS") String studentStatus,
-        @JsonProperty("ACTIVITY_STATUS") String activityStatus,
+        // Not the real status (that's CONTACT_STATUS below), unused elsewhere, kept for
+        // completeness. Has to be JsonNode not String though: this comes back as a list-typed
+        // category attribute on the live account, and declaring it String made Jackson choke on
+        // the array and crash parsing for the whole contacts page, not just this field.
+        @JsonProperty("STUDENT_STATUS") JsonNode studentStatus,
         @JsonProperty("LAST_BOOKING_DATE") String lastBookingDate,
         // The per-student EXT_ID as a custom ATTRIBUTE. A live probe (2026-07-20) confirmed Brevo
         // does NOT return the top-level ext_id in the contact body, but a custom attribute IS
@@ -215,70 +213,6 @@ public class BrevoCommunicationService {
             return full;
         }
         return (email != null && !email.isBlank()) ? email : "(unnamed)";
-    }
-
-    /**
-     * Pulls global contact configurations exactly once to generate an in-memory 
-     * dictionary routing Account Keys to their explicit target parent email structures.
-     *
-     * @return Lookup map linking VICI Account IDs to Primary Emails.
-     */
-    public Map<String, String> fetchViciIdToEmailMap() {
-        Map<String, String> lookupMap = new HashMap<>();
-        for (BrevoContactNode contact : fetchAllContacts()) {
-            if (contact.attributes() != null && contact.attributes().viciAccountId() != null) {
-                String cleanViciId = contact.attributes().viciAccountId().trim().toUpperCase();
-                if (!cleanViciId.isEmpty() && contact.email() != null) {
-                    lookupMap.put(cleanViciId, contact.email().trim());
-                }
-            }
-        }
-        return lookupMap;
-    }
-
-    /**
-     * Pulls cumulative contact nodes and organizes them into a multi-tiered dictionary
-     * structured as: Map<ViciAccountId, Map<LowercaseStudentName, ActivityStatus>>
-     */
-    public Map<String, Map<String, String>> fetchStudentStatusMap() {
-        // Nested structure: Map<AccountId, Map<StudentName, Status>>
-        Map<String, Map<String, String>> masterAccountMap = new HashMap<>();
-        for (BrevoContactNode contact : fetchAllContacts()) {
-            BrevoAttributesNode attributes = contact.attributes();
-            // Only process records with a valid family account identifier.
-            if (attributes != null && attributes.viciAccountId() != null && !attributes.viciAccountId().isBlank()) {
-                String cleanAccountId = attributes.viciAccountId().trim().toUpperCase();
-                Map<String, String> familyBucket = masterAccountMap.computeIfAbsent(cleanAccountId, k -> new HashMap<>());
-                unpackContactStatuses(attributes, familyBucket);
-            }
-        }
-        return masterAccountMap;
-    }
-
-    /**
-     * Extracted helper that populates a designated family mapping bucket with sibling statuses.
-     */
-    private void unpackContactStatuses(BrevoAttributesNode attributes, Map<String, String> familyBucket) {
-        String namesRaw = attributes.studentNames();
-        String statusesRaw = attributes.activityStatus();
-
-        if (namesRaw == null || namesRaw.isBlank()) {
-            return; 
-        }
-
-        String[] names = namesRaw.split(",");
-        String[] statuses = (statusesRaw != null && !statusesRaw.isBlank()) 
-                ? statusesRaw.split(",") 
-                : new String[0];
-
-        for (int i = 0; i < names.length; i++) {
-            String cleanName = names[i].trim().toLowerCase();
-            String cleanStatus = (i < statuses.length) ? statuses[i].trim() : DEFAULT_STATUS;
-            
-            if (!cleanName.isEmpty()) {
-                familyBucket.put(cleanName, cleanStatus); 
-            }
-        }
     }
 
     /**

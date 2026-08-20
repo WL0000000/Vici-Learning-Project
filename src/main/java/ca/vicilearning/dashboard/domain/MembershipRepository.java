@@ -1,6 +1,8 @@
 package ca.vicilearning.dashboard.domain;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface MembershipRepository extends JpaRepository<Membership, Long> {
@@ -17,4 +19,15 @@ public interface MembershipRepository extends JpaRepository<Membership, Long> {
     // DashboardMetricsService.actionRequired() surfaces it (via its own per-student map so it can
     // read the student name without the lazy Membership.student proxy).
     List<Membership> findByActiveTrueAndDeletedAtIsNullAndRemainingCountLessThanEqual(int threshold);
+
+    // same "running low" set but with the student eagerly fetched, for the Automations renewal
+    // queue which needs contact info outside an open Hibernate session (same deal as
+    // InvoiceRepository.findActiveWithStudent())
+    @Query("""
+            select m from Membership m
+            join fetch m.student
+            where m.active = true and m.deletedAt is null
+              and m.remainingCount is not null and m.remainingCount <= :threshold
+            """)
+    List<Membership> findRunningLowWithStudent(@Param("threshold") int threshold);
 }

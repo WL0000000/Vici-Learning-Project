@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -45,7 +44,7 @@ public class SyncController {
 
         SyncLog last = logs.isEmpty() ? null : logs.get(0);
         Long minutesAgo = last == null ? null
-                : ChronoUnit.MINUTES.between(last.getStartedAt(), LocalDateTime.now(ZoneOffset.UTC));
+                : ChronoUnit.MINUTES.between(last.getStartedAt(), LocalDateTime.now(AppClock.ZONE));
 
         model.addAttribute("recentLogs",   logs);
         model.addAttribute("lastSync",     last);

@@ -24,7 +24,13 @@ class BrevoControllerTest {
         mockMvc.perform(get("/comms/review"))
                 .andExpect(status().isOk())
                 .andExpect(view().name("comms-review"))
-                .andExpect(model().attributeExists("pendingTasks"));
+                .andExpect(model().attributeExists("pendingTasks"))
+                .andExpect(model().attributeExists("renewalTasks"))
+                .andExpect(model().attributeExists("paymentReminderTasks"))
+                .andExpect(model().attributeExists("renewalTemplateConfigured"))
+                .andExpect(model().attributeExists("payment2wkTemplateConfigured"))
+                .andExpect(model().attributeExists("payment72hTemplateConfigured"))
+                .andExpect(model().attributeExists("payment12hTemplateConfigured"));
     }
 
     @Test

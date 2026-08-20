@@ -587,6 +587,51 @@ details.vici-family[open] > summary .vici-chevron { transform: rotate(90deg); }
   overflow-wrap: anywhere;
 }
 
+.notion-subjects {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.notion-subjects-badge {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  background: #faf8f4;
+  color: var(--vici-navy);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--vici-border);
+  user-select: none;
+}
+
+.notion-subjects-badge:hover {
+  background: #fff;
+  border-color: var(--vici-gold);
+}
+
+.notion-subjects-menu {
+  min-width: 160px;
+  max-width: 260px;
+  padding: 6px 0;
+  font-size: 12.5px;
+}
+
+.notion-subjects-menu .dropdown-item-text {
+  display: block;
+  padding: 4px 14px;
+  color: var(--vici-text);
+}
+
+.notion-subjects-hint {
+  color: var(--vici-muted);
+  font-size: 10.5px;
+  margin-top: 3px;
+}
+
 .notion-edit-input,
 .notion-edit-select,
 .notion-edit-textarea {
@@ -678,6 +723,17 @@ details.vici-family[open] > summary .vici-chevron { transform: rotate(90deg); }
 .btn-vici:hover {
   background: #1d3f70;
   color: white;
+}
+
+.btn-vici:disabled {
+  background: var(--vici-muted);
+  color: #fff;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-vici:disabled:hover {
+  background: var(--vici-muted);
 }
 
 .btn-vici-outline {

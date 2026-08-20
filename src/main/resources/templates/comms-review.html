@@ -9,7 +9,7 @@
 </head>
 <body>
 
-<div th:replace="~{fragments/header :: header('Automations Queue', 'Review Queue -> Brevo API Delivery')}"></div>
+<div th:replace="~{fragments/header :: header('Automations Queue', 'Lapse discrepancies, session-pack renewals, and payment reminders, review and approve before anything sends')}"></div>
 
 <div class="vici-layout">
 
@@ -112,6 +112,133 @@
                         <tr th:if="${pendingTasks.isEmpty()}">
                             <td colspan="5" class="text-center text-muted py-5 fw-medium">
                                 🎉 All synchronization data parameters are perfectly reconciled. No anomalies detected!
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="vici-panel mt-3">
+            <div class="vici-panel-header">
+                <div>
+                    <h2>Session-Pack Renewals</h2>
+                    <p>Families finishing their prepaid sessions, follow up before their next invoice.</p>
+                </div>
+            </div>
+
+            <div th:if="${!renewalTemplateConfigured}" class="notion-save-message is-error">
+                No renewal-reminder template configured yet (set BREVO_RENEWAL_REMINDER_TEMPLATE_ID once one exists in Brevo). Approving is disabled until then.
+            </div>
+
+            <div class="table-responsive">
+                <table class="table sessions-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Sessions Left</th>
+                            <th>Next Invoice #</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="task : ${renewalTasks}">
+                            <td>
+                                <div class="student-name" th:text="${task.name}">Student Name</div>
+                                <small class="text-muted" th:text="${task.email}">parent@example.com</small>
+                            </td>
+                            <td>
+                                <span th:class="${task.empty} ? 'badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1' : 'badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1'"
+                                      th:text="${task.empty} ? '0 left, can\'t book' : (${task.remainingCount} + ' left')">2 left</span>
+                            </td>
+                            <td><code th:text="${task.invoiceNumber} ?: '-'">SI-000</code></td>
+                            <td>
+                                <form th:action="@{/comms/approve-renewal}" method="post" class="mb-0">
+                                    <input type="hidden" name="membershipId" th:value="${task.membershipId}" />
+                                    <input type="hidden" name="studentName" th:value="${task.name}" />
+                                    <input type="hidden" name="email" th:value="${task.email}" />
+                                    <input type="hidden" name="remainingCount" th:value="${task.remainingCount}" />
+                                    <button type="submit" class="btn-vici py-1 px-3" style="font-size: 13px;"
+                                            th:disabled="${!renewalTemplateConfigured}">
+                                        Approve &amp; Email Parent
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+
+                        <tr th:if="${renewalTasks.isEmpty()}">
+                            <td colspan="4" class="text-center text-muted py-4 fw-medium">
+                                No families currently finishing their session pack.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="vici-panel mt-3">
+            <div class="vici-panel-header">
+                <div>
+                    <h2>Payment Reminders</h2>
+                    <p>Unpaid invoices with a session coming up soon, tiered by how close it is.</p>
+                </div>
+            </div>
+
+            <div th:if="${!payment2wkTemplateConfigured || !payment72hTemplateConfigured || !payment12hTemplateConfigured}"
+                 class="notion-save-message is-error">
+                Not all payment-reminder templates are configured yet, each urgency tier needs its own Brevo template
+                (set BREVO_PAYMENT_REMINDER_2WK_TEMPLATE_ID / _72H_ / _12H_TEMPLATE_ID once they exist). Approving is
+                disabled per-row until that tier's template is set.
+            </div>
+
+            <div class="table-responsive">
+                <table class="table sessions-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Invoice</th>
+                            <th>Next Session</th>
+                            <th>Urgency</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="task : ${paymentReminderTasks}"
+                            th:with="tierConfigured=${(task.urgency.name() == 'URGENT_12H' and payment12hTemplateConfigured)
+                                                       or (task.urgency.name() == 'REMINDER_72H' and payment72hTemplateConfigured)
+                                                       or (task.urgency.name() == 'REMINDER_2WK' and payment2wkTemplateConfigured)}">
+                            <td>
+                                <div class="student-name" th:text="${task.name}">Student Name</div>
+                                <small class="text-muted" th:text="${task.email}">parent@example.com</small>
+                            </td>
+                            <td>
+                                <code th:text="${task.invoiceNumber} ?: '-'">SI-000</code>
+                                <div class="text-muted" style="font-size:12px;" th:text="${task.amount} + ' ' + ${task.currency}">100 CAD</div>
+                            </td>
+                            <td th:text="${#temporals.format(task.nextSessionDate, 'MMM d')}">Aug 20</td>
+                            <td>
+                                <span th:if="${task.urgency.name() == 'URGENT_12H'}" class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">12h warning</span>
+                                <span th:if="${task.urgency.name() == 'REMINDER_72H'}" class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1">72h reminder</span>
+                                <span th:if="${task.urgency.name() == 'REMINDER_2WK'}" class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">2wk reminder</span>
+                            </td>
+                            <td>
+                                <form th:action="@{/comms/approve-payment-reminder}" method="post" class="mb-0">
+                                    <input type="hidden" name="invoiceId" th:value="${task.invoiceId}" />
+                                    <input type="hidden" name="studentName" th:value="${task.name}" />
+                                    <input type="hidden" name="email" th:value="${task.email}" />
+                                    <input type="hidden" name="invoiceNumber" th:value="${task.invoiceNumber}" />
+                                    <input type="hidden" name="urgency" th:value="${task.urgency.name()}" />
+                                    <button type="submit" class="btn-vici py-1 px-3" style="font-size: 13px;"
+                                            th:disabled="${!tierConfigured}">
+                                        Approve &amp; Email Parent
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+
+                        <tr th:if="${paymentReminderTasks.isEmpty()}">
+                            <td colspan="5" class="text-center text-muted py-4 fw-medium">
+                                No unpaid invoices with a session coming up soon.
                             </td>
                         </tr>
                     </tbody>

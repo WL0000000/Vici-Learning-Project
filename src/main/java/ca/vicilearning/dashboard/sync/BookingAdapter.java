@@ -1,5 +1,6 @@
 package ca.vicilearning.dashboard.sync;
 
+import ca.vicilearning.dashboard.domain.AppClock;
 import ca.vicilearning.dashboard.domain.Booking;
 import ca.vicilearning.dashboard.domain.Service;
 import ca.vicilearning.dashboard.domain.Student;
@@ -10,7 +11,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -23,7 +23,7 @@ public class BookingAdapter {
                                     Map<Long, Student> students,
                                     Map<Long, Tutor> tutors,
                                     Map<Long, Service> services) {
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(AppClock.ZONE);
         return AdapterUtils.asList(result).stream()
                 .map(node -> toBooking(node, students, tutors, services, now))
                 .filter(b -> b != null)

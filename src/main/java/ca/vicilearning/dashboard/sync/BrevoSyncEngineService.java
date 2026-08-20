@@ -1,6 +1,6 @@
 package ca.vicilearning.dashboard.sync;
 
-import ca.vicilearning.dashboard.comms.BrevoCommunicationService;
+import ca.vicilearning.dashboard.association.AccountIdNormalizer;
 import ca.vicilearning.dashboard.domain.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,21 +10,25 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
-/**
- * Engine management system handling scheduled synchronization processing windows.
- * Reconciles local database states against distant telemetry datasets pulled out from Brevo CRM.
- */
+// Compares our own booking-derived lapse status against Brevo's real roster status
+// (RosterStudent.status, synced from CONTACT_STATUS), linked by the student's family account
+// key. Used to key off a VICI_ACCOUNT_ID contact attribute plus comma-joined STUDENT_NAMES/
+// ACTIVITY_STATUS attributes that don't actually seem to exist on the real account, so the
+// lookup missed almost everyone and defaulted to "Active", making basically every lapsed
+// student look like a false discrepancy. RosterStudent.status is the same source that's
+// already proven reliable for the Tutor Portal's My Students page.
 @Service
 public class BrevoSyncEngineService {
 
     private static final Logger log = LoggerFactory.getLogger(BrevoSyncEngineService.class);
-    private static final String STATUS_LAPSED = "Lapsed";
 
     private final StudentRepository studentRepository;
     private final BookingRepository bookingRepository;
     private final AlertStudentRepository alertStudentRepository;
-    private final BrevoCommunicationService communicationService;
+    private final RosterStudentRepository rosterStudentRepository;
 
     // Shared with DashboardMetricsService (same property) so the Brevo reconciliation and the
     // dashboard action items agree on who's lapsed — previously 14 here vs 21 there.
@@ -33,41 +37,63 @@ public class BrevoSyncEngineService {
     public BrevoSyncEngineService(StudentRepository studentRepository,
                                   BookingRepository bookingRepository,
                                   AlertStudentRepository alertStudentRepository,
-                                  BrevoCommunicationService communicationService,
+                                  RosterStudentRepository rosterStudentRepository,
                                   @Value("${metrics.lapse-threshold-days:21}") int lapseThresholdDays) {
         this.studentRepository = studentRepository;
         this.bookingRepository = bookingRepository;
         this.alertStudentRepository = alertStudentRepository;
-        this.communicationService = communicationService;
+        this.rosterStudentRepository = rosterStudentRepository;
         this.lapseThresholdDays = lapseThresholdDays;
     }
 
-    /**
-     * Orchestrates background two-way synchronization windows scheduled sequentially.
-     * Pulls bulk states up-front to run in-memory processing mappings efficiently.
-     */
+    // runs hourly, pulls everything up front so the per-student loop stays in memory
     @Scheduled(cron = "0 0 * * * *")
     public void runTwoWayReconciliationSync() {
         log.info("Initiating automatic structured Brevo synchronization sequence...");
-        
-        // 1. Capture the multi-tiered structural configuration map
-        Map<String, Map<String, String>> brevoStudentStatuses = communicationService.fetchStudentStatusMap();
-        
+
+        // group roster by family account key so a SimplyBook Student can be matched against its
+        // sibling roster records, same tolerant matching as the rest of the app (AccountIdNormalizer,
+        // handles "Gray" vs "Gray_Account")
+        Map<String, List<RosterStudent>> rosterByAccountKey = rosterStudentRepository.findByDeletedAtIsNull().stream()
+                .filter(r -> r.getAccountId() != null && !r.getAccountId().isBlank())
+                .collect(Collectors.groupingBy(r -> AccountIdNormalizer.compareKey(r.getAccountId())));
+
         List<Student> activeStudents = studentRepository.findByDeletedAtIsNull();
-        LocalDateTime thresholdDateTime = LocalDateTime.now().minusDays(lapseThresholdDays);
-        
+        LocalDateTime thresholdDateTime = LocalDateTime.now(AppClock.ZONE).minusDays(lapseThresholdDays);
+
         log.info("Synchronizing {} student tracking configurations...", activeStudents.size());
         for (Student student : activeStudents) {
             try {
-                reconcileSingleStudent(student, brevoStudentStatuses, thresholdDateTime);
+                reconcileSingleStudent(student, rosterByAccountKey, thresholdDateTime);
             } catch (Exception ex) {
                 log.error("Anomalous fault encountered running alignment computations for ID: {}", student.getId(), ex);
             }
         }
+
+        purgeOrphanedAlerts(activeStudents);
         log.info("Two-way tracking alignment routines finalized successfully.");
     }
 
-    private void reconcileSingleStudent(Student student, Map<String, Map<String, String>> brevoStatuses, LocalDateTime baselineThreshold) {
+    // cleans up alerts for students who no longer show up as active (removed from SimplyBook
+    // entirely, say). the loop above only visits active students, so without this a removed
+    // student's old alert would just sit there forever
+
+    private void purgeOrphanedAlerts(List<Student> activeStudents) {
+        Set<String> activeNames = activeStudents.stream()
+                .map(Student::getName)
+                .filter(name -> name != null && !name.isBlank())
+                .map(String::trim)
+                .collect(Collectors.toSet());
+
+        for (AlertStudent alert : alertStudentRepository.findAll()) {
+            if (!activeNames.contains(alert.getName())) {
+                alertStudentRepository.deleteById(alert.getName());
+            }
+        }
+    }
+
+    private void reconcileSingleStudent(Student student, Map<String, List<RosterStudent>> rosterByAccountKey,
+                                        LocalDateTime baselineThreshold) {
         String studentName = student.getName();
         String accountId = student.getAccountId();
 
@@ -78,21 +104,19 @@ public class BrevoSyncEngineService {
         List<Booking> structuralBookings = bookingRepository.findByStudentId(student.getId());
         boolean lapsedNow = evaluateLapseCondition(structuralBookings, baselineThreshold);
 
-        // 2. SEARCH FOR STATUS VIA ACCOUNT ID FIRST:
-        String statusFromBrevo = "Active"; // Default fallback if family record is missing
-        
-        Map<String, String> familyBucket = brevoStatuses.get(accountId.trim().toUpperCase());
-        if (familyBucket != null) {
-            // If the family account exists, look up the target child's name inside it
-            statusFromBrevo = familyBucket.getOrDefault(studentName.trim().toLowerCase(), "Active");
+        RosterStudent matched = findMatchingRosterStudent(studentName, accountId, rosterByAccountKey);
+        if (matched == null) {
+            // no matching roster record, nothing to compare against, don't guess
+            alertStudentRepository.deleteById(studentName.trim());
+            return;
         }
 
-        boolean isLapsedInBrevo = STATUS_LAPSED.equalsIgnoreCase(statusFromBrevo.trim());
+        // ACTIVE/PAUSED means Brevo still considers them a student, DROPPED/COMPLETED means gone
+        boolean isLapsedInBrevo = !matched.getStatus().isCurrent();
 
-        // 3. Proactive cleanup database gate
         if (lapsedNow == isLapsedInBrevo) {
             alertStudentRepository.deleteById(studentName.trim());
-            return; 
+            return;
         }
 
         AlertStudent alertEntity = alertStudentRepository.findById(studentName.trim())
@@ -105,14 +129,32 @@ public class BrevoSyncEngineService {
         alertEntity.setAccountId(accountId.trim());
         alertEntity.setLapsedNow(lapsedNow);
         alertEntity.setLapsedStatus(isLapsedInBrevo);
-        alertEntity.setLastCheckedAt(LocalDateTime.now());
-        
+        alertEntity.setLastCheckedAt(LocalDateTime.now(AppClock.ZONE));
+        alertEntity.setEmail(student.getEmail());
+
         alertStudentRepository.save(alertEntity);
     }
 
-    /**
-     * Determines whether student tracking flows fall behind active operational constraints.
-     */
+    /** Finds this student's own roster record among their family's roster siblings, by name. */
+    private RosterStudent findMatchingRosterStudent(String studentName, String accountId,
+                                                     Map<String, List<RosterStudent>> rosterByAccountKey) {
+        List<RosterStudent> siblings = rosterByAccountKey.get(AccountIdNormalizer.compareKey(accountId));
+        if (siblings == null) {
+            return null;
+        }
+        String normalizedName = NameNormalizer.normalize(studentName);
+        if (normalizedName == null) {
+            return null;
+        }
+        for (RosterStudent r : siblings) {
+            if (normalizedName.equalsIgnoreCase(NameNormalizer.normalize(r.getName()))) {
+                return r;
+            }
+        }
+        return null;
+    }
+
+    // true if this student has no recent or upcoming booking, i.e. lapsed
     private boolean evaluateLapseCondition(List<Booking> bookings, LocalDateTime baselineThreshold) {
         if (bookings == null || bookings.isEmpty()) {
             return true;
@@ -120,14 +162,14 @@ public class BrevoSyncEngineService {
 
         boolean hasRecentConfirmedBooking = false;
         boolean hasUpcomingConfirmedBooking = false;
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(AppClock.ZONE);
 
         for (Booking booking : bookings) {
             // Drop cancelled or deleted bookings from data pool tracking pipelines
             if (booking.getDeletedAt() != null || "cancelled".equalsIgnoreCase(booking.getStatus())) {
                 continue;
             }
-            
+
             LocalDateTime startTime = booking.getStartTime();
             if (startTime != null) {
                 if (startTime.isAfter(baselineThreshold) && startTime.isBefore(now)) {

@@ -13,7 +13,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -117,7 +116,7 @@ public class SyncService {
 
     private SyncLog doSync() {
         SyncLog entry = new SyncLog();
-        entry.setStartedAt(LocalDateTime.now(ZoneOffset.UTC));
+        entry.setStartedAt(LocalDateTime.now(AppClock.ZONE));
         entry.setSuccess(false);
         syncLogRepo.save(entry);
 
@@ -160,7 +159,7 @@ public class SyncService {
         if (!failures.isEmpty()) {
             entry.setErrorMessage(String.join("; ", failures));
         }
-        entry.setFinishedAt(LocalDateTime.now(ZoneOffset.UTC));
+        entry.setFinishedAt(LocalDateTime.now(AppClock.ZONE));
         syncLogRepo.save(entry);
 
         log.info("Sync finished (success={}): tutors={}(-{}) services={}(-{}) "
@@ -297,8 +296,8 @@ public class SyncService {
         Map<Long, ca.vicilearning.dashboard.domain.Service> serviceMap =
                 toMap(serviceRepo.findAll(), ca.vicilearning.dashboard.domain.Service::getId);
 
-        LocalDate from = LocalDate.now(ZoneOffset.UTC).minusDays(BOOKING_LOOKBACK_DAYS);
-        LocalDate to   = LocalDate.now(ZoneOffset.UTC).plusDays(BOOKING_LOOKAHEAD_DAYS);
+        LocalDate from = LocalDate.now(AppClock.ZONE).minusDays(BOOKING_LOOKBACK_DAYS);
+        LocalDate to   = LocalDate.now(AppClock.ZONE).plusDays(BOOKING_LOOKAHEAD_DAYS);
 
         List<Booking> bookings = bookingAdapter.toBookings(
                 client.getBookingList(from, to), studentMap, tutorMap, serviceMap);
@@ -388,7 +387,7 @@ public class SyncService {
                 .filter(r -> r.getAccountId() != null)
                 .collect(Collectors.toMap(RosterStudent::getExtId, RosterStudent::getAccountId));
 
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(AppClock.ZONE);
         List<RosterStudent> upserted = new ArrayList<>();
         for (BrevoCommunicationService.BrevoStudent bs : fetched) {
             RosterStudent r = rosterStudentRepo.findById(bs.extId()).orElseGet(RosterStudent::new);
@@ -631,7 +630,7 @@ public class SyncService {
                 .filter(row -> getDeletedAt.apply(row) == null)
                 .toList();
 
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(AppClock.ZONE);
         newlyRemoved.forEach(row -> setDeletedAt.accept(row, now));
         repo.saveAll(newlyRemoved);
         return newlyRemoved.size();

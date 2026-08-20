@@ -85,6 +85,25 @@ class BrevoCommunicationServiceTest {
     }
 
     @Test
+    void fetchStudents_survivesStudentStatusAsListAttribute() {
+        // STUDENT_STATUS comes back as a category/array attribute on the live account, not a
+        // plain string. Declaring it String made Jackson throw on the array and crash parsing
+        // for the whole contacts page, even though the field itself is never read downstream.
+        wm.stubFor(get(urlPathEqualTo("/contacts"))
+                .withQueryParam("offset", equalTo("0"))
+                .willReturn(okJson("""
+                        {"contacts":[
+                          {"email":"kid@x.com","attributes":{"EXT_ID":"EXT-1","CONTACT_TYPE":["Student"],
+                             "CONTACT_STATUS":["Active"],"STUDENT_STATUS":["Active"],"STUDENT_NAME":"Ashe Collett"}}
+                        ]}""")));
+
+        var students = service.fetchStudents();
+
+        assertThat(students).hasSize(1);
+        assertThat(students.get(0).extId()).isEqualTo("EXT-1");
+    }
+
+    @Test
     void fetchStudents_returnsEmpty_whenBrevoFails() {
         wm.stubFor(get(urlPathEqualTo("/contacts")).willReturn(aResponse().withStatus(401)));
 
